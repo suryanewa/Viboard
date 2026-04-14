@@ -4,6 +4,7 @@ import { BlockRenderer } from './components/Blocks';
 import { Toolbar } from './components/Toolbar';
 import { KeyboardShortcuts } from './components/KeyboardShortcuts';
 import { ContextMenu } from './components/ContextMenu';
+import { PropertyToolbar } from './components/PropertyToolbar';
 import { useBoardStore } from './store';
 
 function App() {
@@ -21,6 +22,7 @@ function App() {
         ))}
       </Canvas>
       <Toolbar />
+      <PropertyToolbar />
     </div>
   );
 }

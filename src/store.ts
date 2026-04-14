@@ -47,6 +47,9 @@ interface BoardState {
   mousePos: { x: number, y: number };
   clipboard: Block[];
   tool: 'select' | 'marker' | 'shape' | 'text' | 'pan' | 'sticky';
+  markerType: 'marker' | 'highlighter' | 'eraser';
+  markerColor: string;
+  markerThickness: number;
   activeShape: { type: string, x1: number, y1: number, x2: number, y2: number } | null;
   isDraggingGroup: boolean;
   currentPath: DrawingPath | null;
@@ -69,6 +72,9 @@ interface BoardState {
   setCanvasTitle: (title: string) => void;
   setMousePos: (x: number, y: number) => void;
   setTool: (tool: 'select' | 'marker' | 'shape' | 'text' | 'pan' | 'sticky') => void;
+  setMarkerType: (type: 'marker' | 'highlighter' | 'eraser') => void;
+  setMarkerColor: (color: string) => void;
+  setMarkerThickness: (thickness: number) => void;
   setIsDraggingGroup: (isDragging: boolean) => void;
   setActiveShape: (shape: { type: string, x1: number, y1: number, x2: number, y2: number } | null) => void;
   setCurrentPath: (path: DrawingPath | null) => void;
@@ -97,6 +103,9 @@ export const useBoardStore = create<BoardState>((set, get) => ({
   mousePos: { x: 0, y: 0 },
   clipboard: [],
   tool: 'select',
+  markerType: 'marker',
+  markerColor: 'hsl(45, 90%, 65%)',
+  markerThickness: 4,
   activeShape: null,
   isDraggingGroup: false,
   currentPath: null,
@@ -203,6 +212,9 @@ export const useBoardStore = create<BoardState>((set, get) => ({
 
   setMousePos: (x, y) => set({ mousePos: { x, y } }),
   setTool: (tool) => set({ tool }),
+  setMarkerType: (markerType) => set({ markerType }),
+  setMarkerColor: (markerColor) => set({ markerColor }),
+  setMarkerThickness: (markerThickness) => set({ markerThickness }),
   setIsDraggingGroup: (isDraggingGroup) => set({ isDraggingGroup }),
   setActiveShape: (activeShape) => set({ activeShape }),
   setCurrentPath: (currentPath) => set({ currentPath }),

@@ -18,8 +18,14 @@ export const StickyBlock: React.FC<BlockContentProps> = ({ block }) => {
     }
   };
 
+  const hue = block.data.hue !== undefined ? block.data.hue : (block.data.color === 'yellow' ? 55 : 55);
+  const bgColor = `hsl(${hue}, 90%, 85%)`;
+
   return (
-    <div className="w-full min-h-full p-6 bg-[#fef9c3] flex flex-col">
+    <div 
+      className="w-full min-h-full p-6 flex flex-col shadow-sm"
+      style={{ backgroundColor: bgColor }}
+    >
       <p
         ref={textRef}
         className="text-zinc-800 font-medium text-lg leading-relaxed outline-none"

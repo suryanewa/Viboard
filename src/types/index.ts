@@ -16,6 +16,7 @@ export interface DrawingPath {
   points: { x: number, y: number }[];
   color: string;
   strokeWidth: number;
+  toolType?: 'marker' | 'highlighter' | 'eraser';
 }
 
 export interface Viewport {

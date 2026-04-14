@@ -121,7 +121,7 @@ export const Toolbar: React.FC = () => {
       newBlock.height = 120;
       newBlock.data = { shape: dataOverride.shape || 'square', color: dataOverride.color || '#4ade80' };
     } else if (type === 'sticky') {
-      newBlock.data = { text: 'New sticky', color: 'yellow' };
+      newBlock.data = { text: 'New sticky', color: 'yellow', hue: 55 };
     } else if (type === 'text') {
       newBlock.height = 60;
       newBlock.data = { text: '' };
@@ -173,8 +173,46 @@ export const Toolbar: React.FC = () => {
   };
 
   return (
-    <div className="fixed bottom-8 left-0 right-0 flex justify-center z-[9999] pointer-events-none">
+    <div className="fixed bottom-8 left-0 right-0 flex justify-center z-[9998] pointer-events-none">
       <div className="flex items-center gap-2 px-4 py-2 bg-white/90 backdrop-blur-md shadow-lg border border-zinc-200 pointer-events-auto">
+        <Tooltip content="Select" shortcut="V">
+          <button 
+            type="button"
+            onPointerDown={(e) => {
+              e.stopPropagation();
+              const nextTool = 'select';
+              setTool(nextTool);
+            }}
+            className={clsx(
+              "p-2 transition-colors",
+              tool === 'select' 
+                ? "bg-blue-50 text-blue-600 hover:bg-blue-100" 
+                : "text-zinc-600 hover:bg-zinc-100 hover:text-zinc-900"
+            )}
+          >
+            <MousePointer className="w-5 h-5" />
+          </button>
+        </Tooltip>
+
+        <Tooltip content="Pan" shortcut="H">
+          <button 
+            type="button"
+            onPointerDown={(e) => {
+              e.stopPropagation();
+              const nextTool = tool === 'pan' ? 'select' : 'pan';
+              setTool(nextTool);
+            }}
+            className={clsx(
+              "p-2 transition-colors",
+              tool === 'pan' 
+                ? "bg-blue-50 text-blue-600 hover:bg-blue-100" 
+                : "text-zinc-600 hover:bg-zinc-100 hover:text-zinc-900"
+            )}
+          >
+            <Hand className="w-5 h-5" />
+          </button>
+        </Tooltip>
+
         <Tooltip content="Sticky" shortcut="S">
           <button 
             type="button"
@@ -194,7 +232,7 @@ export const Toolbar: React.FC = () => {
                 : "text-zinc-600 hover:bg-zinc-100 hover:text-zinc-900"
             )}
           >
-            <div className={clsx("w-5 h-5", tool === 'sticky' ? 'bg-yellow-400 border-yellow-500' : 'bg-yellow-400 border-yellow-500/20')} />
+            <div className={clsx("w-4 h-4 bg-white border-2", tool === 'sticky' ? 'border-blue-600' : 'border-currentColor')} />
           </button>
         </Tooltip>
         
@@ -280,44 +318,6 @@ export const Toolbar: React.FC = () => {
             className="p-2 hover:bg-zinc-100 transition-colors text-zinc-600 hover:text-zinc-900"
           >
             <Link className="w-5 h-5" />
-          </button>
-        </Tooltip>
-        
-        <Tooltip content="Select" shortcut="V">
-          <button 
-            type="button"
-            onPointerDown={(e) => {
-              e.stopPropagation();
-              const nextTool = 'select';
-              setTool(nextTool);
-            }}
-            className={clsx(
-              "p-2 transition-colors",
-              tool === 'select' 
-                ? "bg-blue-50 text-blue-600 hover:bg-blue-100" 
-                : "text-zinc-600 hover:bg-zinc-100 hover:text-zinc-900"
-            )}
-          >
-            <MousePointer className="w-5 h-5" />
-          </button>
-        </Tooltip>
-
-        <Tooltip content="Pan" shortcut="H">
-          <button 
-            type="button"
-            onPointerDown={(e) => {
-              e.stopPropagation();
-              const nextTool = tool === 'pan' ? 'select' : 'pan';
-              setTool(nextTool);
-            }}
-            className={clsx(
-              "p-2 transition-colors",
-              tool === 'pan' 
-                ? "bg-blue-50 text-blue-600 hover:bg-blue-100" 
-                : "text-zinc-600 hover:bg-zinc-100 hover:text-zinc-900"
-            )}
-          >
-            <Hand className="w-5 h-5" />
           </button>
         </Tooltip>
       </div>
@@ -444,7 +444,7 @@ export const Toolbar: React.FC = () => {
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
             transition={{ duration: 0.15, ease: "easeOut" }}
-            className="fixed inset-0 flex items-center justify-center z-[10000] pointer-events-auto"
+            className="fixed inset-0 flex items-center justify-center z-[9999] pointer-events-auto"
             onClick={handleLinkCancel}
           >
             <motion.div 

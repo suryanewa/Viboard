@@ -29,13 +29,20 @@ export const Canvas: React.FC<{ children: React.ReactNode }> = ({ children }) =>
   const isDrawing = useRef(false);
   const isCreatingShape = useRef(false);
   const isDraggingDrawing = useRef(false);
+  const isErasing = useRef(false);
+
+  const markerType = useBoardStore((state) => state.markerType);
+  const markerColor = useBoardStore((state) => state.markerColor);
+  const markerThickness = useBoardStore((state) => state.markerThickness);
+  const removeDrawings = useBoardStore((state) => state.removeDrawings);
 
   const markerCursor = `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24'%3E%3Cpath fill='%23333' d='M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z'/%3E%3C/svg%3E") 0 24, auto`;
+  const eraserCursor = `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24'%3E%3Cpath fill='%23ef4444' d='M20 20H7L3 16a1 1 0 0 1 0-1.41l9.59-9.59a2 2 0 0 1 2.82 0l5.17 5.17a2 2 0 0 1 0 2.83L14 19.83'/%3E%3Cpath fill='none' stroke='%23ef4444' stroke-width='2' d='M6.5 13.5L12 8'/%3E%3C/svg%3E") 0 24, auto`;
 
-  const stickyCursor = `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24'%3E%3Crect x='3' y='3' width='18' height='18' rx='2' fill='%23fef08a' stroke='%23eab308' stroke-width='1.5'/%3E%3C/svg%3E") 12 12, auto`;
+  const stickyCursor = `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24'%3E%3Crect x='3' y='3' width='18' height='18' rx='2' fill='white' stroke='%23333' stroke-width='2'/%3E%3C/svg%3E") 12 12, auto`;
 
   const cursorStyle = tool === 'marker' 
-    ? markerCursor 
+    ? (markerType === 'eraser' ? eraserCursor : markerCursor)
     : tool === 'pan' 
       ? (isGrabbing ? 'grabbing' : 'grab')
       : tool === 'sticky'
@@ -167,13 +174,27 @@ export const Canvas: React.FC<{ children: React.ReactNode }> = ({ children }) =>
     const canvasY = (e.clientY - rect.top - viewport.y) / viewport.zoom;
 
     if (tool === 'marker') {
+      if (markerType === 'eraser') {
+        isErasing.current = true;
+        const drawingsToRemove = drawings
+          .filter(d => d.points.some(p => 
+            Math.sqrt(Math.pow(p.x - canvasX, 2) + Math.pow(p.y - canvasY, 2)) < markerThickness * 3
+          ))
+          .map(d => d.id);
+        if (drawingsToRemove.length > 0) {
+          removeDrawings(drawingsToRemove);
+        }
+        return;
+      }
+      
       isDrawing.current = true;
       const startPoint = { x: canvasX, y: canvasY };
       setCurrentPath({
         id: uuidv4(),
         points: [startPoint, { x: canvasX + 0.1, y: canvasY + 0.1 }],
-        color: '#facc15',
-        strokeWidth: 12
+        color: markerColor,
+        strokeWidth: markerThickness * 2,
+        toolType: markerType
       });
       return;
     }
@@ -238,7 +259,7 @@ export const Canvas: React.FC<{ children: React.ReactNode }> = ({ children }) =>
     setMarquee({ x1: canvasX, y1: canvasY, x2: canvasX, y2: canvasY });
     useBoardStore.getState().setSelection([]);
     useBoardStore.getState().setDrawingSelection([]);
-  }, [tool, setCurrentPath, setActiveShape, drawings, drawingSelection, setDrawingSelection, setSelection]);
+  }, [tool, markerType, markerColor, markerThickness, removeDrawings, setCurrentPath, setActiveShape, drawings, drawingSelection, setDrawingSelection, setSelection, addBlock]);
 
   const PAN_SENSITIVITY = 2;
 
@@ -283,6 +304,16 @@ export const Canvas: React.FC<{ children: React.ReactNode }> = ({ children }) =>
         ...currentPath,
         points: [...currentPath.points, { x: canvasX, y: canvasY }]
       });
+    } else if (isErasing.current) {
+      const { drawings: currentDrawings, removeDrawings: removeDraws } = useBoardStore.getState();
+      const drawingsToRemove = currentDrawings
+        .filter(d => d.points.some(p => 
+          Math.sqrt(Math.pow(p.x - canvasX, 2) + Math.pow(p.y - canvasY, 2)) < markerThickness * 3
+        ))
+        .map(d => d.id);
+      if (drawingsToRemove.length > 0) {
+        removeDraws(drawingsToRemove);
+      }
     } else if (isMarquee.current && marquee) {
       setMarquee(prev => prev ? { ...prev, x2: canvasX, y2: canvasY } : null);
       
@@ -302,7 +333,7 @@ export const Canvas: React.FC<{ children: React.ReactNode }> = ({ children }) =>
       useBoardStore.getState().setSelection(selectedIds);
       useBoardStore.getState().setDrawingSelection(selectedDrawingIds);
     }
-  }, [marquee, blocks, drawings, setMousePos, currentPath, setCurrentPath, drawingSelection, updateDrawings, activeShape, setActiveShape]);
+  }, [marquee, blocks, drawings, setMousePos, currentPath, setCurrentPath, drawingSelection, updateDrawings, activeShape, setActiveShape, markerThickness]);
 
   const handlePointerUp = useCallback(() => {
     if (isPanning.current) {
@@ -315,6 +346,9 @@ export const Canvas: React.FC<{ children: React.ReactNode }> = ({ children }) =>
     if (isMarquee.current) {
       isMarquee.current = false;
       setMarquee(null);
+    }
+    if (isErasing.current) {
+      isErasing.current = false;
     }
     if (isDrawing.current && currentPath) {
       isDrawing.current = false;
@@ -428,7 +462,7 @@ export const Canvas: React.FC<{ children: React.ReactNode }> = ({ children }) =>
                 strokeWidth={path.strokeWidth}
                 strokeLinecap="round"
                 strokeLinejoin="round"
-                style={{ opacity: 0.8 }}
+                style={{ opacity: path.toolType === 'highlighter' ? 0.4 : 0.9 }}
               />
             ))}
             {currentPath && (
@@ -440,7 +474,7 @@ export const Canvas: React.FC<{ children: React.ReactNode }> = ({ children }) =>
                 strokeWidth={currentPath.strokeWidth}
                 strokeLinecap="round"
                 strokeLinejoin="round"
-                style={{ opacity: 0.8 }}
+                style={{ opacity: currentPath.toolType === 'highlighter' ? 0.4 : 0.9 }}
               />
             )}
           </svg>
