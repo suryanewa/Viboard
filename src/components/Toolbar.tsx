@@ -62,7 +62,7 @@ export const Toolbar: React.FC = () => {
         setTool('shape');
       } else if (e.key.toLowerCase() === 'v' && !cmdOrCtrl) {
         setTool('select');
-      } else if (e.key.toLowerCase() === 'h' && !cmdOrCtrl) {
+      } else if (e.key.toLowerCase() === 'p' && !cmdOrCtrl) {
         setTool('pan');
       }
 
@@ -194,7 +194,7 @@ export const Toolbar: React.FC = () => {
           </button>
         </Tooltip>
 
-        <Tooltip content="Pan" shortcut="H">
+        <Tooltip content="Pan" shortcut="P">
           <button 
             type="button"
             onPointerDown={(e) => {
