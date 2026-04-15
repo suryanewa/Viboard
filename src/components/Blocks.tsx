@@ -18,6 +18,12 @@ export const StickyBlock: React.FC<BlockContentProps> = ({ block }) => {
       hasFocused.current = true;
       requestAnimationFrame(() => {
         el.focus();
+        const range = document.createRange();
+        const sel = window.getSelection();
+        range.selectNodeContents(el);
+        range.collapse(false);
+        sel?.removeAllRanges();
+        sel?.addRange(range);
       });
     }
   };
