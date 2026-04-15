@@ -374,15 +374,13 @@ export const Toolbar: React.FC = () => {
             onPointerLeave={() => setHoveredTopRightTool(null)}
             className="relative w-9 h-9 p-2 rounded-lg transition-colors"
           >
-            {(hoveredTopRightTool || snapping) === 'snap' && (
-              <motion.div
-                layoutId="top-right-toolbar-hover-bg"
-                initial={false}
-                animate={{ opacity: (hoveredTopRightTool === 'snap' && snapping !== true) || snapping ? 1 : 0 }}
-                transition={{ layout: { type: "spring", stiffness: 350, damping: 30, mass: 0.8 }, opacity: { duration: 0.2 } }}
-                className="absolute inset-0 rounded-lg bg-zinc-100 -z-20"
-              />
-            )}
+            <motion.div
+              layoutId="top-right-toolbar-hover-bg"
+              initial={false}
+              animate={{ opacity: (hoveredTopRightTool === 'snap' || snapping) ? 1 : 0 }}
+              transition={{ layout: { type: "spring", stiffness: 350, damping: 30, mass: 0.8 }, opacity: { duration: 0.2 } }}
+              className="absolute inset-0 rounded-lg bg-zinc-100 -z-20"
+            />
             <span className={clsx("relative z-10 transition-colors", snapping ? "text-blue-600" : "text-zinc-600")}>
               <Magnet className={clsx("w-5 h-5", snapping && "fill-blue-600/10")} />
             </span>
@@ -400,15 +398,13 @@ export const Toolbar: React.FC = () => {
             onPointerLeave={() => setHoveredTopRightTool(null)}
             className="relative w-9 h-9 p-2 rounded-lg transition-colors"
           >
-            {(hoveredTopRightTool || gridView !== 'none') === 'grid' && (
-              <motion.div
-                layoutId="top-right-toolbar-hover-bg"
-                initial={false}
-                animate={{ opacity: (hoveredTopRightTool === 'grid' && gridView === 'none') || gridView !== 'none' ? 1 : 0 }}
-                transition={{ layout: { type: "spring", stiffness: 350, damping: 30, mass: 0.8 }, opacity: { duration: 0.2 } }}
-                className="absolute inset-0 rounded-lg bg-zinc-100 -z-20"
-              />
-            )}
+            <motion.div
+              layoutId="top-right-toolbar-hover-bg"
+              initial={false}
+              animate={{ opacity: (hoveredTopRightTool === 'grid' || gridView !== 'none') ? 1 : 0 }}
+              transition={{ layout: { type: "spring", stiffness: 350, damping: 30, mass: 0.8 }, opacity: { duration: 0.2 } }}
+              className="absolute inset-0 rounded-lg bg-zinc-100 -z-20"
+            />
             <span className={clsx("relative z-10 transition-colors", gridView !== 'none' ? "text-blue-600" : "text-zinc-600")}>
               {gridView === 'box' ? (
                 <svg className="w-5 h-5" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg">
@@ -449,15 +445,13 @@ export const Toolbar: React.FC = () => {
             onPointerLeave={() => setHoveredTopRightTool(null)}
             className="relative w-9 h-9 p-2 rounded-lg transition-colors"
           >
-            {hoveredTopRightTool === 'zoom-out' && (
-              <motion.div
-                layoutId="top-right-toolbar-hover-bg"
-                initial={false}
-                animate={{ opacity: 1 }}
-                transition={{ layout: { type: "spring", stiffness: 350, damping: 30, mass: 0.8 }, opacity: { duration: 0.2 } }}
-                className="absolute inset-0 rounded-lg bg-zinc-100 -z-20"
-              />
-            )}
+            <motion.div
+              layoutId="top-right-toolbar-hover-bg"
+              initial={false}
+              animate={{ opacity: hoveredTopRightTool === 'zoom-out' ? 1 : 0 }}
+              transition={{ layout: { type: "spring", stiffness: 350, damping: 30, mass: 0.8 }, opacity: { duration: 0.2 } }}
+              className="absolute inset-0 rounded-lg bg-zinc-100 -z-20"
+            />
             <span className="relative z-10 text-zinc-600">
               <ZoomOut className="w-5 h-5" />
             </span>
@@ -472,15 +466,13 @@ export const Toolbar: React.FC = () => {
             onPointerLeave={() => setHoveredTopRightTool(null)}
             className="relative w-9 h-9 p-2 rounded-lg transition-colors text-xs font-mono flex items-center justify-center"
           >
-            {hoveredTopRightTool === 'zoom' && (
-              <motion.div
-                layoutId="top-right-toolbar-hover-bg"
-                initial={false}
-                animate={{ opacity: 1 }}
-                transition={{ layout: { type: "spring", stiffness: 350, damping: 30, mass: 0.8 }, opacity: { duration: 0.2 } }}
-                className="absolute inset-0 rounded-lg bg-zinc-100 -z-20"
-              />
-            )}
+            <motion.div
+              layoutId="top-right-toolbar-hover-bg"
+              initial={false}
+              animate={{ opacity: hoveredTopRightTool === 'zoom' ? 1 : 0 }}
+              transition={{ layout: { type: "spring", stiffness: 350, damping: 30, mass: 0.8 }, opacity: { duration: 0.2 } }}
+              className="absolute inset-0 rounded-lg bg-zinc-100 -z-20"
+            />
             <span className="relative z-10 text-zinc-600">
               {Math.round(viewport.zoom * 100)}%
             </span>
@@ -495,15 +487,13 @@ export const Toolbar: React.FC = () => {
             onPointerLeave={() => setHoveredTopRightTool(null)}
             className="relative w-9 h-9 p-2 rounded-lg transition-colors"
           >
-            {hoveredTopRightTool === 'zoom-in' && (
-              <motion.div
-                layoutId="top-right-toolbar-hover-bg"
-                initial={false}
-                animate={{ opacity: 1 }}
-                transition={{ layout: { type: "spring", stiffness: 350, damping: 30, mass: 0.8 }, opacity: { duration: 0.2 } }}
-                className="absolute inset-0 rounded-lg bg-zinc-100 -z-20"
-              />
-            )}
+            <motion.div
+              layoutId="top-right-toolbar-hover-bg"
+              initial={false}
+              animate={{ opacity: hoveredTopRightTool === 'zoom-in' ? 1 : 0 }}
+              transition={{ layout: { type: "spring", stiffness: 350, damping: 30, mass: 0.8 }, opacity: { duration: 0.2 } }}
+              className="absolute inset-0 rounded-lg bg-zinc-100 -z-20"
+            />
             <span className="relative z-10 text-zinc-600">
               <ZoomIn className="w-5 h-5" />
             </span>
@@ -519,15 +509,13 @@ export const Toolbar: React.FC = () => {
             onPointerLeave={() => setHoveredTopLeftTool(null)}
             className="relative w-9 h-9 p-2 rounded-lg transition-colors"
           >
-            {hoveredTopLeftTool === 'search' && (
-              <motion.div
-                layoutId="top-left-toolbar-hover-bg"
-                initial={false}
-                animate={{ opacity: 1 }}
-                transition={{ layout: { type: "spring", stiffness: 350, damping: 30, mass: 0.8 }, opacity: { duration: 0.2 } }}
-                className="absolute inset-0 rounded-lg bg-zinc-100 -z-20"
-              />
-            )}
+            <motion.div
+              layoutId="top-left-toolbar-hover-bg"
+              initial={false}
+              animate={{ opacity: hoveredTopLeftTool === 'search' ? 1 : 0 }}
+              transition={{ layout: { type: "spring", stiffness: 350, damping: 30, mass: 0.8 }, opacity: { duration: 0.2 } }}
+              className="absolute inset-0 rounded-lg bg-zinc-100 -z-20"
+            />
             <span className="relative z-10 text-zinc-600">
               <Search className="w-5 h-5" />
             </span>
@@ -545,15 +533,13 @@ export const Toolbar: React.FC = () => {
             onPointerLeave={() => setHoveredTopLeftTool(null)}
             className="relative w-9 h-9 p-2 rounded-lg transition-colors"
           >
-            {hoveredTopLeftTool === 'share' && (
-              <motion.div
-                layoutId="top-left-toolbar-hover-bg"
-                initial={false}
-                animate={{ opacity: 1 }}
-                transition={{ layout: { type: "spring", stiffness: 350, damping: 30, mass: 0.8 }, opacity: { duration: 0.2 } }}
-                className="absolute inset-0 rounded-lg bg-zinc-100 -z-20"
-              />
-            )}
+            <motion.div
+              layoutId="top-left-toolbar-hover-bg"
+              initial={false}
+              animate={{ opacity: hoveredTopLeftTool === 'share' ? 1 : 0 }}
+              transition={{ layout: { type: "spring", stiffness: 350, damping: 30, mass: 0.8 }, opacity: { duration: 0.2 } }}
+              className="absolute inset-0 rounded-lg bg-zinc-100 -z-20"
+            />
             <span className="relative z-10 text-zinc-600">
               <Send className="w-5 h-5" />
             </span>
