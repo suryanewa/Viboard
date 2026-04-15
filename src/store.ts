@@ -50,6 +50,7 @@ interface BoardState {
   markerType: 'marker' | 'highlighter' | 'eraser';
   markerColor: string;
   markerThickness: number;
+  stickyHue: number;
   activeShape: { type: string, x1: number, y1: number, x2: number, y2: number } | null;
   isDraggingGroup: boolean;
   currentPath: DrawingPath | null;
@@ -75,6 +76,7 @@ interface BoardState {
   setMarkerType: (type: 'marker' | 'highlighter' | 'eraser') => void;
   setMarkerColor: (color: string) => void;
   setMarkerThickness: (thickness: number) => void;
+  setStickyHue: (hue: number) => void;
   setIsDraggingGroup: (isDragging: boolean) => void;
   setActiveShape: (shape: { type: string, x1: number, y1: number, x2: number, y2: number } | null) => void;
   setCurrentPath: (path: DrawingPath | null) => void;
@@ -106,6 +108,7 @@ export const useBoardStore = create<BoardState>((set, get) => ({
   markerType: 'marker',
   markerColor: 'hsl(45, 90%, 65%)',
   markerThickness: 4,
+  stickyHue: 55,
   activeShape: null,
   isDraggingGroup: false,
   currentPath: null,
@@ -215,6 +218,7 @@ export const useBoardStore = create<BoardState>((set, get) => ({
   setMarkerType: (markerType) => set({ markerType }),
   setMarkerColor: (markerColor) => set({ markerColor }),
   setMarkerThickness: (markerThickness) => set({ markerThickness }),
+  setStickyHue: (stickyHue) => set({ stickyHue }),
   setIsDraggingGroup: (isDraggingGroup) => set({ isDraggingGroup }),
   setActiveShape: (activeShape) => set({ activeShape }),
   setCurrentPath: (currentPath) => set({ currentPath }),

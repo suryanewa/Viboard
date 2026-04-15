@@ -26,6 +26,8 @@ export const PropertyToolbar: React.FC = () => {
   const setMarkerThickness = useBoardStore((state) => state.setMarkerThickness);
   const markerColor = useBoardStore((state) => state.markerColor);
   const setMarkerColor = useBoardStore((state) => state.setMarkerColor);
+  const stickyHue = useBoardStore((state) => state.stickyHue);
+  const setStickyHue = useBoardStore((state) => state.setStickyHue);
 
   const selectedBlocks = selection.map(id => blocks[id]).filter(Boolean);
   const hasSelectedStickies = selectedBlocks.length > 0 && selectedBlocks.every(b => b.type === 'sticky');
@@ -34,7 +36,7 @@ export const PropertyToolbar: React.FC = () => {
     ? parseInt(markerColor.match(/\d+/)?.[0] || '45', 10)
     : hasSelectedStickies && selectedBlocks[0]?.data?.hue !== undefined 
       ? selectedBlocks[0].data.hue 
-      : 55;
+      : stickyHue;
   const [currentHue, setCurrentHue] = useState(initialHue);
 
   if (tool !== 'sticky' && tool !== 'marker') return null;
@@ -53,6 +55,7 @@ export const PropertyToolbar: React.FC = () => {
 
   const handleStickyColorClick = (hue: number) => {
     setCurrentHue(hue);
+    setStickyHue(hue);
     if (hasSelectedStickies) {
       selection.forEach(id => {
         updateBlock(id, { data: { ...blocks[id].data, hue } });

@@ -162,7 +162,7 @@ export const Canvas: React.FC<{ children: React.ReactNode }> = ({ children }) =>
         width: 240,
         height: 240,
         zIndex: highestZ + 1,
-        data: { text: '', color: 'yellow' }
+        data: { text: '', hue: useBoardStore.getState().stickyHue }
       });
       setSelection([id]);
       return;
