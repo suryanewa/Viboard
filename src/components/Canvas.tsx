@@ -37,7 +37,7 @@ export const Canvas: React.FC<{ children: React.ReactNode }> = ({ children }) =>
   const removeDrawings = useBoardStore((state) => state.removeDrawings);
 
   const markerCursor = `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24'%3E%3Cpath fill='%23333' d='M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z'/%3E%3C/svg%3E") 0 24, auto`;
-  const eraserCursor = `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24'%3E%3Cpath fill='%23ef4444' d='M20 20H7L3 16a1 1 0 0 1 0-1.41l9.59-9.59a2 2 0 0 1 2.82 0l5.17 5.17a2 2 0 0 1 0 2.83L14 19.83'/%3E%3Cpath fill='none' stroke='%23ef4444' stroke-width='2' d='M6.5 13.5L12 8'/%3E%3C/svg%3E") 0 24, auto`;
+  const eraserCursor = `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24'%3E%3Cpath fill='%23333' d='M20 20H7L3 16a1 1 0 0 1 0-1.41l9.59-9.59a2 2 0 0 1 2.82 0l5.17 5.17a2 2 0 0 1 0 2.83L14 19.83'/%3E%3Cpath fill='none' stroke='%23333' stroke-width='2' d='M6.5 13.5L12 8'/%3E%3C/svg%3E") 0 24, auto`;
 
   const stickyCursor = `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24'%3E%3Crect x='3' y='3' width='18' height='18' rx='2' fill='white' stroke='%23333' stroke-width='2'/%3E%3C/svg%3E") 12 12, auto`;
 
