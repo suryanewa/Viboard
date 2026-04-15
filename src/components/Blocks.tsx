@@ -11,6 +11,12 @@ export const StickyBlock: React.FC<BlockContentProps> = ({ block }) => {
   const textRef = useRef<HTMLParagraphElement>(null);
   const updateBlock = useBoardStore((state) => state.updateBlock);
 
+  useEffect(() => {
+    if (textRef.current) {
+      textRef.current.focus();
+    }
+  }, []);
+
   const handleInput = () => {
     const el = textRef.current;
     if (el) {
