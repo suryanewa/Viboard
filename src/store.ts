@@ -60,14 +60,15 @@ interface BoardState {
   currentPath: DrawingPath | null;
   drawings: DrawingPath[];
   drawingSelection: string[];
+  snapLines: { x?: number, y?: number }[];
   history: {
     past: { blocks: Record<string, Block>; drawings: DrawingPath[] }[];
     future: { blocks: Record<string, Block>; drawings: DrawingPath[] }[];
   };
   
   addBlock: (block: Block) => void;
-  updateBlock: (id: string, updates: Partial<Block>) => void;
-  updateBlocks: (updates: { id: string; updates: Partial<Block> }[]) => void;
+  updateBlock: (id: string, updates: Partial<Block>, noHistory?: boolean) => void;
+  updateBlocks: (updates: { id: string; updates: Partial<Block> }[], noHistory?: boolean) => void;
   removeBlocks: (ids: string[]) => void;
   setSelection: (ids: string[]) => void;
   setDrawingSelection: (ids: string[]) => void;
@@ -84,6 +85,7 @@ interface BoardState {
   setStickyHue: (hue: number) => void;
   setShapeType: (type: 'circle' | 'square' | 'triangle') => void;
   setShapeHue: (hue: number) => void;
+  setSnapLines: (snapLines: { x?: number, y?: number }[]) => void;
   setIsDraggingGroup: (isDragging: boolean) => void;
   setIsDuplicatingGroup: (isDuplicating: boolean) => void;
   setActiveShape: (shape: { type: string, x1: number, y1: number, x2: number, y2: number } | null) => void;
@@ -127,6 +129,7 @@ export const useBoardStore = create<BoardState>((set, get) => ({
   currentPath: null,
   drawings: [],
   drawingSelection: [],
+  snapLines: [],
   history: {
     past: [],
     future: [],
@@ -143,7 +146,7 @@ export const useBoardStore = create<BoardState>((set, get) => ({
     });
   },
 
-  updateBlock: (id, updates) => {
+  updateBlock: (id, updates, noHistory = false) => {
     const { blocks, drawings, history } = get();
     const block = blocks[id];
     if (!block) return;
@@ -152,14 +155,14 @@ export const useBoardStore = create<BoardState>((set, get) => ({
         ...blocks,
         [id]: { ...block, ...updates }
       },
-      history: {
+      history: noHistory ? history : {
         past: [...history.past.slice(-MAX_HISTORY + 1), { blocks, drawings }],
         future: [],
       }
     });
   },
 
-  updateBlocks: (updates) => {
+  updateBlocks: (updates, noHistory = false) => {
     const { blocks, drawings, history } = get();
     const newBlocks = { ...blocks };
     let hasChanges = false;
@@ -174,7 +177,7 @@ export const useBoardStore = create<BoardState>((set, get) => ({
     if (hasChanges) {
       set({
         blocks: newBlocks,
-        history: {
+        history: noHistory ? history : {
           past: [...history.past.slice(-MAX_HISTORY + 1), { blocks, drawings }],
           future: [],
         }
@@ -235,6 +238,7 @@ export const useBoardStore = create<BoardState>((set, get) => ({
   setStickyHue: (stickyHue) => set({ stickyHue }),
   setShapeType: (shapeType) => set({ shapeType }),
   setShapeHue: (shapeHue) => set({ shapeHue }),
+  setSnapLines: (snapLines) => set({ snapLines }),
   setIsDraggingGroup: (isDraggingGroup) => set({ isDraggingGroup }),
   setIsDuplicatingGroup: (isDuplicatingGroup) => set({ isDuplicatingGroup }),
   setActiveShape: (activeShape) => set({ activeShape }),

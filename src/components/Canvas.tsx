@@ -14,6 +14,7 @@ export const Canvas: React.FC<{ children: React.ReactNode }> = ({ children }) =>
   const activeShape = useBoardStore((state) => state.activeShape);
   const drawings = useBoardStore((state) => state.drawings);
   const drawingSelection = useBoardStore((state) => state.drawingSelection);
+  const snapLines = useBoardStore((state) => state.snapLines);
   const setCurrentPath = useBoardStore((state) => state.setCurrentPath);
   const setActiveShape = useBoardStore((state) => state.setActiveShape);
   const setSelection = useBoardStore((state) => state.setSelection);
@@ -26,6 +27,8 @@ export const Canvas: React.FC<{ children: React.ReactNode }> = ({ children }) =>
   const [isGrabbing, setIsGrabbing] = useState(false);
   const [marquee, setMarquee] = useState<{ x1: number, y1: number, x2: number, y2: number } | null>(null);
   const isMarquee = useRef(false);
+  const initialSelection = useRef<string[]>([]);
+  const initialDrawingSelection = useRef<string[]>([]);
   const isDrawing = useRef(false);
   const isCreatingShape = useRef(false);
   const isDraggingDrawing = useRef(false);
@@ -193,7 +196,7 @@ export const Canvas: React.FC<{ children: React.ReactNode }> = ({ children }) =>
         id: uuidv4(),
         points: [startPoint, { x: canvasX + 0.1, y: canvasY + 0.1 }],
         color: markerColor,
-        strokeWidth: markerThickness * 2,
+        strokeWidth: markerThickness / 2,
         toolType: markerType
       });
       return;
@@ -257,8 +260,16 @@ export const Canvas: React.FC<{ children: React.ReactNode }> = ({ children }) =>
 
     isMarquee.current = true;
     setMarquee({ x1: canvasX, y1: canvasY, x2: canvasX, y2: canvasY });
-    useBoardStore.getState().setSelection([]);
-    useBoardStore.getState().setDrawingSelection([]);
+    
+    if (e.shiftKey || shiftHeldRef.current) {
+      initialSelection.current = useBoardStore.getState().selection;
+      initialDrawingSelection.current = useBoardStore.getState().drawingSelection;
+    } else {
+      initialSelection.current = [];
+      initialDrawingSelection.current = [];
+      useBoardStore.getState().setSelection([]);
+      useBoardStore.getState().setDrawingSelection([]);
+    }
   }, [tool, markerType, markerColor, markerThickness, removeDrawings, setCurrentPath, setActiveShape, drawings, drawingSelection, setDrawingSelection, setSelection, addBlock]);
 
   const PAN_SENSITIVITY = 2;
@@ -330,8 +341,13 @@ export const Canvas: React.FC<{ children: React.ReactNode }> = ({ children }) =>
         .filter(d => d.points.some(p => p.x > x1 && p.x < x2 && p.y > y1 && p.y < y2))
         .map(d => d.id);
       
-      useBoardStore.getState().setSelection(selectedIds);
-      useBoardStore.getState().setDrawingSelection(selectedDrawingIds);
+      if (e.shiftKey || shiftHeldRef.current) {
+        useBoardStore.getState().setSelection([...new Set([...initialSelection.current, ...selectedIds])]);
+        useBoardStore.getState().setDrawingSelection([...new Set([...initialDrawingSelection.current, ...selectedDrawingIds])]);
+      } else {
+        useBoardStore.getState().setSelection(selectedIds);
+        useBoardStore.getState().setDrawingSelection(selectedDrawingIds);
+      }
     }
   }, [marquee, blocks, drawings, setMousePos, currentPath, setCurrentPath, drawingSelection, updateDrawings, activeShape, setActiveShape, markerThickness]);
 
@@ -433,6 +449,8 @@ export const Canvas: React.FC<{ children: React.ReactNode }> = ({ children }) =>
           }}
         >
           {children}
+
+          <div id="viboard-overlay-layer" className="absolute top-0 left-0 w-0 h-0 pointer-events-none z-[9999]" />
           
           <AnimatePresence>
             {marquee && (
@@ -512,6 +530,38 @@ export const Canvas: React.FC<{ children: React.ReactNode }> = ({ children }) =>
               />
             )}
           </svg>
+
+          {snapLines.map((line) => {
+            if (line.x !== undefined) {
+              return (
+                <div 
+                  key={`snap-x-${line.x}-${crypto.randomUUID()}`}
+                  className="absolute bg-blue-500/50 pointer-events-none z-[2000]"
+                  style={{
+                    left: line.x,
+                    top: -10000,
+                    width: 1,
+                    height: 20000
+                  }}
+                />
+              );
+            }
+            if (line.y !== undefined) {
+              return (
+                <div 
+                  key={`snap-y-${line.y}-${crypto.randomUUID()}`}
+                  className="absolute bg-blue-500/50 pointer-events-none z-[2000]"
+                  style={{
+                    top: line.y,
+                    left: -10000,
+                    height: 1,
+                    width: 20000
+                  }}
+                />
+              );
+            }
+            return null;
+          })}
         </motion.div>
       </button>
     </main>
