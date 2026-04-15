@@ -328,7 +328,6 @@ export const BlockShell: React.FC<BlockShellProps> = ({ block, children }) => {
               if (dist < bestDistX) {
                 bestDistX = dist;
                 snapX = otherEx - (i === 0 ? 0 : i === 1 ? currentW / 2 : currentW);
-                activeSnapLines.push({ x: otherEx });
               }
             });
           });
@@ -339,7 +338,6 @@ export const BlockShell: React.FC<BlockShellProps> = ({ block, children }) => {
               if (dist < bestDistY) {
                 bestDistY = dist;
                 snapY = otherEy - (i === 0 ? 0 : i === 1 ? currentH / 2 : currentH);
-                activeSnapLines.push({ y: otherEy });
               }
             });
           });
@@ -428,9 +426,38 @@ export const BlockShell: React.FC<BlockShellProps> = ({ block, children }) => {
 
         if (bestSnapXLines.length > 0) {
           activeSnapLines.push(...bestSnapXLines);
+        } else if (bestDistX < SNAP_THRESHOLD) {
+          const snappedEdgesX = [snapX, snapX + currentW / 2, snapX + currentW];
+          unselectedBlocks.forEach(other => {
+            const otherEdgesX = [other.x, other.x + other.width / 2, other.x + other.width];
+            snappedEdgesX.forEach(myEx => {
+              otherEdgesX.forEach(otherEx => {
+                if (Math.abs(myEx - otherEx) < 0.1) {
+                  if (!activeSnapLines.some(l => l.x !== undefined && Math.abs(l.x - otherEx) < 0.1)) {
+                    activeSnapLines.push({ x: otherEx });
+                  }
+                }
+              });
+            });
+          });
         }
+
         if (bestSnapYLines.length > 0) {
           activeSnapLines.push(...bestSnapYLines);
+        } else if (bestDistY < SNAP_THRESHOLD) {
+          const snappedEdgesY = [snapY, snapY + currentH / 2, snapY + currentH];
+          unselectedBlocks.forEach(other => {
+            const otherEdgesY = [other.y, other.y + other.height / 2, other.y + other.height];
+            snappedEdgesY.forEach(myEy => {
+              otherEdgesY.forEach(otherEy => {
+                if (Math.abs(myEy - otherEy) < 0.1) {
+                  if (!activeSnapLines.some(l => l.y !== undefined && Math.abs(l.y - otherEy) < 0.1)) {
+                    activeSnapLines.push({ y: otherEy });
+                  }
+                }
+              });
+            });
+          });
         }
         
         x.set(snapX);
