@@ -709,32 +709,37 @@ export const BlockShell: React.FC<BlockShellProps> = ({ block, children }) => {
       }}
       className={clsx(
         'group absolute outline-none select-none touch-none',
-        'transition-colors duration-200',
+        'transition-all duration-300 ease-[cubic-bezier(0.22,1,0.36,1)]',
         block.type !== 'shape' && block.type !== 'drawing' && block.type !== 'text' && block.type !== 'link' && [
           'border shadow-[0_4px_6px_-1px_rgba(0,0,0,0.1),_0_2px_4px_-1px_rgba(0,0,0,0.06)]',
-          isSelected ? 'border-transparent ring-2 ring-blue-500/20' : 'border-zinc-200 hover:border-zinc-300'
+          isSelected ? 'border-transparent ring-2 ring-blue-500/20' : 'border-zinc-200 ring-2 ring-transparent hover:border-zinc-300'
         ],
-        block.type === 'shape' && isSelected && 'ring-2 ring-blue-500/20'
+        block.type === 'shape' && (isSelected ? 'ring-2 ring-blue-500/20' : 'ring-2 ring-transparent')
       )}
     >
-      {isSelected && overlayElement && createPortal(
-        <motion.div
-          style={{
-            position: 'absolute',
-            left: 0,
-            top: 0,
-            x,
-            y,
-            width,
-            height,
-            scale,
-            pointerEvents: 'none',
-            zIndex: 9999
-          }}
-        >
-          <AnimatePresence>
-            {[
-              <motion.svg
+      {overlayElement && createPortal(
+        <AnimatePresence>
+          {isSelected && (
+            <motion.div
+              key="selection-overlay"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0, transition: { duration: 0.3, ease: [0.22, 1, 0.36, 1], delay: 0.2 } }}
+              style={{
+                position: 'absolute',
+                left: 0,
+                top: 0,
+                x,
+                y,
+                width,
+                height,
+                scale,
+                pointerEvents: 'none',
+                zIndex: 9999
+              }}
+            >
+              {[
+                <motion.svg
                 key="outline"
                 aria-hidden="true"
                 className="absolute pointer-events-none"
@@ -777,9 +782,10 @@ export const BlockShell: React.FC<BlockShellProps> = ({ block, children }) => {
               <ResizeHandle key="b" delay={0.15} direction="bottom" cursor="ns-resize" styles={{ bottom: -6, left: 'calc(50% - 6px)', pointerEvents: 'auto' }} onPointerDown={handleResizePointerDown} onPointerMove={handleResizePointerMove} onPointerUp={handleResizePointerUp} />,
               <ResizeHandle key="l" delay={0.15} direction="left" cursor="ew-resize" styles={{ top: 'calc(50% - 6px)', left: -6, pointerEvents: 'auto' }} onPointerDown={handleResizePointerDown} onPointerMove={handleResizePointerMove} onPointerUp={handleResizePointerUp} />,
               <ResizeHandle key="r" delay={0.15} direction="right" cursor="ew-resize" styles={{ top: 'calc(50% - 6px)', right: -6, pointerEvents: 'auto' }} onPointerDown={handleResizePointerDown} onPointerMove={handleResizePointerMove} onPointerUp={handleResizePointerUp} />
-            ]}
-          </AnimatePresence>
-        </motion.div>,
+              ]}
+            </motion.div>
+          )}
+        </AnimatePresence>,
         overlayElement
       )}
       <div className={clsx("w-full h-full", block.type !== 'shape' && block.type !== 'drawing' && "overflow-hidden")}>
