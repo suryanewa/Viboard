@@ -66,6 +66,7 @@ interface BoardState {
     future: { blocks: Record<string, Block>; drawings: DrawingPath[] }[];
   };
   
+  pushHistory: () => void;
   addBlock: (block: Block) => void;
   updateBlock: (id: string, updates: Partial<Block>, noHistory?: boolean) => void;
   updateBlocks: (updates: { id: string; updates: Partial<Block> }[], noHistory?: boolean) => void;
@@ -133,6 +134,16 @@ export const useBoardStore = create<BoardState>((set, get) => ({
   history: {
     past: [],
     future: [],
+  },
+
+  pushHistory: () => {
+    const { blocks, drawings, history } = get();
+    set({
+      history: {
+        past: [...history.past.slice(-MAX_HISTORY + 1), { blocks, drawings }],
+        future: [],
+      }
+    });
   },
 
   addBlock: (block) => {
