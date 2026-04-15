@@ -46,11 +46,15 @@ export const BlockShell: React.FC<BlockShellProps> = ({ block, children }) => {
   const altDupeIds = useRef<string[]>([]);
 
   const handlePointerDown = (e: React.PointerEvent) => {
-    if (e.button === 1) return; // Allow middle click for panning
-    e.stopPropagation();
-    
+    if (e.button === 1) return;
     if (e.button === 2 && isDragging.current) return;
-    
+
+    const target = e.target as HTMLElement;
+    const isContentEditable = target.closest?.('[contenteditable="true"]');
+
+    if (isContentEditable) return;
+
+    e.stopPropagation();
     e.currentTarget.setPointerCapture(e.pointerId);
     
     const { selection, setSelection, setIsDraggingGroup } = useBoardStore.getState();

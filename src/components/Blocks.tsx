@@ -10,10 +10,17 @@ interface BlockContentProps {
 export const StickyBlock: React.FC<BlockContentProps> = ({ block }) => {
   const textRef = useRef<HTMLParagraphElement>(null);
   const updateBlock = useBoardStore((state) => state.updateBlock);
+  const isEditingRef = useRef(false);
 
   useEffect(() => {
-    if (textRef.current) {
+    if (textRef.current && !isEditingRef.current) {
       textRef.current.focus();
+      const range = document.createRange();
+      const sel = window.getSelection();
+      range.selectNodeContents(textRef.current);
+      range.collapse(false);
+      sel?.removeAllRanges();
+      sel?.addRange(range);
     }
   }, []);
 
@@ -24,6 +31,14 @@ export const StickyBlock: React.FC<BlockContentProps> = ({ block }) => {
       el.style.height = `${el.scrollHeight}px`;
       updateBlock(block.id, { data: { ...block.data, text: el.innerText } });
     }
+  };
+
+  const handleFocus = () => {
+    isEditingRef.current = true;
+  };
+
+  const handleBlur = () => {
+    isEditingRef.current = false;
   };
 
   const hue = block.data.hue !== undefined ? block.data.hue : (block.data.color === 'yellow' ? 55 : 55);
@@ -40,6 +55,8 @@ export const StickyBlock: React.FC<BlockContentProps> = ({ block }) => {
         contentEditable
         suppressContentEditableWarning
         onInput={handleInput}
+        onFocus={handleFocus}
+        onBlur={handleBlur}
         style={{ minHeight: '1.5em' }}
       >
         {block.data.text}
