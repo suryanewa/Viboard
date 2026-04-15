@@ -83,9 +83,10 @@ export const BlockShell: React.FC<BlockShellProps> = ({ block, children }) => {
     };
 
     if (e.altKey) {
-      const { duplicate, selection: currentSelection } = useBoardStore.getState();
+      const { duplicate, selection: currentSelection, setIsDuplicatingGroup } = useBoardStore.getState();
       duplicate(currentSelection, true);
       altDupeIds.current = useBoardStore.getState().selection;
+      setIsDuplicatingGroup(true);
     } else {
       altDupeIds.current = [];
     }
@@ -158,14 +159,22 @@ export const BlockShell: React.FC<BlockShellProps> = ({ block, children }) => {
     isDragging.current = false;
     altDupeIds.current = [];
     
-    const { selection, setIsDraggingGroup } = useBoardStore.getState();
+    const { selection, setIsDraggingGroup, setIsDuplicatingGroup } = useBoardStore.getState();
     setIsDraggingGroup(false);
+    setIsDuplicatingGroup(false);
     
     scale.set(1);
     boxShadow.set('0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06)');
 
     if (!(selection.length > 1 && selection.includes(block.id))) {
       updateBlock(block.id, { x: x.get(), y: y.get() });
+    }
+
+    window.getSelection()?.removeAllRanges();
+    
+    const activeEl = document.activeElement;
+    if (activeEl && (activeEl as HTMLElement).isContentEditable) {
+      (activeEl as HTMLElement).blur();
     }
   };
 
@@ -195,10 +204,11 @@ export const BlockShell: React.FC<BlockShellProps> = ({ block, children }) => {
           'border shadow-[0_4px_6px_-1px_rgba(0,0,0,0.1),_0_2px_4px_-1px_rgba(0,0,0,0.06)]',
           isSelected ? 'border-blue-500 ring-2 ring-blue-500/20' : 'border-zinc-200 hover:border-zinc-300'
         ],
-        (block.type === 'shape' || block.type === 'drawing' || block.type === 'text' || block.type === 'link') && isSelected && 'border border-blue-400 rounded-sm'
+        block.type === 'shape' && isSelected && 'ring-2 ring-blue-500/20',
+        (block.type === 'drawing' || block.type === 'text' || block.type === 'link') && isSelected && 'border border-blue-400'
       )}
     >
-      <div className="w-full h-full overflow-hidden">
+      <div className={clsx("w-full h-full", block.type !== 'shape' && block.type !== 'drawing' && "overflow-hidden")}>
         {children}
       </div>
     </motion.div>

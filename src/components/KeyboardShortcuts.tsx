@@ -2,32 +2,23 @@ import React, { useEffect } from 'react';
 import { useBoardStore } from '../store';
 
 export const KeyboardShortcuts: React.FC = () => {
-  const selection = useBoardStore((state) => state.selection);
-  const drawingSelection = useBoardStore((state) => state.drawingSelection);
-  const blocks = useBoardStore((state) => state.blocks);
-  const updateBlocks = useBoardStore((state) => state.updateBlocks);
-  const setSelection = useBoardStore((state) => state.setSelection);
-  const setDrawingSelection = useBoardStore((state) => state.setDrawingSelection);
-  const removeBlocks = useBoardStore((state) => state.removeBlocks);
-  const removeDrawings = useBoardStore((state) => state.removeDrawings);
-  const copy = useBoardStore((state) => state.copy);
-  const cut = useBoardStore((state) => state.cut);
-  const paste = useBoardStore((state) => state.paste);
-  const duplicate = useBoardStore((state) => state.duplicate);
-  const undo = useBoardStore((state) => state.undo);
-  const redo = useBoardStore((state) => state.redo);
-
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       const isCmd = e.metaKey || e.ctrlKey;
 
+      console.log('[KeyboardShortcuts] key:', e.key, 'activeElement:', document.activeElement?.tagName, 'contentEditable:', (document.activeElement as HTMLElement)?.isContentEditable);
+
       if (
         document.activeElement instanceof HTMLInputElement ||
         document.activeElement instanceof HTMLTextAreaElement ||
-        (document.activeElement as HTMLElement).isContentEditable
+        (document.activeElement as HTMLElement)?.isContentEditable
       ) {
+        console.log('[KeyboardShortcuts] Returning early due to activeElement');
         return;
       }
+
+      const { selection, drawingSelection, blocks, removeBlocks, removeDrawings, setSelection, setDrawingSelection, updateBlocks, copy, cut, paste, duplicate, undo, redo } = useBoardStore.getState();
+      console.log('[KeyboardShortcuts] selection:', selection, 'drawingSelection:', drawingSelection);
 
       if (e.key === 'Backspace' || e.key === 'Delete') {
         if (selection.length > 0) {
@@ -81,7 +72,7 @@ export const KeyboardShortcuts: React.FC = () => {
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [selection, drawingSelection, blocks, removeBlocks, removeDrawings, setSelection, setDrawingSelection, updateBlocks, copy, cut, paste, duplicate, undo, redo]);
+  }, []);
 
   return null;
 };
