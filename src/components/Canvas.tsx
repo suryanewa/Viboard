@@ -462,7 +462,7 @@ export const Canvas: React.FC<{ children: React.ReactNode }> = ({ children }) =>
                 strokeWidth={path.strokeWidth}
                 strokeLinecap="round"
                 strokeLinejoin="round"
-                style={{ opacity: path.toolType === 'highlighter' ? 0.4 : 0.9 }}
+                style={{ opacity: path.toolType === 'highlighter' ? 0.4 : 1 }}
               />
             ))}
             {currentPath && (
@@ -474,7 +474,7 @@ export const Canvas: React.FC<{ children: React.ReactNode }> = ({ children }) =>
                 strokeWidth={currentPath.strokeWidth}
                 strokeLinecap="round"
                 strokeLinejoin="round"
-                style={{ opacity: currentPath.toolType === 'highlighter' ? 0.4 : 0.9 }}
+                style={{ opacity: currentPath.toolType === 'highlighter' ? 0.4 : 1 }}
               />
             )}
           </svg>
