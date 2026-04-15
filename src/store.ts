@@ -47,12 +47,16 @@ interface BoardState {
   mousePos: { x: number, y: number };
   clipboard: Block[];
   tool: 'select' | 'marker' | 'shape' | 'text' | 'pan' | 'sticky';
+  animationState: 'idle' | 'animating-out' | 'hopping' | 'animating-in';
   markerType: 'marker' | 'highlighter' | 'eraser';
   markerColor: string;
   markerThickness: number;
   stickyHue: number;
+  shapeType: 'circle' | 'square' | 'triangle';
+  shapeHue: number;
   activeShape: { type: string, x1: number, y1: number, x2: number, y2: number } | null;
   isDraggingGroup: boolean;
+  isDuplicatingGroup: boolean;
   currentPath: DrawingPath | null;
   drawings: DrawingPath[];
   drawingSelection: string[];
@@ -73,11 +77,15 @@ interface BoardState {
   setCanvasTitle: (title: string) => void;
   setMousePos: (x: number, y: number) => void;
   setTool: (tool: 'select' | 'marker' | 'shape' | 'text' | 'pan' | 'sticky') => void;
+  setAnimationState: (state: 'idle' | 'animating-out' | 'hopping' | 'animating-in') => void;
   setMarkerType: (type: 'marker' | 'highlighter' | 'eraser') => void;
   setMarkerColor: (color: string) => void;
   setMarkerThickness: (thickness: number) => void;
   setStickyHue: (hue: number) => void;
+  setShapeType: (type: 'circle' | 'square' | 'triangle') => void;
+  setShapeHue: (hue: number) => void;
   setIsDraggingGroup: (isDragging: boolean) => void;
+  setIsDuplicatingGroup: (isDuplicating: boolean) => void;
   setActiveShape: (shape: { type: string, x1: number, y1: number, x2: number, y2: number } | null) => void;
   setCurrentPath: (path: DrawingPath | null) => void;
   addDrawing: (path: DrawingPath) => void;
@@ -105,12 +113,17 @@ export const useBoardStore = create<BoardState>((set, get) => ({
   mousePos: { x: 0, y: 0 },
   clipboard: [],
   tool: 'select',
+  animationState: 'idle' as 'idle' | 'animating-out' | 'hopping' | 'animating-in',
+  pendingTool: null as 'select' | 'marker' | 'shape' | 'text' | 'pan' | 'sticky' | null,
   markerType: 'marker',
   markerColor: 'hsl(45, 90%, 65%)',
   markerThickness: 4,
   stickyHue: 55,
+  shapeType: 'square',
+  shapeHue: 0,
   activeShape: null,
   isDraggingGroup: false,
+  isDuplicatingGroup: false,
   currentPath: null,
   drawings: [],
   drawingSelection: [],
@@ -215,11 +228,15 @@ export const useBoardStore = create<BoardState>((set, get) => ({
 
   setMousePos: (x, y) => set({ mousePos: { x, y } }),
   setTool: (tool) => set({ tool }),
+  setAnimationState: (animationState) => set({ animationState }),
   setMarkerType: (markerType) => set({ markerType }),
   setMarkerColor: (markerColor) => set({ markerColor }),
   setMarkerThickness: (markerThickness) => set({ markerThickness }),
   setStickyHue: (stickyHue) => set({ stickyHue }),
+  setShapeType: (shapeType) => set({ shapeType }),
+  setShapeHue: (shapeHue) => set({ shapeHue }),
   setIsDraggingGroup: (isDraggingGroup) => set({ isDraggingGroup }),
+  setIsDuplicatingGroup: (isDuplicatingGroup) => set({ isDuplicatingGroup }),
   setActiveShape: (activeShape) => set({ activeShape }),
   setCurrentPath: (currentPath) => set({ currentPath }),
   

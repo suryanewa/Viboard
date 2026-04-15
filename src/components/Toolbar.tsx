@@ -19,8 +19,12 @@ export const Toolbar: React.FC = () => {
 
   const tool = useBoardStore((state) => state.tool);
   const setTool = useBoardStore((state) => state.setTool);
+  const animationState = useBoardStore((state) => state.animationState);
+  const setAnimationState = useBoardStore((state) => state.setAnimationState);
 
   const [showLinkPopup, setShowLinkPopup] = useState(false);
+  const [hopDirection, setHopDirection] = useState<1 | -1>(1);
+  const [hoveredTool, setHoveredTool] = useState<string | null>(null);
   const [linkUrl, setLinkUrl] = useState('');
   const linkInputRef = useRef<HTMLInputElement>(null);
 
@@ -44,6 +48,37 @@ export const Toolbar: React.FC = () => {
     setViewport({ x: newX, y: newY, zoom: newZoom });
   };
 
+  const TOOLS = React.useMemo(() => [
+    { id: 'select', icon: MousePointer, shortcut: 'V', color: 'blue', hasSecondary: false, hoverAnim: { scale: 1.1, rotate: -15, x: -1, y: -1 } as any },
+    { id: 'pan', icon: Hand, shortcut: 'P', color: 'blue', hasSecondary: false, hoverAnim: { scale: 1.1, rotate: [0, -15, 15, -10, 0] } as any },
+    { id: 'sticky', icon: () => <div className={clsx("w-4 h-4 bg-white border-2 transition-colors", tool === 'sticky' ? 'border-blue-600' : 'border-currentColor')} />, shortcut: 'S', color: 'blue', hasSecondary: true, hoverAnim: { scale: 1.15, rotate: 10, y: -1 } as any },
+    { id: 'text', icon: Type, shortcut: 'T', color: 'blue', hasSecondary: false, hoverAnim: { scale: 1.1, y: -2 } as any },
+    { id: 'marker', icon: Pencil, shortcut: 'M', color: 'yellow', hasSecondary: true, hoverAnim: { scale: 1.1, rotate: -20, x: 2, y: -2 } as any },
+    { id: 'shape', icon: Circle, shortcut: 'K', color: 'red', hasSecondary: true, hoverAnim: { scale: 1.15 } as any },
+  ], [tool]);
+
+  const handleToolSelect = React.useCallback((nextTool: 'select' | 'marker' | 'shape' | 'text' | 'pan' | 'sticky') => {
+    if (tool === nextTool) return;
+    
+    const currentIndex = TOOLS.findIndex(t => t.id === tool);
+    const nextIndex = TOOLS.findIndex(t => t.id === nextTool);
+    setHopDirection(nextIndex > currentIndex ? 1 : -1);
+    
+    const nextToolHasSecondary = TOOLS.find(t => t.id === nextTool)?.hasSecondary;
+    
+    setTool(nextTool);
+    if (nextTool === 'sticky' || nextTool === 'text' || nextTool === 'shape' || nextTool === 'marker') {
+      useBoardStore.getState().setSelection([]);
+      useBoardStore.getState().setDrawingSelection([]);
+    }
+    
+    setAnimationState('hopping');
+    
+    setTimeout(() => {
+      setAnimationState(nextToolHasSecondary ? 'animating-in' : 'idle');
+    }, 450);
+  }, [tool, setAnimationState, setTool, TOOLS]);
+
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       const isInput = e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement;
@@ -53,17 +88,17 @@ export const Toolbar: React.FC = () => {
       const cmdOrCtrl = isMac ? e.metaKey : e.ctrlKey;
 
       if (e.key.toLowerCase() === 's' && !e.shiftKey && !cmdOrCtrl) {
-        setTool('sticky');
+        handleToolSelect('sticky');
       } else if (e.key.toLowerCase() === 't' && !cmdOrCtrl) {
-        setTool('text');
+        handleToolSelect('text');
       } else if (e.key.toLowerCase() === 'm' && !cmdOrCtrl) {
-        setTool('marker');
+        handleToolSelect('marker');
       } else if (e.key.toLowerCase() === 'k' && !cmdOrCtrl) {
-        setTool('shape');
+        handleToolSelect('shape');
       } else if (e.key.toLowerCase() === 'v' && !cmdOrCtrl) {
-        setTool('select');
+        handleToolSelect('select');
       } else if (e.key.toLowerCase() === 'p' && !cmdOrCtrl) {
-        setTool('pan');
+        handleToolSelect('pan');
       }
 
       if (e.key.toLowerCase() === 'g') {
@@ -91,7 +126,7 @@ export const Toolbar: React.FC = () => {
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [snapping, gridView, viewport, setTool, setSnapping, setGridView, setViewport]);
+  }, [snapping, gridView, viewport, handleToolSelect, setSnapping, setGridView, setViewport]);
 
   const handleAddBlock = (type: BlockType, dataOverride: any = {}) => {
     setTool('select');
@@ -174,151 +209,157 @@ export const Toolbar: React.FC = () => {
 
   return (
     <div className="fixed bottom-8 left-0 right-0 flex justify-center z-[9998] pointer-events-none">
-      <div className="flex items-center gap-2 px-4 py-2 bg-white/90 backdrop-blur-md shadow-lg border border-zinc-200 pointer-events-auto">
-        <Tooltip content="Select" shortcut="V">
-          <button 
-            type="button"
-            onPointerDown={(e) => {
-              e.stopPropagation();
-              const nextTool = 'select';
-              setTool(nextTool);
-            }}
-            className={clsx(
-              "p-2 transition-colors",
-              tool === 'select' 
-                ? "bg-blue-50 text-blue-600 hover:bg-blue-100" 
-                : "text-zinc-600 hover:bg-zinc-100 hover:text-zinc-900"
-            )}
-          >
-            <MousePointer className="w-5 h-5" />
-          </button>
-        </Tooltip>
+      <div 
+        className="flex items-center gap-2 px-4 py-2 bg-white/90 backdrop-blur-md shadow-lg border border-zinc-200 pointer-events-auto rounded-xl"
+        onPointerLeave={() => setHoveredTool(null)}
+      >
+        {TOOLS.map((t) => {
+          const isSelected = tool === t.id;
+          const Icon = t.icon;
+          
+          return (
+            <Tooltip key={t.id} content={t.id.charAt(0).toUpperCase() + t.id.slice(1)} shortcut={t.shortcut}>
+              <motion.button
+                type="button"
+                initial="rest"
+                animate={isSelected ? "selected" : "rest"}
+                whileHover={!isSelected ? "hover" : undefined}
+                onPointerEnter={() => setHoveredTool(t.id)}
+                onPointerDown={(e) => {
+                  e.stopPropagation();
+                  handleToolSelect(t.id as 'select' | 'marker' | 'shape' | 'text' | 'pan' | 'sticky');
+                }}
+                className="relative p-2 flex items-center justify-center w-10 h-10 rounded-lg transition-colors"
+              >
+                {(hoveredTool || tool) === t.id && (
+                  <motion.div
+                    layoutId="toolbar-hover-bg"
+                    initial={false}
+                    animate={{ opacity: hoveredTool === t.id && !isSelected ? 1 : 0 }}
+                    transition={{
+                      layout: { type: "spring", stiffness: 350, damping: 30, mass: 0.8 },
+                      opacity: { duration: 0.2 }
+                    }}
+                    className="absolute inset-0 rounded-lg bg-zinc-100 -z-20"
+                  />
+                )}
 
-        <Tooltip content="Pan" shortcut="P">
-          <button 
-            type="button"
-            onPointerDown={(e) => {
-              e.stopPropagation();
-              const nextTool = tool === 'pan' ? 'select' : 'pan';
-              setTool(nextTool);
-            }}
-            className={clsx(
-              "p-2 transition-colors",
-              tool === 'pan' 
-                ? "bg-blue-50 text-blue-600 hover:bg-blue-100" 
-                : "text-zinc-600 hover:bg-zinc-100 hover:text-zinc-900"
-            )}
-          >
-            <Hand className="w-5 h-5" />
-          </button>
-        </Tooltip>
+                <AnimatePresence>
+                  {isSelected && animationState === 'animating-out' && (
+                    <motion.div
+                      initial={{ opacity: 1, scale: 1 }}
+                      exit={{ opacity: 0, scale: 1.2, transition: { duration: 0.2 } }}
+                      className="absolute inset-0 border-2 border-current rounded-lg"
+                    />
+                  )}
+                </AnimatePresence>
 
-        <Tooltip content="Sticky" shortcut="S">
-          <button 
-            type="button"
-            onPointerDown={(e) => {
-              e.stopPropagation();
-              const nextTool = tool === 'sticky' ? 'select' : 'sticky';
-              setTool(nextTool);
-              if (nextTool === 'sticky') {
-                useBoardStore.getState().setSelection([]);
-                useBoardStore.getState().setDrawingSelection([]);
-              }
-            }}
-            className={clsx(
-              "p-2 transition-colors",
-              tool === 'sticky' 
-                ? "bg-blue-50 text-blue-600 hover:bg-blue-100" 
-                : "text-zinc-600 hover:bg-zinc-100 hover:text-zinc-900"
-            )}
-          >
-            <div className={clsx("w-4 h-4 bg-white border-2", tool === 'sticky' ? 'border-blue-600' : 'border-currentColor')} />
-          </button>
-        </Tooltip>
-        
-        <Tooltip content="Text" shortcut="T">
-          <button 
-            type="button"
-            onPointerDown={(e) => {
-              e.stopPropagation();
-              const nextTool = tool === 'text' ? 'select' : 'text';
-              setTool(nextTool);
-              if (nextTool === 'text') {
-                useBoardStore.getState().setSelection([]);
-                useBoardStore.getState().setDrawingSelection([]);
-              }
-            }}
-            className={clsx(
-              "p-2 transition-colors",
-              tool === 'text' 
-                ? "bg-blue-50 text-blue-600 hover:bg-blue-100" 
-                : "text-zinc-600 hover:bg-zinc-100 hover:text-zinc-900"
-            )}
-          >
-            <Type className="w-5 h-5" />
-          </button>
-        </Tooltip>
-        
-        <Tooltip content="Marker" shortcut="M">
-          <button 
-            type="button"
-            onPointerDown={(e) => {
-              e.stopPropagation();
-              const nextTool = tool === 'marker' ? 'select' : 'marker';
-              setTool(nextTool);
-              if (nextTool === 'marker') {
-                useBoardStore.getState().setSelection([]);
-              }
-            }}
-            className={clsx(
-              "p-2 transition-colors",
-              tool === 'marker' 
-                ? "bg-yellow-50 text-yellow-600 hover:bg-yellow-100" 
-                : "text-zinc-600 hover:bg-zinc-100 hover:text-zinc-900"
-            )}
-          >
-            <Pencil className={clsx("w-5 h-5", tool === 'marker' && "fill-yellow-600/10")} />
-          </button>
-        </Tooltip>
+                {isSelected && (
+                  <motion.div
+                    layoutId="active-tool-bg"
+                    transition={{
+                      layout: {
+                        type: "spring",
+                        stiffness: 250,
+                        damping: 25,
+                        mass: 0.5
+                      },
+                      y: { duration: 0.4, times: [0, 0.5, 1], ease: ["circOut", "circIn"] },
+                      rotate: { duration: animationState === 'hopping' ? 0.45 : 0, times: [0, 0.85, 1], ease: ["easeInOut", "easeOut"] },
+                      scale: { duration: 0.45, times: [0, 0.4, 0.85, 1], ease: ["easeOut", "easeIn", "easeOut"] }
+                    }}
+                    animate={
+                      animationState === 'hopping' 
+                        ? { 
+                            rotate: [0, hopDirection === 1 ? 385 : -385, hopDirection === 1 ? 360 : -360], 
+                            y: [0, -50, 0], 
+                            scale: [1, 1.15, 0.9, 1] 
+                          } 
+                        : { rotate: 0, y: 0, scale: 1 }
+                    }
+                    className={clsx(
+                      "absolute inset-0 rounded-lg -z-10",
+                      t.color === 'blue' ? 'bg-blue-100' :
+                      t.color === 'yellow' ? 'bg-yellow-100' : 'bg-red-100'
+                    )}
+                  />
+                )}
 
-        <Tooltip content="Shape" shortcut="K">
-          <button 
-            type="button"
-            onPointerDown={(e) => {
-              e.stopPropagation();
-              const nextTool = tool === 'shape' ? 'select' : 'shape';
-              setTool(nextTool);
-              if (nextTool === 'shape') {
-                useBoardStore.getState().setSelection([]);
-                useBoardStore.getState().setDrawingSelection([]);
-              }
-            }}
-            className={clsx(
-              "p-2 transition-colors",
-              tool === 'shape' 
-                ? "bg-red-50 text-red-600 hover:bg-red-100" 
-                : "text-zinc-600 hover:bg-zinc-100 hover:text-zinc-900"
-            )}
-          >
-            <Circle className={clsx("w-5 h-5", tool === 'shape' && "fill-red-600/10")} />
-          </button>
-        </Tooltip>
+                <motion.div
+                  variants={{ 
+                    hover: t.hoverAnim,
+                    rest: { scale: 1, rotate: 0, x: 0, y: 0 },
+                    selected: { 
+                      scale: [1, 0.8, 1.2, 1],
+                      rotate: [0, -10, 10, 0],
+                      x: 0,
+                      y: 0
+                    }
+                  }}
+                  transition={{ duration: 0.3, type: "spring" }}
+                  className={clsx(
+                    "relative z-10 transition-colors duration-200",
+                    isSelected 
+                      ? `text-${t.color}-600` 
+                      : "text-zinc-600 hover:text-zinc-900"
+                  )}
+                >
+                  <Icon className={clsx("w-5 h-5", isSelected && `fill-${t.color}-600/10`)} />
+                </motion.div>
+              </motion.button>
+            </Tooltip>
+          );
+        })}
 
         <Tooltip content="Upload" shortcut="U">
-          <label className="p-2 hover:bg-zinc-100 transition-colors text-zinc-600 hover:text-zinc-900 cursor-pointer">
-            <Upload className="w-5 h-5" />
+          <motion.label 
+            whileHover="hover"
+            onPointerEnter={() => setHoveredTool('upload')}
+            className="relative p-2 flex items-center justify-center w-10 h-10 rounded-lg transition-colors text-zinc-600 hover:text-zinc-900 cursor-pointer"
+          >
+            {(hoveredTool || tool) === 'upload' && (
+              <motion.div
+                layoutId="toolbar-hover-bg"
+                initial={false}
+                animate={{ opacity: hoveredTool === 'upload' ? 1 : 0 }}
+                transition={{
+                  layout: { type: "spring", stiffness: 350, damping: 30, mass: 0.8 },
+                  opacity: { duration: 0.2 }
+                }}
+                className="absolute inset-0 rounded-lg bg-zinc-100 -z-20"
+              />
+            )}
+            <motion.div variants={{ hover: { scale: 1.1, y: -2 } }} transition={{ duration: 0.3, type: "spring" }}>
+              <Upload className="w-5 h-5" />
+            </motion.div>
             <input type="file" className="hidden" accept="image/*" onChange={handleFileUpload} />
-          </label>
+          </motion.label>
         </Tooltip>
 
         <Tooltip content="Link" shortcut="L">
-          <button 
+          <motion.button 
             type="button"
+            whileHover="hover"
+            onPointerEnter={() => setHoveredTool('link')}
             onClick={() => setShowLinkPopup(true)}
-            className="p-2 hover:bg-zinc-100 transition-colors text-zinc-600 hover:text-zinc-900"
+            className="relative p-2 flex items-center justify-center w-10 h-10 rounded-lg transition-colors text-zinc-600 hover:text-zinc-900"
           >
-            <Link className="w-5 h-5" />
-          </button>
+            {(hoveredTool || tool) === 'link' && (
+              <motion.div
+                layoutId="toolbar-hover-bg"
+                initial={false}
+                animate={{ opacity: hoveredTool === 'link' ? 1 : 0 }}
+                transition={{
+                  layout: { type: "spring", stiffness: 350, damping: 30, mass: 0.8 },
+                  opacity: { duration: 0.2 }
+                }}
+                className="absolute inset-0 rounded-lg bg-zinc-100 -z-20"
+              />
+            )}
+            <motion.div variants={{ hover: { scale: 1.1, rotate: 15 } }} transition={{ duration: 0.3, type: "spring" }}>
+              <Link className="w-5 h-5" />
+            </motion.div>
+          </motion.button>
         </Tooltip>
       </div>
 
