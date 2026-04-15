@@ -32,6 +32,7 @@ export const StickyBlock: React.FC<BlockContentProps> = ({ block }) => {
     if (textRef.current) {
       updateBlock(block.id, { data: { ...block.data, text: textRef.current.innerText } });
     }
+    window.getSelection()?.removeAllRanges();
   };
 
   const hue = block.data.hue !== undefined ? block.data.hue : (block.data.color === 'yellow' ? 55 : 55);
