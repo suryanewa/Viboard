@@ -18,11 +18,6 @@ export const StickyBlock: React.FC<BlockContentProps> = ({ block }) => {
       hasFocused.current = true;
       requestAnimationFrame(() => {
         el.focus();
-        window.getSelection()?.selectAllChildren(el);
-        const sel = window.getSelection();
-        if (sel) {
-          sel.collapseToEnd();
-        }
       });
     }
   };
@@ -31,7 +26,12 @@ export const StickyBlock: React.FC<BlockContentProps> = ({ block }) => {
     const el = e.currentTarget;
     el.style.height = 'auto';
     el.style.height = `${el.scrollHeight}px`;
-    updateBlock(block.id, { data: { ...block.data, text: el.innerText } });
+  };
+
+  const handleBlur = () => {
+    if (textRef.current) {
+      updateBlock(block.id, { data: { ...block.data, text: textRef.current.innerText } });
+    }
   };
 
   const hue = block.data.hue !== undefined ? block.data.hue : (block.data.color === 'yellow' ? 55 : 55);
@@ -48,6 +48,7 @@ export const StickyBlock: React.FC<BlockContentProps> = ({ block }) => {
         contentEditable
         suppressContentEditableWarning
         onInput={handleInput}
+        onBlur={handleBlur}
         style={{ minHeight: '1.5em' }}
       >
         {block.data.text}
