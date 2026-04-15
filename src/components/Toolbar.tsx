@@ -370,10 +370,10 @@ export const Toolbar: React.FC = () => {
             onClick={() => setSnapping(!snapping)}
             className={clsx(
               "relative w-9 h-9 p-2 rounded-lg transition-colors",
-              snapping ? "bg-blue-50" : ""
+              snapping ? "bg-blue-50 text-blue-600" : "text-zinc-600 hover:bg-zinc-100"
             )}
           >
-            <Magnet className={clsx("w-5 h-5 transition-colors", snapping ? "text-blue-600 fill-blue-600/10" : "text-zinc-600")} />
+            <Magnet className={clsx("w-5 h-5", snapping && "fill-blue-600/10")} />
           </button>
         </Tooltip>
 
@@ -386,10 +386,10 @@ export const Toolbar: React.FC = () => {
             }}
             className={clsx(
               "relative w-9 h-9 p-2 rounded-lg transition-colors",
-              gridView !== 'none' ? "bg-blue-50" : ""
+              gridView !== 'none' ? "bg-blue-50" : "text-zinc-600 hover:bg-zinc-100"
             )}
           >
-            <span className="text-zinc-600">
+            <span className={clsx(gridView !== 'none' ? "text-blue-600" : "text-zinc-600")}>
               {gridView === 'box' ? (
                 <svg className="w-5 h-5" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg">
                   <title>Box Grid</title>
