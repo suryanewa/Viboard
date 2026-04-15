@@ -208,7 +208,7 @@ export const Toolbar: React.FC = () => {
   };
 
   return (
-    <div className="fixed bottom-8 left-0 right-0 flex justify-center z-[9998] pointer-events-none">
+    <div className="fixed bottom-8 left-0 right-0 flex justify-center z-[9999] pointer-events-none">
       <div 
         className="flex items-center gap-2 px-4 py-2 bg-white/90 backdrop-blur-md shadow-lg border border-zinc-200 pointer-events-auto rounded-xl"
         onPointerLeave={() => setHoveredTool(null)}
