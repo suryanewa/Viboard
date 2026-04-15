@@ -28,7 +28,8 @@ const menuVariants: Variants = {
     transition: { 
       type: "spring",
       bounce: 0,
-      duration: 0.35
+      duration: 0.35,
+      delay: 0.45
     }
   }
 };
@@ -54,7 +55,7 @@ const itemVariants: Variants = {
     y: 10,
     rotateX: 65,
     filter: "blur(5px)",
-    transition: { type: "spring", bounce: 0.2, duration: 0.3 }
+    transition: { type: "spring", bounce: 0.2, duration: 0.45 }
   })
 };
 
