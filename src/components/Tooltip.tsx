@@ -20,7 +20,7 @@ export const Tooltip: React.FC<TooltipProps> = ({
   const [isVisible, setIsVisible] = useState(false);
 
   const positionClasses = {
-    top: '-top-10 left-1/2 -translate-x-1/2',
+    top: '-top-14 left-1/2 -translate-x-1/2',
     bottom: '-bottom-10 left-1/2 -translate-x-1/2',
     left: 'top-1/2 right-full -translate-y-1/2 mr-2',
     right: 'top-1/2 left-full -translate-y-1/2 ml-2'
