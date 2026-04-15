@@ -88,7 +88,7 @@ export const PropertyToolbar: React.FC = () => {
           animate={{ opacity: 1, y: 0, clipPath: 'circle(150% at 50% 100%)' }}
           exit={{ opacity: 0, y: 10, clipPath: 'circle(0% at 50% 100%)', transition: { duration: 0.15, ease: 'easeIn' } }}
           transition={{ type: 'spring', stiffness: 400, damping: 25 }}
-          className="fixed bottom-[88px] left-1/2 -translate-x-1/2 flex items-center justify-center px-4 bg-white/90 backdrop-blur-md shadow-lg border border-zinc-200 pointer-events-auto rounded-full z-[9998] w-[380px] h-[52px]"
+          className="fixed bottom-[148px] left-1/2 -translate-x-1/2 flex items-center justify-center px-4 bg-white/90 backdrop-blur-md shadow-lg border border-zinc-200 pointer-events-auto rounded-full z-[9998] w-[380px] h-[52px]"
         >
           {tool === 'sticky' && (
           <div className="flex items-center justify-center gap-3 w-full h-8">
