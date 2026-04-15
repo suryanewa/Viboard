@@ -148,7 +148,7 @@ export const Canvas: React.FC<{ children: React.ReactNode }> = ({ children }) =>
     }
 
     if (tool === 'sticky') {
-      const { viewport, blocks, setTool, addBlock } = useBoardStore.getState();
+      const { viewport, blocks, addBlock, setSelection } = useBoardStore.getState();
       const rect = containerRef.current!.getBoundingClientRect();
       const canvasX = (e.clientX - rect.left - viewport.x) / viewport.zoom;
       const canvasY = (e.clientY - rect.top - viewport.y) / viewport.zoom;
@@ -164,7 +164,7 @@ export const Canvas: React.FC<{ children: React.ReactNode }> = ({ children }) =>
         zIndex: highestZ + 1,
         data: { text: '', color: 'yellow' }
       });
-      setTool('select');
+      setSelection([id]);
       return;
     }
 

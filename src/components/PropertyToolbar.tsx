@@ -4,6 +4,16 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { Pencil, Highlighter, Eraser } from 'lucide-react';
 import clsx from 'clsx';
 
+const STICKY_COLORS = [
+  { name: 'yellow', hue: 55 },
+  { name: 'orange', hue: 30 },
+  { name: 'green', hue: 140 },
+  { name: 'blue', hue: 210 },
+  { name: 'purple', hue: 280 },
+  { name: 'pink', hue: 330 },
+  { name: 'red', hue: 0 },
+];
+
 export const PropertyToolbar: React.FC = () => {
   const tool = useBoardStore((state) => state.tool);
   const updateBlock = useBoardStore((state) => state.updateBlock);
@@ -41,6 +51,15 @@ export const PropertyToolbar: React.FC = () => {
     }
   };
 
+  const handleStickyColorClick = (hue: number) => {
+    setCurrentHue(hue);
+    if (hasSelectedStickies) {
+      selection.forEach(id => {
+        updateBlock(id, { data: { ...blocks[id].data, hue } });
+      });
+    }
+  };
+
   const handleStrokeChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     setMarkerThickness(parseFloat(e.target.value));
   };
@@ -51,56 +70,27 @@ export const PropertyToolbar: React.FC = () => {
         initial={{ opacity: 0, y: 10, scale: 0.95 }}
         animate={{ opacity: 1, y: 0, scale: 1 }}
         exit={{ opacity: 0, y: 10, scale: 0.95 }}
-        className="fixed bottom-24 left-1/2 -translate-x-1/2 flex items-center gap-4 px-5 py-2.5 bg-white/90 backdrop-blur-md shadow-lg border border-zinc-200 pointer-events-auto rounded-full z-[9998] min-w-[280px]"
+        className="fixed bottom-[88px] left-1/2 -translate-x-1/2 flex items-center justify-center px-4 bg-white/90 backdrop-blur-md shadow-lg border border-zinc-200 pointer-events-auto rounded-full z-[9998] w-[380px] h-[52px]"
       >
         {tool === 'sticky' && (
-          <>
-            <input 
-              type="range" 
-              min="0" 
-              max="360" 
-              value={currentHue} 
-              onChange={handleHueChange}
-              className="w-44 h-2 appearance-none rounded-full outline-none"
-              style={{
-                background: `linear-gradient(to right, 
-                  hsl(0, 90%, 65%), 
-                  hsl(60, 90%, 65%), 
-                  hsl(120, 90%, 65%), 
-                  hsl(180, 90%, 65%), 
-                  hsl(240, 90%, 65%), 
-                  hsl(300, 90%, 65%), 
-                  hsl(360, 90%, 65%)
-                )`
-              }}
-            />
-            <style>{`
-              input[type="range"]::-webkit-slider-thumb {
-                -webkit-appearance: none;
-                appearance: none;
-                width: 18px;
-                height: 18px;
-                border-radius: 50%;
-                background: white;
-                border: 2px solid #a1a1aa;
-                cursor: pointer;
-                box-shadow: 0 1px 3px rgba(0,0,0,0.1);
-              }
-              input[type="range"]::-moz-range-thumb {
-                width: 18px;
-                height: 18px;
-                border-radius: 50%;
-                background: white;
-                border: 2px solid #a1a1aa;
-                cursor: pointer;
-                box-shadow: 0 1px 3px rgba(0,0,0,0.1);
-              }
-            `}</style>
-          </>
+          <div className="flex items-center justify-center gap-3 w-full h-8">
+            {STICKY_COLORS.map(({ hue }) => (
+              <button
+                key={hue}
+                type="button"
+                onClick={() => handleStickyColorClick(hue)}
+                className={clsx(
+                  "w-6 h-6 rounded-full transition-transform hover:scale-110",
+                  currentHue === hue ? "ring-2 ring-zinc-900 ring-offset-2" : "border border-zinc-200/50"
+                )}
+                style={{ backgroundColor: `hsl(${hue}, 90%, 85%)` }}
+              />
+            ))}
+          </div>
         )}
 
         {tool === 'marker' && (
-          <div className="flex items-center gap-4 w-full">
+          <div className="flex items-center gap-4 w-full h-8">
             <div className="flex items-center gap-1 border-r border-zinc-200 pr-4">
               <button
                 type="button"
@@ -177,7 +167,7 @@ export const PropertyToolbar: React.FC = () => {
                 max="360" 
                 value={currentHue} 
                 onChange={handleHueChange}
-                className="flex-1 h-2 appearance-none rounded-full outline-none"
+                className="flex-1 w-full h-2 appearance-none rounded-full outline-none"
                 style={{
                   background: `linear-gradient(to right, 
                     hsl(0, 90%, 65%), 
