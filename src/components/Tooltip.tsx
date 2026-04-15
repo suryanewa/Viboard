@@ -61,7 +61,7 @@ export const Tooltip: React.FC<TooltipProps> = ({
             animate="animate"
             exit="exit"
             className={clsx(
-              "absolute z-[999999] px-2 py-1 flex items-center gap-1.5 whitespace-nowrap pointer-events-none",
+              "absolute z-[2147483647] px-2 py-1 flex items-center gap-1.5 whitespace-nowrap pointer-events-none",
               "bg-white/90 backdrop-blur-md border border-zinc-200 shadow-md",
               "text-[11px] font-medium text-zinc-900",
               positionClasses[position]
