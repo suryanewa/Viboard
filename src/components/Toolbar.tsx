@@ -1,6 +1,6 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useBoardStore } from '../store';
-import { Type, Link, Magnet, Upload, Pencil, Circle, MousePointer, Hand, ZoomIn, ZoomOut, Search, Send } from 'lucide-react';
+import { Type, Link, Magnet, Pencil, Circle, MousePointer, Hand, ZoomIn, ZoomOut, Search, Send } from 'lucide-react';
 import { v4 as uuidv4 } from 'uuid';
 import { motion, AnimatePresence } from 'framer-motion';
 import clsx from 'clsx';
@@ -22,19 +22,10 @@ export const Toolbar: React.FC = () => {
   const animationState = useBoardStore((state) => state.animationState);
   const setAnimationState = useBoardStore((state) => state.setAnimationState);
 
-  const [showLinkPopup, setShowLinkPopup] = useState(false);
   const [hopDirection, setHopDirection] = useState<1 | -1>(1);
   const [hoveredTool, setHoveredTool] = useState<string | null>(null);
   const [hoveredTopRight, setHoveredTopRight] = useState<string | null>(null);
   const [hoveredTopLeft, setHoveredTopLeft] = useState<string | null>(null);
-  const [linkUrl, setLinkUrl] = useState('');
-  const linkInputRef = useRef<HTMLInputElement>(null);
-
-  useEffect(() => {
-    if (showLinkPopup && linkInputRef.current) {
-      linkInputRef.current.focus();
-    }
-  }, [showLinkPopup]);
 
   const ZOOM_LEVELS = [0.25, 0.5, 0.75, 1, 2];
   const cycleZoom = () => {
@@ -57,9 +48,10 @@ export const Toolbar: React.FC = () => {
     { id: 'text', icon: Type, shortcut: 'T', color: 'red', hasSecondary: false, hoverAnim: { scale: 1.1, y: -2 } as any },
     { id: 'marker', icon: Pencil, shortcut: 'M', color: 'red', hasSecondary: true, hoverAnim: { scale: 1.1, rotate: -20, x: 2, y: -2 } as any },
     { id: 'shape', icon: Circle, shortcut: 'K', color: 'red', hasSecondary: true, hoverAnim: { scale: 1.15 } as any },
+    { id: 'link', icon: Link, shortcut: 'L', color: 'red', hasSecondary: true, hoverAnim: { scale: 1.1, rotate: 15 } as any },
   ], [tool]);
 
-  const handleToolSelect = React.useCallback((nextTool: 'select' | 'marker' | 'shape' | 'text' | 'pan' | 'sticky') => {
+  const handleToolSelect = React.useCallback((nextTool: 'select' | 'marker' | 'shape' | 'text' | 'pan' | 'sticky' | 'link') => {
     if (tool === nextTool) return;
     
     const currentIndex = TOOLS.findIndex(t => t.id === tool);
@@ -69,7 +61,7 @@ export const Toolbar: React.FC = () => {
     const nextToolHasSecondary = TOOLS.find(t => t.id === nextTool)?.hasSecondary;
     
     setTool(nextTool);
-    if (nextTool === 'sticky' || nextTool === 'text' || nextTool === 'shape' || nextTool === 'marker') {
+    if (nextTool === 'sticky' || nextTool === 'text' || nextTool === 'shape' || nextTool === 'marker' || nextTool === 'link') {
       useBoardStore.getState().setSelection([]);
       useBoardStore.getState().setDrawingSelection([]);
     }
@@ -101,6 +93,8 @@ export const Toolbar: React.FC = () => {
         handleToolSelect('select');
       } else if (e.key.toLowerCase() === 'p' && !cmdOrCtrl) {
         handleToolSelect('pan');
+      } else if (e.key.toLowerCase() === 'l' && !cmdOrCtrl) {
+        handleToolSelect('link');
       }
 
       if (e.key.toLowerCase() === 'g') {
@@ -130,7 +124,7 @@ export const Toolbar: React.FC = () => {
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [snapping, gridView, viewport, handleToolSelect, setSnapping, setGridView, setViewport]);
 
-  const handleAddBlock = (type: BlockType, dataOverride: any = {}) => {
+  const handleAddBlock = React.useCallback((type: BlockType, dataOverride: any = {}) => {
     setTool('select');
     const centerX = -viewport.x / viewport.zoom + window.innerWidth / 2 / viewport.zoom;
     const centerY = -viewport.y / viewport.zoom + window.innerHeight / 2 / viewport.zoom;
@@ -176,38 +170,14 @@ export const Toolbar: React.FC = () => {
     if (type === 'text') {
       useBoardStore.getState().setSelection([id]);
     }
-  };
+  }, [setTool, viewport, blocks, addBlock]);
 
-  const handleLinkSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (linkUrl.trim()) {
-      handleAddBlock('link', {
-        url: linkUrl.trim(),
-        title: linkUrl.trim(),
-        description: ''
-      });
-      setLinkUrl('');
-      setShowLinkPopup(false);
-    }
-  };
-
-  const handleLinkCancel = () => {
-    setLinkUrl('');
-    setShowLinkPopup(false);
-  };
-
-  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
-    setTool('select');
-    const file = e.target.files?.[0];
-    if (!file) return;
-
-    const reader = new FileReader();
-    reader.onload = (event) => {
-      const url = event.target?.result as string;
-      handleAddBlock('image', { url });
+  useEffect(() => {
+    (window as any).__handleAddBlock = handleAddBlock;
+    return () => {
+      delete (window as any).__handleAddBlock;
     };
-    reader.readAsDataURL(file);
-  };
+  }, [handleAddBlock]);
 
   return (
     <div className="fixed bottom-8 left-0 right-0 flex justify-center z-[9999] pointer-events-none">
@@ -229,7 +199,7 @@ export const Toolbar: React.FC = () => {
                 onPointerEnter={() => setHoveredTool(t.id)}
                 onPointerDown={(e) => {
                   e.stopPropagation();
-                  handleToolSelect(t.id as 'select' | 'marker' | 'shape' | 'text' | 'pan' | 'sticky');
+                  handleToolSelect(t.id as 'select' | 'marker' | 'shape' | 'text' | 'pan' | 'sticky' | 'link');
                 }}
                 className="relative p-2 flex items-center justify-center w-10 h-10 rounded-lg transition-colors"
               >
@@ -313,56 +283,6 @@ export const Toolbar: React.FC = () => {
           );
         })}
 
-        <Tooltip content="Upload" shortcut="U" position="top">
-          <motion.label 
-            whileHover="hover"
-            onPointerEnter={() => setHoveredTool('upload')}
-            className="relative p-2 flex items-center justify-center w-10 h-10 rounded-lg transition-colors text-zinc-600 hover:text-zinc-900 cursor-pointer"
-          >
-            {(hoveredTool || tool) === 'upload' && (
-              <motion.div
-                layoutId="toolbar-hover-bg"
-                initial={false}
-                animate={{ opacity: hoveredTool === 'upload' ? 1 : 0 }}
-                transition={{
-                  layout: { type: "spring", stiffness: 350, damping: 30, mass: 0.8 },
-                  opacity: { duration: 0.2 }
-                }}
-                className="absolute inset-0 rounded-lg bg-zinc-100 -z-20"
-              />
-            )}
-            <motion.div variants={{ hover: { scale: 1.1, y: -2 } }} transition={{ duration: 0.3, type: "spring" }}>
-              <Upload className="w-5 h-5" />
-            </motion.div>
-            <input type="file" className="hidden" accept="image/*" onChange={handleFileUpload} />
-          </motion.label>
-        </Tooltip>
-
-        <Tooltip content="Link" shortcut="L" position="top">
-          <motion.button 
-            type="button"
-            whileHover="hover"
-            onPointerEnter={() => setHoveredTool('link')}
-            onClick={() => setShowLinkPopup(true)}
-            className="relative p-2 flex items-center justify-center w-10 h-10 rounded-lg transition-colors text-zinc-600 hover:text-zinc-900"
-          >
-            {(hoveredTool || tool) === 'link' && (
-              <motion.div
-                layoutId="toolbar-hover-bg"
-                initial={false}
-                animate={{ opacity: hoveredTool === 'link' ? 1 : 0 }}
-                transition={{
-                  layout: { type: "spring", stiffness: 350, damping: 30, mass: 0.8 },
-                  opacity: { duration: 0.2 }
-                }}
-                className="absolute inset-0 rounded-lg bg-zinc-100 -z-20"
-              />
-            )}
-            <motion.div variants={{ hover: { scale: 1.1, rotate: 15 } }} transition={{ duration: 0.3, type: "spring" }}>
-              <Link className="w-5 h-5" />
-            </motion.div>
-          </motion.button>
-        </Tooltip>
       </div>
 
       <div 
@@ -641,63 +561,6 @@ export const Toolbar: React.FC = () => {
           </motion.button>
         </Tooltip>
       </div>
-
-      <AnimatePresence>
-        {showLinkPopup && (
-          <motion.div 
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            transition={{ duration: 0.15, ease: "easeOut" }}
-            className="fixed inset-0 flex items-center justify-center z-[9999] pointer-events-auto"
-            onClick={handleLinkCancel}
-          >
-            <motion.div 
-              initial={{ opacity: 0, scale: 0.95, y: 10, filter: "blur(4px)" }}
-              animate={{ opacity: 1, scale: 1, y: 0, filter: "blur(0px)" }}
-              exit={{ opacity: 0, scale: 0.95, y: 5, filter: "blur(2px)" }}
-              transition={{ 
-                type: "spring", 
-                damping: 25, 
-                stiffness: 350,
-                mass: 0.5
-              }}
-              className="bg-white/90 backdrop-blur-md shadow-lg border border-zinc-200 p-4 w-80 max-w-[90vw] pointer-events-auto flex flex-col gap-3"
-              onClick={(e: React.MouseEvent) => e.stopPropagation()}
-            >
-              <div className="flex items-center justify-between">
-                <h3 className="text-sm font-medium text-zinc-900">Add Link</h3>
-              </div>
-              <form onSubmit={handleLinkSubmit} className="flex flex-col gap-3">
-                <input
-                  ref={linkInputRef}
-                  type="url"
-                  required
-                  value={linkUrl}
-                  onChange={(e) => setLinkUrl(e.target.value)}
-                  placeholder="https://example.com"
-                  className="w-full px-3 py-2 bg-white border border-zinc-200 text-sm text-zinc-900 placeholder-zinc-400 focus:outline-none focus:border-zinc-400 transition-colors"
-                />
-                <div className="flex justify-end gap-2">
-                  <button
-                    type="button"
-                    onClick={handleLinkCancel}
-                    className="px-3 py-1.5 text-sm text-zinc-600 hover:text-zinc-900 hover:bg-zinc-100 transition-colors"
-                  >
-                    Cancel
-                  </button>
-                  <button
-                    type="submit"
-                    className="px-3 py-1.5 text-sm text-zinc-900 bg-zinc-100 border border-zinc-200 hover:bg-zinc-200 transition-colors shadow-sm"
-                  >
-                    Add
-                  </button>
-                </div>
-              </form>
-            </motion.div>
-          </motion.div>
-        )}
-      </AnimatePresence>
     </div>
   );
 };

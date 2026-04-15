@@ -437,16 +437,32 @@ export const Canvas: React.FC<{ children: React.ReactNode }> = ({ children }) =>
           <AnimatePresence>
             {marquee && (
               <motion.div
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
-                exit={{ opacity: 0 }}
-                className="absolute border border-blue-500 bg-blue-500/10 pointer-events-none z-[1000]"
-                style={{
+                initial={{ 
+                  opacity: 0,
                   left: Math.min(marquee.x1, marquee.x2),
                   top: Math.min(marquee.y1, marquee.y2),
                   width: Math.max(1, Math.abs(marquee.x2 - marquee.x1)),
                   height: Math.max(1, Math.abs(marquee.y2 - marquee.y1)),
                 }}
+                animate={{ 
+                  opacity: 1,
+                  left: Math.min(marquee.x1, marquee.x2),
+                  top: Math.min(marquee.y1, marquee.y2),
+                  width: Math.max(1, Math.abs(marquee.x2 - marquee.x1)),
+                  height: Math.max(1, Math.abs(marquee.y2 - marquee.y1)),
+                }}
+                exit={{ 
+                  opacity: 0, 
+                  scale: 0.98,
+                  transition: { duration: 0.1 } 
+                }}
+                transition={{ 
+                  type: "spring",
+                  damping: 25,
+                  stiffness: 400,
+                  mass: 0.5
+                }}
+                className="absolute pointer-events-none z-[1000] rounded-md border-[1.5px] border-blue-500/50 bg-blue-500/10 shadow-[inset_0_0_0_1px_rgba(255,255,255,0.15),_0_8px_32px_rgba(59,130,246,0.12)] backdrop-blur-[0.5px]"
               />
             )}
           </AnimatePresence>

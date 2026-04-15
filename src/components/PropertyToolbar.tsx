@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { useBoardStore } from '../store';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Pencil, Highlighter, Eraser, Circle, Square, Triangle } from 'lucide-react';
+import { Pencil, Highlighter, Eraser, Circle, Square, Triangle, Upload, CornerDownLeft } from 'lucide-react';
 import clsx from 'clsx';
 
 const STICKY_COLORS = [
@@ -47,6 +47,7 @@ export const PropertyToolbar: React.FC = () => {
         : stickyHue;
   const [currentHue, setCurrentHue] = useState(initialHue);
   const [hoveredProperty, setHoveredProperty] = useState<string | null>(null);
+  const [linkUrl, setLinkUrl] = useState('');
 
   const handleHueChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const newHue = parseInt(e.target.value, 10);
@@ -81,15 +82,43 @@ export const PropertyToolbar: React.FC = () => {
     setMarkerThickness(parseFloat(e.target.value));
   };
 
+  const handleLinkSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (linkUrl.trim()) {
+      if ((window as any).__handleAddBlock) {
+        (window as any).__handleAddBlock('link', {
+          url: linkUrl.trim(),
+          title: linkUrl.trim(),
+          description: ''
+        });
+      }
+      setLinkUrl('');
+    }
+  };
+
+  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      const url = event.target?.result as string;
+      if ((window as any).__handleAddBlock) {
+        (window as any).__handleAddBlock('image', { url });
+      }
+    };
+    reader.readAsDataURL(file);
+  };
+
   return (
     <AnimatePresence mode="wait">
-      {(tool === 'sticky' || tool === 'marker' || tool === 'shape') && (animationState === 'animating-in' || animationState === 'idle') && (
+      {(tool === 'sticky' || tool === 'marker' || tool === 'shape' || tool === 'link') && (animationState === 'animating-in' || animationState === 'idle') && (
         <motion.div
           initial={{ opacity: 0, y: 20, clipPath: 'circle(0% at 50% 100%)' }}
           animate={{ opacity: 1, y: 0, clipPath: 'circle(150% at 50% 100%)' }}
           exit={{ opacity: 0, y: 10, clipPath: 'circle(0% at 50% 100%)', transition: { duration: 0.15, ease: 'easeIn' } }}
           transition={{ type: 'spring', stiffness: 400, damping: 25 }}
-          className="fixed bottom-[110px] left-1/2 -translate-x-1/2 flex items-center justify-center px-4 bg-white/90 backdrop-blur-md shadow-lg border border-zinc-200 pointer-events-auto rounded-full z-[9998] w-[380px] h-[52px]"
+          className="fixed bottom-[110px] left-1/2 -translate-x-1/2 flex items-center justify-center px-[10px] bg-white/90 backdrop-blur-md shadow-lg border border-zinc-200 pointer-events-auto rounded-full z-[9998] w-[380px] h-[52px]"
         >
           {tool === 'sticky' && (
           <div className="flex items-center justify-center gap-3 w-full h-8">
@@ -499,6 +528,36 @@ export const PropertyToolbar: React.FC = () => {
                 }}
               />
             </div>
+          </div>
+        )}
+        
+        {tool === 'link' && (
+          <div className="flex items-center gap-2 w-full h-8">
+            <form onSubmit={handleLinkSubmit} className="flex flex-1 items-center gap-2">
+              <input
+                type="url"
+                required
+                value={linkUrl}
+                onChange={(e) => setLinkUrl(e.target.value)}
+                placeholder="https://example.com"
+                className="flex-1 px-4 py-1.5 bg-zinc-100/50 border border-zinc-200/50 rounded-full text-sm text-zinc-900 placeholder-zinc-400 focus:outline-none focus:bg-white focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all"
+              />
+              <button
+                type="submit"
+                className="flex items-center justify-center w-8 h-8 text-white bg-blue-600 rounded-full hover:bg-blue-700 transition-colors shadow-sm shrink-0"
+              >
+                <CornerDownLeft className="w-4 h-4" />
+              </button>
+            </form>
+            <motion.label 
+              whileHover={{ scale: 1.05 }}
+              whileTap={{ scale: 0.95 }}
+              className="relative flex items-center justify-center w-8 h-8 rounded-full transition-colors text-zinc-500 hover:text-zinc-900 hover:bg-zinc-100 cursor-pointer shrink-0"
+              title="Upload File"
+            >
+              <Upload className="w-4 h-4" />
+              <input type="file" className="hidden" accept="image/*" onChange={handleFileUpload} />
+            </motion.label>
           </div>
         )}
       </motion.div>

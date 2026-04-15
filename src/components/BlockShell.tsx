@@ -1,5 +1,5 @@
 import React, { useRef, useEffect } from 'react';
-import { motion, useMotionValue } from 'framer-motion';
+import { motion, useMotionValue, AnimatePresence } from 'framer-motion';
 import type { Block } from '../types';
 import { useBoardStore } from '../store';
 import clsx from 'clsx';
@@ -294,34 +294,36 @@ export const BlockShell: React.FC<BlockShellProps> = ({ block, children }) => {
         block.type === 'shape' && isSelected && 'ring-2 ring-blue-500/20'
       )}
     >
-      {isSelected && (
-        <svg
-          aria-hidden="true"
-          className="absolute pointer-events-none"
-          style={{ 
-            top: (block.type === 'shape' || block.type === 'drawing' || block.type === 'text' || block.type === 'link') ? 0 : -1,
-            left: (block.type === 'shape' || block.type === 'drawing' || block.type === 'text' || block.type === 'link') ? 0 : -1,
-            width: block.width,
-            height: block.height,
-            overflow: 'visible', 
-            zIndex: 10 
-          }}
-        >
-          {getSplitPathsForPoint(block.width, block.height, clickPoint.current).map((path, index) => (
-            <motion.path
-              key={index === 0 ? 'cw' : 'ccw'}
-              d={path}
-              fill="none"
-              stroke="#3b82f6"
-              strokeWidth="2"
-              initial={{ pathLength: 0, opacity: 0 }}
-              animate={{ pathLength: 1, opacity: 1 }}
-              exit={{ pathLength: 0, opacity: 0 }}
-              transition={{ duration: 0.5, ease: [0.22, 1, 0.36, 1] }}
-            />
-          ))}
-        </svg>
-      )}
+      <AnimatePresence>
+        {isSelected && (
+          <svg
+            aria-hidden="true"
+            className="absolute pointer-events-none"
+            style={{ 
+              top: (block.type === 'shape' || block.type === 'drawing' || block.type === 'text' || block.type === 'link') ? 0 : -1,
+              left: (block.type === 'shape' || block.type === 'drawing' || block.type === 'text' || block.type === 'link') ? 0 : -1,
+              width: block.width,
+              height: block.height,
+              overflow: 'visible', 
+              zIndex: 10 
+            }}
+          >
+            {getSplitPathsForPoint(block.width, block.height, clickPoint.current).map((path, index) => (
+              <motion.path
+                key={index === 0 ? 'cw' : 'ccw'}
+                d={path}
+                fill="none"
+                stroke="#3b82f6"
+                strokeWidth="2"
+                initial={{ pathLength: 0, opacity: 0 }}
+                animate={{ pathLength: 1, opacity: 1 }}
+                exit={{ pathLength: 0, opacity: 0 }}
+                transition={{ duration: 0.5, ease: [0.22, 1, 0.36, 1] }}
+              />
+            ))}
+          </svg>
+        )}
+      </AnimatePresence>
       <div className={clsx("w-full h-full", block.type !== 'shape' && block.type !== 'drawing' && "overflow-hidden")}>
         {children}
       </div>

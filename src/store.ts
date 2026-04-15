@@ -46,7 +46,7 @@ interface BoardState {
   canvasTitle: string;
   mousePos: { x: number, y: number };
   clipboard: Block[];
-  tool: 'select' | 'marker' | 'shape' | 'text' | 'pan' | 'sticky';
+  tool: 'select' | 'marker' | 'shape' | 'text' | 'pan' | 'sticky' | 'link';
   animationState: 'idle' | 'animating-out' | 'hopping' | 'animating-in';
   markerType: 'marker' | 'highlighter' | 'eraser';
   markerColor: string;
@@ -76,7 +76,7 @@ interface BoardState {
   setGridView: (gridView: 'box' | 'dot' | 'none') => void;
   setCanvasTitle: (title: string) => void;
   setMousePos: (x: number, y: number) => void;
-  setTool: (tool: 'select' | 'marker' | 'shape' | 'text' | 'pan' | 'sticky') => void;
+  setTool: (tool: 'select' | 'marker' | 'shape' | 'text' | 'pan' | 'sticky' | 'link') => void;
   setAnimationState: (state: 'idle' | 'animating-out' | 'hopping' | 'animating-in') => void;
   setMarkerType: (type: 'marker' | 'highlighter' | 'eraser') => void;
   setMarkerColor: (color: string) => void;
