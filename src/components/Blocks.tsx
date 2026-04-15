@@ -10,35 +10,23 @@ interface BlockContentProps {
 export const StickyBlock: React.FC<BlockContentProps> = ({ block }) => {
   const textRef = useRef<HTMLParagraphElement>(null);
   const updateBlock = useBoardStore((state) => state.updateBlock);
-  const isEditingRef = useRef(false);
+  const hasFocused = useRef(false);
 
-  useEffect(() => {
-    if (textRef.current && !isEditingRef.current) {
-      textRef.current.focus();
-      const range = document.createRange();
-      const sel = window.getSelection();
-      range.selectNodeContents(textRef.current);
-      range.collapse(false);
-      sel?.removeAllRanges();
-      sel?.addRange(range);
-    }
-  }, []);
-
-  const handleInput = () => {
-    const el = textRef.current;
-    if (el) {
-      el.style.height = 'auto';
-      el.style.height = `${el.scrollHeight}px`;
-      updateBlock(block.id, { data: { ...block.data, text: el.innerText } });
+  const setRef = (el: HTMLParagraphElement | null) => {
+    textRef.current = el;
+    if (el && !hasFocused.current) {
+      hasFocused.current = true;
+      requestAnimationFrame(() => {
+        el.focus();
+      });
     }
   };
 
-  const handleFocus = () => {
-    isEditingRef.current = true;
-  };
-
-  const handleBlur = () => {
-    isEditingRef.current = false;
+  const handleInput = (e: React.FormEvent<HTMLParagraphElement>) => {
+    const el = e.currentTarget;
+    el.style.height = 'auto';
+    el.style.height = `${el.scrollHeight}px`;
+    updateBlock(block.id, { data: { ...block.data, text: el.innerText } });
   };
 
   const hue = block.data.hue !== undefined ? block.data.hue : (block.data.color === 'yellow' ? 55 : 55);
@@ -50,13 +38,11 @@ export const StickyBlock: React.FC<BlockContentProps> = ({ block }) => {
       style={{ backgroundColor: bgColor }}
     >
       <p
-        ref={textRef}
+        ref={setRef}
         className="text-zinc-800 font-medium text-lg leading-relaxed outline-none"
         contentEditable
         suppressContentEditableWarning
         onInput={handleInput}
-        onFocus={handleFocus}
-        onBlur={handleBlur}
         style={{ minHeight: '1.5em' }}
       >
         {block.data.text}
