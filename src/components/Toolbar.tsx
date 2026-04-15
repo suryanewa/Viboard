@@ -218,7 +218,7 @@ export const Toolbar: React.FC = () => {
           const Icon = t.icon;
           
           return (
-            <Tooltip key={t.id} content={t.id.charAt(0).toUpperCase() + t.id.slice(1)} shortcut={t.shortcut}>
+            <Tooltip key={t.id} content={t.id.charAt(0).toUpperCase() + t.id.slice(1)} shortcut={t.shortcut} position="bottom">
               <motion.button
                 type="button"
                 initial="rest"
@@ -311,7 +311,7 @@ export const Toolbar: React.FC = () => {
           );
         })}
 
-        <Tooltip content="Upload" shortcut="U">
+        <Tooltip content="Upload" shortcut="U" position="bottom">
           <motion.label 
             whileHover="hover"
             onPointerEnter={() => setHoveredTool('upload')}
@@ -336,7 +336,7 @@ export const Toolbar: React.FC = () => {
           </motion.label>
         </Tooltip>
 
-        <Tooltip content="Link" shortcut="L">
+        <Tooltip content="Link" shortcut="L" position="bottom">
           <motion.button 
             type="button"
             whileHover="hover"
