@@ -391,20 +391,38 @@ export const Canvas: React.FC<{ children: React.ReactNode }> = ({ children }) =>
         onPointerLeave={handlePointerUp}
         onContextMenu={(e) => e.preventDefault()}
       >
-        <motion.div
-          className="absolute inset-0 pointer-events-none"
-          initial={false}
-          animate={{ opacity: gridView === 'none' ? 0 : 1 }}
-          style={{
-            backgroundImage: gridView === 'dot'
-              ? `radial-gradient(circle, var(--grid-color) 2px, transparent 2px)`
-              : gridView === 'box'
-              ? `linear-gradient(to right, var(--grid-color) 1px, transparent 1px), linear-gradient(to bottom, var(--grid-color) 1px, transparent 1px)`
-              : 'none',
-            backgroundSize: gridView === 'dot' ? dotSize : gridView === 'box' ? bgSize : '0 0',
-            backgroundPosition: bgPos,
-          }}
-        />
+        <AnimatePresence>
+          {gridView === 'box' && (
+            <motion.div
+              key="box-grid"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              transition={{ duration: 0.4, ease: "easeInOut" }}
+              className="absolute inset-0 pointer-events-none"
+              style={{
+                backgroundImage: `linear-gradient(to right, var(--grid-color) 1px, transparent 1px), linear-gradient(to bottom, var(--grid-color) 1px, transparent 1px)`,
+                backgroundSize: bgSize,
+                backgroundPosition: bgPos,
+              }}
+            />
+          )}
+          {gridView === 'dot' && (
+            <motion.div
+              key="dot-grid"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              transition={{ duration: 0.4, ease: "easeInOut" }}
+              className="absolute inset-0 pointer-events-none"
+              style={{
+                backgroundImage: `radial-gradient(circle, var(--grid-color) 2px, transparent 2px)`,
+                backgroundSize: dotSize,
+                backgroundPosition: `${mx}px ${my}px`,
+              }}
+            />
+          )}
+        </AnimatePresence>
 
         <motion.div
           className="absolute top-0 left-0 origin-top-left"

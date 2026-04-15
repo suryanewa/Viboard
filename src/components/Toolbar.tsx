@@ -53,9 +53,9 @@ export const Toolbar: React.FC = () => {
   const TOOLS = React.useMemo(() => [
     { id: 'select', icon: MousePointer, shortcut: 'V', color: 'blue', hasSecondary: false, hoverAnim: { scale: 1.1, rotate: -15, x: -1, y: -1 } as any },
     { id: 'pan', icon: Hand, shortcut: 'P', color: 'blue', hasSecondary: false, hoverAnim: { scale: 1.1, rotate: [0, -15, 15, -10, 0] } as any },
-    { id: 'sticky', icon: () => <div className={clsx("w-4 h-4 bg-white border-2 transition-colors", tool === 'sticky' ? 'border-blue-600' : 'border-currentColor')} />, shortcut: 'S', color: 'blue', hasSecondary: true, hoverAnim: { scale: 1.15, rotate: 10, y: -1 } as any },
-    { id: 'text', icon: Type, shortcut: 'T', color: 'blue', hasSecondary: false, hoverAnim: { scale: 1.1, y: -2 } as any },
-    { id: 'marker', icon: Pencil, shortcut: 'M', color: 'yellow', hasSecondary: true, hoverAnim: { scale: 1.1, rotate: -20, x: 2, y: -2 } as any },
+    { id: 'sticky', icon: () => <div className={clsx("w-4 h-4 border-2 transition-colors", tool === 'sticky' ? 'border-red-600' : 'border-currentColor')} />, shortcut: 'S', color: 'red', hasSecondary: true, hoverAnim: { scale: 1.15, rotate: 10, y: -1 } as any },
+    { id: 'text', icon: Type, shortcut: 'T', color: 'red', hasSecondary: false, hoverAnim: { scale: 1.1, y: -2 } as any },
+    { id: 'marker', icon: Pencil, shortcut: 'M', color: 'red', hasSecondary: true, hoverAnim: { scale: 1.1, rotate: -20, x: 2, y: -2 } as any },
     { id: 'shape', icon: Circle, shortcut: 'K', color: 'red', hasSecondary: true, hoverAnim: { scale: 1.15 } as any },
   ], [tool]);
 
@@ -396,7 +396,7 @@ export const Toolbar: React.FC = () => {
             )}
             {snapping && (
               <motion.div
-                layoutId="top-right-active-bg"
+                layoutId="top-right-snap-active-bg"
                 className="absolute inset-0 rounded-lg bg-blue-50 -z-10"
               />
             )}
@@ -436,36 +436,68 @@ export const Toolbar: React.FC = () => {
             )}
             {gridView !== 'none' && (
               <motion.div
-                layoutId="top-right-active-bg"
+                layoutId="top-right-grid-active-bg"
                 className="absolute inset-0 rounded-lg bg-blue-50 -z-10"
               />
             )}
             <motion.div className="relative z-10" variants={{ hover: { scale: 1.15 } }} transition={{ duration: 0.3, type: "spring" }}>
-              {gridView === 'box' ? (
-                <svg className="w-5 h-5" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg">
-                  <title>Box Grid</title>
-                  <rect x="2" y="2" width="6" height="6" rx="0.5" stroke="currentColor" strokeWidth="1.5"/>
-                  <rect x="12" y="2" width="6" height="6" rx="0.5" stroke="currentColor" strokeWidth="1.5"/>
-                  <rect x="2" y="12" width="6" height="6" rx="0.5" stroke="currentColor" strokeWidth="1.5"/>
-                  <rect x="12" y="12" width="6" height="6" rx="0.5" stroke="currentColor" strokeWidth="1.5"/>
-                </svg>
-              ) : gridView === 'dot' ? (
-                <svg className="w-5 h-5" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg">
-                  <title>Dot Grid</title>
-                  <circle cx="5" cy="5" r="2" fill="currentColor"/>
-                  <circle cx="15" cy="5" r="2" fill="currentColor"/>
-                  <circle cx="5" cy="15" r="2" fill="currentColor"/>
-                  <circle cx="15" cy="15" r="2" fill="currentColor"/>
-                </svg>
-              ) : (
-                <svg className="w-5 h-5" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg">
-                  <title>No Grid</title>
-                  <rect x="2" y="2" width="6" height="6" rx="0.5" stroke="currentColor" strokeWidth="1.5"/>
-                  <rect x="12" y="2" width="6" height="6" rx="0.5" stroke="currentColor" strokeWidth="1.5"/>
-                  <rect x="2" y="12" width="6" height="6" rx="0.5" stroke="currentColor" strokeWidth="1.5"/>
-                  <rect x="12" y="12" width="6" height="6" rx="0.5" stroke="currentColor" strokeWidth="1.5"/>
-                </svg>
-              )}
+              <AnimatePresence mode="wait">
+                {gridView === 'box' ? (
+                  <motion.svg
+                    key="box"
+                    initial={{ opacity: 0, scale: 0.8 }}
+                    animate={{ opacity: 1, scale: 1, rotate: 0 }}
+                    exit={{ opacity: 0, scale: 0.8, rotate: 45 }}
+                    transition={{ duration: 0.2 }}
+                    className="w-5 h-5"
+                    viewBox="0 0 20 20"
+                    fill="none"
+                    xmlns="http://www.w3.org/2000/svg"
+                  >
+                    <title>Box Grid</title>
+                    <rect x="2" y="2" width="6" height="6" rx="0.5" stroke="currentColor" strokeWidth="1.5"/>
+                    <rect x="12" y="2" width="6" height="6" rx="0.5" stroke="currentColor" strokeWidth="1.5"/>
+                    <rect x="2" y="12" width="6" height="6" rx="0.5" stroke="currentColor" strokeWidth="1.5"/>
+                    <rect x="12" y="12" width="6" height="6" rx="0.5" stroke="currentColor" strokeWidth="1.5"/>
+                  </motion.svg>
+                ) : gridView === 'dot' ? (
+                  <motion.svg
+                    key="dot"
+                    initial={{ opacity: 0, scale: 0.8, rotate: -45 }}
+                    animate={{ opacity: 1, scale: 1, rotate: 0 }}
+                    exit={{ opacity: 0, scale: 0.8 }}
+                    transition={{ duration: 0.2 }}
+                    className="w-5 h-5"
+                    viewBox="0 0 20 20"
+                    fill="none"
+                    xmlns="http://www.w3.org/2000/svg"
+                  >
+                    <title>Dot Grid</title>
+                    <circle cx="5" cy="5" r="2" fill="currentColor"/>
+                    <circle cx="15" cy="5" r="2" fill="currentColor"/>
+                    <circle cx="5" cy="15" r="2" fill="currentColor"/>
+                    <circle cx="15" cy="15" r="2" fill="currentColor"/>
+                  </motion.svg>
+                ) : (
+                  <motion.svg
+                    key="none"
+                    initial={{ opacity: 0, scale: 0.8 }}
+                    animate={{ opacity: 1, scale: 1, rotate: 0 }}
+                    exit={{ opacity: 0, scale: 0.8 }}
+                    transition={{ duration: 0.2 }}
+                    className="w-5 h-5"
+                    viewBox="0 0 20 20"
+                    fill="none"
+                    xmlns="http://www.w3.org/2000/svg"
+                  >
+                    <title>No Grid</title>
+                    <rect x="2" y="2" width="6" height="6" rx="0.5" stroke="currentColor" strokeWidth="1.5"/>
+                    <rect x="12" y="2" width="6" height="6" rx="0.5" stroke="currentColor" strokeWidth="1.5"/>
+                    <rect x="2" y="12" width="6" height="6" rx="0.5" stroke="currentColor" strokeWidth="1.5"/>
+                    <rect x="12" y="12" width="6" height="6" rx="0.5" stroke="currentColor" strokeWidth="1.5"/>
+                  </motion.svg>
+                )}
+              </AnimatePresence>
             </motion.div>
           </motion.button>
         </Tooltip>
@@ -518,7 +550,7 @@ export const Toolbar: React.FC = () => {
                 className="absolute inset-0 rounded-lg bg-zinc-100 -z-10"
               />
             )}
-            <motion.span className="relative z-10 inline-block" variants={{ hover: { scale: 1.1 } }} transition={{ duration: 0.3, type: "spring" }}>
+            <motion.span className="relative z-10 inline-block text-sm font-medium text-zinc-900" variants={{ hover: { scale: 1.1 } }} transition={{ duration: 0.3, type: "spring" }}>
               {Math.round(viewport.zoom * 100)}%
             </motion.span>
           </motion.button>
