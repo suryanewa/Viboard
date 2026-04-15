@@ -25,8 +25,6 @@ export const Toolbar: React.FC = () => {
   const [showLinkPopup, setShowLinkPopup] = useState(false);
   const [hopDirection, setHopDirection] = useState<1 | -1>(1);
   const [hoveredTool, setHoveredTool] = useState<string | null>(null);
-  const [hoveredTopRightTool, setHoveredTopRightTool] = useState<string | null>(null);
-  const [hoveredTopLeftTool, setHoveredTopLeftTool] = useState<string | null>(null);
   const [linkUrl, setLinkUrl] = useState('');
   const linkInputRef = useRef<HTMLInputElement>(null);
 
@@ -367,45 +365,31 @@ export const Toolbar: React.FC = () => {
 
       <div className="fixed top-8 right-8 flex items-center gap-1 px-2 py-1.5 bg-white/90 backdrop-blur-md shadow-lg border border-zinc-200 pointer-events-auto">
         <Tooltip content="Snap" shortcut="G" position="bottom">
-          <motion.button
+          <button
             type="button"
             onClick={() => setSnapping(!snapping)}
-            onPointerEnter={() => setHoveredTopRightTool('snap')}
-            onPointerLeave={() => setHoveredTopRightTool(null)}
-            className="relative w-9 h-9 p-2 rounded-lg transition-colors"
+            className={clsx(
+              "relative w-9 h-9 p-2 rounded-lg transition-colors",
+              snapping ? "bg-blue-50" : ""
+            )}
           >
-            <motion.div
-              layoutId="top-right-toolbar-hover-bg"
-              initial={false}
-              animate={{ opacity: (hoveredTopRightTool === 'snap' || snapping) ? 1 : 0 }}
-              transition={{ layout: { type: "spring", stiffness: 350, damping: 30, mass: 0.8 }, opacity: { duration: 0.2 } }}
-              className="absolute inset-0 rounded-lg bg-zinc-100 -z-20"
-            />
-            <span className={clsx("relative z-10 transition-colors", snapping ? "text-blue-600" : "text-zinc-600")}>
-              <Magnet className={clsx("w-5 h-5", snapping && "fill-blue-600/10")} />
-            </span>
-          </motion.button>
+            <Magnet className={clsx("w-5 h-5 transition-colors", snapping ? "text-blue-600 fill-blue-600/10" : "text-zinc-600")} />
+          </button>
         </Tooltip>
 
         <Tooltip content="Grid" shortcut="⇧G" position="bottom">
-          <motion.button
+          <button
             type="button"
             onClick={() => {
               const nextView = gridView === 'none' ? 'box' : gridView === 'box' ? 'dot' : 'none';
               setGridView(nextView);
             }}
-            onPointerEnter={() => setHoveredTopRightTool('grid')}
-            onPointerLeave={() => setHoveredTopRightTool(null)}
-            className="relative w-9 h-9 p-2 rounded-lg transition-colors"
+            className={clsx(
+              "relative w-9 h-9 p-2 rounded-lg transition-colors",
+              gridView !== 'none' ? "bg-blue-50" : ""
+            )}
           >
-            <motion.div
-              layoutId="top-right-toolbar-hover-bg"
-              initial={false}
-              animate={{ opacity: (hoveredTopRightTool === 'grid' || gridView !== 'none') ? 1 : 0 }}
-              transition={{ layout: { type: "spring", stiffness: 350, damping: 30, mass: 0.8 }, opacity: { duration: 0.2 } }}
-              className="absolute inset-0 rounded-lg bg-zinc-100 -z-20"
-            />
-            <span className={clsx("relative z-10 transition-colors", gridView !== 'none' ? "text-blue-600" : "text-zinc-600")}>
+            <span className="text-zinc-600">
               {gridView === 'box' ? (
                 <svg className="w-5 h-5" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg">
                   <title>Box Grid</title>
@@ -432,94 +416,50 @@ export const Toolbar: React.FC = () => {
                 </svg>
               )}
             </span>
-          </motion.button>
+          </button>
         </Tooltip>
 
         <div className="w-px h-6 bg-zinc-200 mx-1" />
 
         <Tooltip content="Zoom Out" shortcut="⌘-" position="bottom">
-          <motion.button
+          <button
             type="button"
             onClick={() => setViewport({ zoom: Math.max(0, viewport.zoom - 0.1) })}
-            onPointerEnter={() => setHoveredTopRightTool('zoom-out')}
-            onPointerLeave={() => setHoveredTopRightTool(null)}
-            className="relative w-9 h-9 p-2 rounded-lg transition-colors"
+            className="relative w-9 h-9 p-2 rounded-lg hover:bg-zinc-100 transition-colors text-zinc-600"
           >
-            <motion.div
-              layoutId="top-right-toolbar-hover-bg"
-              initial={false}
-              animate={{ opacity: hoveredTopRightTool === 'zoom-out' ? 1 : 0 }}
-              transition={{ layout: { type: "spring", stiffness: 350, damping: 30, mass: 0.8 }, opacity: { duration: 0.2 } }}
-              className="absolute inset-0 rounded-lg bg-zinc-100 -z-20"
-            />
-            <span className="relative z-10 text-zinc-600">
-              <ZoomOut className="w-5 h-5" />
-            </span>
-          </motion.button>
+            <ZoomOut className="w-5 h-5" />
+          </button>
         </Tooltip>
 
         <Tooltip content="Zoom" shortcut="⌘0" position="bottom">
-          <motion.button
+          <button
             type="button"
             onClick={cycleZoom}
-            onPointerEnter={() => setHoveredTopRightTool('zoom')}
-            onPointerLeave={() => setHoveredTopRightTool(null)}
-            className="relative w-9 h-9 p-2 rounded-lg transition-colors text-xs font-mono flex items-center justify-center"
+            className="relative w-9 h-9 p-2 rounded-lg hover:bg-zinc-100 transition-colors text-zinc-600 text-xs font-mono flex items-center justify-center"
           >
-            <motion.div
-              layoutId="top-right-toolbar-hover-bg"
-              initial={false}
-              animate={{ opacity: hoveredTopRightTool === 'zoom' ? 1 : 0 }}
-              transition={{ layout: { type: "spring", stiffness: 350, damping: 30, mass: 0.8 }, opacity: { duration: 0.2 } }}
-              className="absolute inset-0 rounded-lg bg-zinc-100 -z-20"
-            />
-            <span className="relative z-10 text-zinc-600">
-              {Math.round(viewport.zoom * 100)}%
-            </span>
-          </motion.button>
+            {Math.round(viewport.zoom * 100)}%
+          </button>
         </Tooltip>
 
         <Tooltip content="Zoom In" shortcut="⌘+" position="bottom">
-          <motion.button
+          <button
             type="button"
             onClick={() => setViewport({ zoom: Math.min(5, viewport.zoom + 0.1) })}
-            onPointerEnter={() => setHoveredTopRightTool('zoom-in')}
-            onPointerLeave={() => setHoveredTopRightTool(null)}
-            className="relative w-9 h-9 p-2 rounded-lg transition-colors"
+            className="relative w-9 h-9 p-2 rounded-lg hover:bg-zinc-100 transition-colors text-zinc-600"
           >
-            <motion.div
-              layoutId="top-right-toolbar-hover-bg"
-              initial={false}
-              animate={{ opacity: hoveredTopRightTool === 'zoom-in' ? 1 : 0 }}
-              transition={{ layout: { type: "spring", stiffness: 350, damping: 30, mass: 0.8 }, opacity: { duration: 0.2 } }}
-              className="absolute inset-0 rounded-lg bg-zinc-100 -z-20"
-            />
-            <span className="relative z-10 text-zinc-600">
-              <ZoomIn className="w-5 h-5" />
-            </span>
-          </motion.button>
+            <ZoomIn className="w-5 h-5" />
+          </button>
         </Tooltip>
       </div>
 
       <div className="fixed top-8 left-8 flex items-center gap-2 px-3 py-2 bg-white/90 backdrop-blur-md shadow-lg border border-zinc-200 pointer-events-auto">
         <Tooltip content="Search" shortcut="⌘K" position="bottom">
-          <motion.button
+          <button
             type="button"
-            onPointerEnter={() => setHoveredTopLeftTool('search')}
-            onPointerLeave={() => setHoveredTopLeftTool(null)}
-            className="relative w-9 h-9 p-2 rounded-lg transition-colors"
+            className="relative w-9 h-9 p-2 rounded-lg hover:bg-zinc-100 transition-colors text-zinc-600"
           >
-            <motion.div
-              layoutId="top-left-toolbar-hover-bg"
-              initial={false}
-              animate={{ opacity: hoveredTopLeftTool === 'search' ? 1 : 0 }}
-              transition={{ layout: { type: "spring", stiffness: 350, damping: 30, mass: 0.8 }, opacity: { duration: 0.2 } }}
-              className="absolute inset-0 rounded-lg bg-zinc-100 -z-20"
-            />
-            <span className="relative z-10 text-zinc-600">
-              <Search className="w-5 h-5" />
-            </span>
-          </motion.button>
+            <Search className="w-5 h-5" />
+          </button>
         </Tooltip>
 
         <span className="text-sm font-medium text-zinc-900 min-w-[120px] text-center truncate">
@@ -527,23 +467,12 @@ export const Toolbar: React.FC = () => {
         </span>
 
         <Tooltip content="Share" shortcut="⌘⇧S" position="bottom">
-          <motion.button
+          <button
             type="button"
-            onPointerEnter={() => setHoveredTopLeftTool('share')}
-            onPointerLeave={() => setHoveredTopLeftTool(null)}
-            className="relative w-9 h-9 p-2 rounded-lg transition-colors"
+            className="relative w-9 h-9 p-2 rounded-lg hover:bg-zinc-100 transition-colors text-zinc-600"
           >
-            <motion.div
-              layoutId="top-left-toolbar-hover-bg"
-              initial={false}
-              animate={{ opacity: hoveredTopLeftTool === 'share' ? 1 : 0 }}
-              transition={{ layout: { type: "spring", stiffness: 350, damping: 30, mass: 0.8 }, opacity: { duration: 0.2 } }}
-              className="absolute inset-0 rounded-lg bg-zinc-100 -z-20"
-            />
-            <span className="relative z-10 text-zinc-600">
-              <Send className="w-5 h-5" />
-            </span>
-          </motion.button>
+            <Send className="w-5 h-5" />
+          </button>
         </Tooltip>
       </div>
 
