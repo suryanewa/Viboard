@@ -9,12 +9,14 @@ interface BlockContentProps {
 
 export const StickyBlock: React.FC<BlockContentProps> = ({ block }) => {
   const textRef = useRef<HTMLParagraphElement>(null);
+  const updateBlock = useBoardStore((state) => state.updateBlock);
 
   const handleInput = () => {
     const el = textRef.current;
     if (el) {
       el.style.height = 'auto';
       el.style.height = `${el.scrollHeight}px`;
+      updateBlock(block.id, { data: { ...block.data, text: el.innerText } });
     }
   };
 
@@ -42,12 +44,14 @@ export const StickyBlock: React.FC<BlockContentProps> = ({ block }) => {
 
 export const TextBlock: React.FC<BlockContentProps> = ({ block }) => {
   const textRef = useRef<HTMLParagraphElement>(null);
+  const updateBlock = useBoardStore((state) => state.updateBlock);
 
   const handleInput = () => {
     const el = textRef.current;
     if (el) {
       el.style.height = 'auto';
       el.style.height = `${el.scrollHeight}px`;
+      updateBlock(block.id, { data: { ...block.data, text: el.innerText } });
     }
   };
 
