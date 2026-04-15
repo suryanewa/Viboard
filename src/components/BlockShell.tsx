@@ -194,14 +194,16 @@ export const BlockShell: React.FC<BlockShellProps> = ({ block, children }) => {
     }
   }, [scale, boxShadow]);
 
+  // Sync motion values from store on block position changes (handles group drag updates)
   useEffect(() => {
     if (!isDragging.current && !isResizing.current) {
-      x.set(block.x);
-      y.set(block.y);
-      width.set(block.width);
-      height.set(block.height);
+      const storeBlock = useBoardStore.getState().blocks[block.id];
+      if (storeBlock) {
+        x.set(storeBlock.x);
+        y.set(storeBlock.y);
+      }
     }
-  }, [block.x, block.y, block.width, block.height, x, y, width, height]);
+  }, [block.x, block.y, block.id]);
 
   const altDupeIds = useRef<string[]>([]);
 
