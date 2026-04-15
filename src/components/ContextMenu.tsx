@@ -49,12 +49,12 @@ const itemVariants: Variants = {
     filter: "blur(0px)",
     transition: { type: "spring", bounce: 0.3, duration: 0.45, delay: i * 0.04 } 
   }),
-  exit: (i: number) => ({
+  exit: (_i: number) => ({
     opacity: 0,
-    y: 15,
+    y: 10,
     rotateX: 65,
     filter: "blur(5px)",
-    transition: { type: "spring", bounce: 0.3, duration: 0.4, delay: (7 - i) * 0.04 }
+    transition: { type: "spring", bounce: 0.2, duration: 0.3 }
   })
 };
 
