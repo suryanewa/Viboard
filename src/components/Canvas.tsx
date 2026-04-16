@@ -531,37 +531,41 @@ export const Canvas: React.FC<{ children: React.ReactNode }> = ({ children }) =>
             )}
           </svg>
 
-          {snapLines.map((line) => {
-            if (line.x !== undefined) {
-              return (
-                <div 
-                  key={`snap-x-${line.x}-${crypto.randomUUID()}`}
-                  className="absolute bg-blue-500/50 pointer-events-none z-[2000]"
-                  style={{
-                    left: line.x,
-                    top: -10000,
-                    width: 1,
-                    height: 20000
-                  }}
-                />
-              );
-            }
-            if (line.y !== undefined) {
-              return (
-                <div 
-                  key={`snap-y-${line.y}-${crypto.randomUUID()}`}
-                  className="absolute bg-blue-500/50 pointer-events-none z-[2000]"
-                  style={{
-                    top: line.y,
-                    left: -10000,
-                    height: 1,
-                    width: 20000
-                  }}
-                />
-              );
-            }
-            return null;
-          })}
+          {snapLines.length > 0 && (
+            <svg 
+              aria-hidden="true"
+              className="absolute pointer-events-none z-[2000]"
+              style={{ left: 0, top: 0, width: 0, height: 0, overflow: 'visible' }}
+            >
+              {snapLines.map((line) => {
+                if (line.x !== undefined) {
+                  return (
+                    <line
+                      key={`snap-x-${line.x}-${crypto.randomUUID()}`}
+                      x1={line.x} y1={-10000} x2={line.x} y2={10000}
+                      stroke="#3b82f6"
+                      strokeWidth={1.5 / viewport.zoom}
+                      strokeDasharray={`${6 / viewport.zoom} ${6 / viewport.zoom}`}
+                      className="animate-snap-march"
+                    />
+                  );
+                }
+                if (line.y !== undefined) {
+                  return (
+                    <line
+                      key={`snap-y-${line.y}-${crypto.randomUUID()}`}
+                      x1={-10000} y1={line.y} x2={10000} y2={line.y}
+                      stroke="#3b82f6"
+                      strokeWidth={1.5 / viewport.zoom}
+                      strokeDasharray={`${6 / viewport.zoom} ${6 / viewport.zoom}`}
+                      className="animate-snap-march"
+                    />
+                  );
+                }
+                return null;
+              })}
+            </svg>
+          )}
         </motion.div>
       </button>
     </main>

@@ -19,3 +19,12 @@
     -moz-osx-font-smoothing: grayscale;
   }
 }
+
+@keyframes snap-march {
+  from { stroke-dashoffset: 12; }
+  to { stroke-dashoffset: 0; }
+}
+
+.animate-snap-march {
+  animation: snap-march 0.5s linear infinite;
+}
