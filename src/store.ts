@@ -95,6 +95,9 @@ interface BoardState {
   removeDrawings: (ids: string[]) => void;
   updateDrawings: (updates: { id: string; deltaX: number; deltaY: number }[]) => void;
   bringToFront: (id: string) => void;
+  bringForward: (id: string) => void;
+  sendBackward: (id: string) => void;
+  sendToBack: (id: string) => void;
   
   copy: () => void;
   cut: () => void;
@@ -324,6 +327,68 @@ export const useBoardStore = create<BoardState>((set, get) => ({
         [id]: { ...block, zIndex: highestZ + 1 }
       }
     };
+  }),
+
+  bringForward: (id) => set((state) => {
+    const block = state.blocks[id];
+    if (!block) return state;
+    
+    const otherBlocks = Object.values(state.blocks).filter(b => b.id !== id);
+    const higherBlocks = otherBlocks.filter(b => b.zIndex > block.zIndex);
+    
+    if (higherBlocks.length === 0) return state;
+    
+    const nextBlock = higherBlocks.reduce((prev, curr) => 
+      curr.zIndex < prev.zIndex ? curr : prev
+    );
+    
+    const newBlocks = { ...state.blocks };
+    const tempZ = block.zIndex;
+    newBlocks[id] = { ...block, zIndex: nextBlock.zIndex };
+    newBlocks[nextBlock.id] = { ...newBlocks[nextBlock.id], zIndex: tempZ };
+    
+    return { blocks: newBlocks };
+  }),
+
+  sendBackward: (id) => set((state) => {
+    const block = state.blocks[id];
+    if (!block) return state;
+    
+    const otherBlocks = Object.values(state.blocks).filter(b => b.id !== id);
+    const lowerBlocks = otherBlocks.filter(b => b.zIndex < block.zIndex);
+    
+    if (lowerBlocks.length === 0) return state;
+    
+    const prevBlock = lowerBlocks.reduce((prev, curr) => 
+      curr.zIndex > prev.zIndex ? curr : prev
+    );
+    
+    const newBlocks = { ...state.blocks };
+    const tempZ = block.zIndex;
+    newBlocks[id] = { ...block, zIndex: prevBlock.zIndex };
+    newBlocks[prevBlock.id] = { ...newBlocks[prevBlock.id], zIndex: tempZ };
+    
+    return { blocks: newBlocks };
+  }),
+
+  sendToBack: (id) => set((state) => {
+    const block = state.blocks[id];
+    if (!block) return state;
+    
+    const lowestZ = Math.min(...Object.values(state.blocks).map((b) => b.zIndex));
+    
+    if (block.zIndex === lowestZ) return state;
+    
+    const newBlocks = { ...state.blocks };
+    Object.keys(newBlocks).forEach(blockId => {
+      newBlocks[blockId] = {
+        ...newBlocks[blockId],
+        zIndex: newBlocks[blockId].zIndex + 1
+      };
+    });
+    newBlocks[id] = { ...block, zIndex: 0 };
+    
+    return { blocks: newBlocks };
   }),
 
   copy: () => {

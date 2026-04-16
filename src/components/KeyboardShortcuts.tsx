@@ -17,7 +17,7 @@ export const KeyboardShortcuts: React.FC = () => {
         return;
       }
 
-      const { selection, drawingSelection, blocks, removeBlocks, removeDrawings, setSelection, setDrawingSelection, updateBlocks, copy, cut, paste, duplicate, undo, redo } = useBoardStore.getState();
+      const { selection, drawingSelection, blocks, removeBlocks, removeDrawings, setSelection, setDrawingSelection, updateBlocks, copy, cut, paste, duplicate, undo, redo, bringForward, sendBackward } = useBoardStore.getState();
       console.log('[KeyboardShortcuts] selection:', selection, 'drawingSelection:', drawingSelection);
 
       if (e.key === 'Backspace' || e.key === 'Delete') {
@@ -66,6 +66,16 @@ export const KeyboardShortcuts: React.FC = () => {
             };
           });
           updateBlocks(updates);
+        }
+      } else if (e.key === ']' && isCmd) {
+        if (selection.length > 0) {
+          e.preventDefault();
+          selection.forEach(id => bringForward(id));
+        }
+      } else if (e.key === '[' && isCmd) {
+        if (selection.length > 0) {
+          e.preventDefault();
+          selection.forEach(id => sendBackward(id));
         }
       }
     };
