@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useBoardStore } from '../store';
-import { Type, Link, Magnet, Pencil, Circle, MousePointer, Hand, ZoomIn, ZoomOut, Search, Send, Eye, Edit3 } from 'lucide-react';
+import { Type, Link, Magnet, Pencil, Circle, MousePointer, Hand, ZoomIn, ZoomOut, Search, Send, Eye, Edit3, MoreVertical } from 'lucide-react';
 import { v4 as uuidv4 } from 'uuid';
 import { motion, AnimatePresence } from 'framer-motion';
 import clsx from 'clsx';
@@ -184,7 +184,7 @@ export const Toolbar: React.FC = () => {
   return (
     <>
       <motion.div 
-        className="fixed top-8 right-8 flex justify-center z-[9999] pointer-events-none"
+        className="fixed bottom-8 right-8 flex justify-center z-[9999] pointer-events-none"
         initial="hidden"
         animate="visible"
         variants={{
@@ -206,7 +206,7 @@ export const Toolbar: React.FC = () => {
           onPointerLeave={() => setHoveredTopRight(null)}
         >
         <motion.div variants={{ hidden: { opacity: 0, scale: 0.5 }, visible: { opacity: 1, scale: 1, transition: { type: "spring", bounce: 0.4 } } }}>
-          <Tooltip content="Snap" shortcut="G" position="bottom">
+          <Tooltip content="Snap" shortcut="G" position="top">
           <motion.button 
             type="button"
             whileHover="hover"
@@ -245,7 +245,7 @@ export const Toolbar: React.FC = () => {
           </motion.div>
 
         <motion.div variants={{ hidden: { opacity: 0, scale: 0.5 }, visible: { opacity: 1, scale: 1, transition: { type: "spring", bounce: 0.4 } } }}>
-          <Tooltip content="Grid" shortcut="⇧G" position="bottom">
+          <Tooltip content="Grid" shortcut="⇧G" position="top">
           <motion.button 
             type="button"
             whileHover="hover"
@@ -343,7 +343,7 @@ export const Toolbar: React.FC = () => {
           </motion.div>
 
         <motion.div variants={{ hidden: { opacity: 0, scale: 0.5 }, visible: { opacity: 1, scale: 1, transition: { type: "spring", bounce: 0.4 } } }}>
-          <Tooltip content={mode === 'view' ? 'Edit' : 'View'} shortcut={mode === 'view' ? 'E' : 'V'} position="bottom">
+          <Tooltip content={mode === 'view' ? 'Edit' : 'View'} shortcut={mode === 'view' ? 'E' : 'V'} position="top">
           <motion.button 
             type="button"
             whileHover="hover"
@@ -379,7 +379,7 @@ export const Toolbar: React.FC = () => {
           </motion.div>
 
         <motion.div variants={{ hidden: { opacity: 0, scale: 0.5 }, visible: { opacity: 1, scale: 1, transition: { type: "spring", bounce: 0.4 } } }}>
-          <Tooltip content="Zoom Out" shortcut="⌘-" position="bottom">
+          <Tooltip content="Zoom Out" shortcut="⌘-" position="top">
           <motion.button 
             type="button"
             whileHover="hover"
@@ -407,7 +407,7 @@ export const Toolbar: React.FC = () => {
           </motion.div>
 
         <motion.div variants={{ hidden: { opacity: 0, scale: 0.5 }, visible: { opacity: 1, scale: 1, transition: { type: "spring", bounce: 0.4 } } }}>
-          <Tooltip content="Zoom" shortcut="⌘0" position="bottom">
+          <Tooltip content="Zoom" shortcut="⌘0" position="top">
           <motion.button 
             type="button"
             whileHover="hover"
@@ -435,7 +435,7 @@ export const Toolbar: React.FC = () => {
           </motion.div>
 
         <motion.div variants={{ hidden: { opacity: 0, scale: 0.5 }, visible: { opacity: 1, scale: 1, transition: { type: "spring", bounce: 0.4 } } }}>
-          <Tooltip content="Zoom In" shortcut="⌘+" position="bottom">
+          <Tooltip content="Zoom In" shortcut="⌘+" position="top">
           <motion.button 
             type="button"
             whileHover="hover"
@@ -464,6 +464,56 @@ export const Toolbar: React.FC = () => {
         </motion.div>
       </motion.div>
 
+      <motion.div 
+        className="fixed top-8 right-8 flex justify-center z-[9999] pointer-events-none"
+        initial="hidden"
+        animate="visible"
+        variants={{
+          hidden: { 
+            clipPath: "inset(0 0 0 100% round 12px)", 
+            opacity: 0,
+            transition: { type: "spring", bounce: 0, duration: 0.4, staggerChildren: 0.03, staggerDirection: -1 } 
+          },
+          visible: { 
+            clipPath: "inset(0 0% 0 0% round 12px)", 
+            opacity: 1,
+            transitionEnd: { clipPath: "none" },
+            transition: { type: "spring", bounce: 0, duration: 0.4, delayChildren: 0.1, staggerChildren: 0.05 } 
+          }
+        }}
+      >
+        <motion.div 
+          className="flex items-center gap-1 px-2 py-1.5 bg-white/90 backdrop-blur-md shadow-none border border-zinc-200 pointer-events-auto rounded-xl"
+        >
+          <motion.div variants={{ hidden: { opacity: 0, scale: 0.5 }, visible: { opacity: 1, scale: 1, transition: { type: "spring", bounce: 0.4 } } }}>
+            <Tooltip content="Share" shortcut="⌘⇧S" position="bottom">
+              <motion.button 
+                type="button"
+                whileHover="hover"
+                onPointerEnter={() => setHoveredTopRight('share')}
+                className="relative w-9 h-9 p-2 transition-colors flex items-center justify-center rounded-lg text-zinc-600 hover:text-zinc-900"
+              >
+                {hoveredTopRight === 'share' && (
+                  <motion.div
+                    layoutId="top-right-share-hover-bg"
+                    initial={false}
+                    animate={{ opacity: 1 }}
+                    transition={{
+                      layout: { type: "spring", stiffness: 350, damping: 30, mass: 0.8 },
+                      opacity: { duration: 0.2 }
+                    }}
+                    className="absolute inset-0 rounded-lg bg-zinc-100 -z-10"
+                  />
+                )}
+                <motion.div variants={{ hover: { scale: 1.1, x: 2, y: -2 } }} transition={{ duration: 0.3, type: "spring" }}>
+                  <Send className="w-5 h-5 relative z-10" />
+                </motion.div>
+              </motion.button>
+            </Tooltip>
+          </motion.div>
+        </motion.div>
+      </motion.div>
+
       <AnimatePresence>
         {mode === 'edit' && (
           <motion.div 
@@ -473,7 +523,7 @@ export const Toolbar: React.FC = () => {
             exit="hidden"
           >
             <motion.div 
-              className="flex items-center gap-2 px-4 py-2 bg-white/90 backdrop-blur-md shadow-none border border-zinc-200 pointer-events-auto rounded-xl"
+              className="flex items-center gap-1 px-2 py-1.5 bg-white/90 backdrop-blur-md shadow-none border border-zinc-200 pointer-events-auto rounded-xl"
               onPointerLeave={() => setHoveredTool(null)}
               variants={{
                 hidden: { 
@@ -596,7 +646,62 @@ export const Toolbar: React.FC = () => {
       <AnimatePresence>
         {mode === 'edit' && (
           <motion.div 
-            className="fixed top-8 left-8 flex items-center gap-2 px-3 py-2 bg-white/90 backdrop-blur-md shadow-none border border-zinc-200 pointer-events-auto rounded-xl"
+            className="fixed bottom-8 left-8 flex items-center z-[9999] pointer-events-none"
+            initial="hidden"
+            animate="visible"
+            exit="hidden"
+            variants={{
+              hidden: { 
+                clipPath: "inset(0 100% 0 0% round 12px)", 
+                opacity: 0,
+                transition: { type: "spring", bounce: 0, duration: 0.4, staggerChildren: 0.03, staggerDirection: -1 } 
+              },
+              visible: { 
+                clipPath: "inset(0 0% 0 0% round 12px)", 
+                opacity: 1,
+                transitionEnd: { clipPath: "none" },
+                transition: { type: "spring", bounce: 0, duration: 0.4, delayChildren: 0.1, staggerChildren: 0.05 } 
+              }
+            }}
+          >
+            <motion.div 
+              className="flex items-center gap-1 px-2 py-1.5 bg-white/90 backdrop-blur-md shadow-none border border-zinc-200 pointer-events-auto rounded-xl"
+            >
+              <motion.div variants={{ hidden: { opacity: 0, scale: 0.5 }, visible: { opacity: 1, scale: 1, transition: { type: "spring", bounce: 0.4 } } }}>
+                <Tooltip content="Search" shortcut="⌘K" position="top">
+                  <motion.button 
+                    type="button"
+                    whileHover="hover"
+                    onPointerEnter={() => setHoveredTopLeft('search')}
+                    className="relative w-9 h-9 p-2 transition-colors flex items-center justify-center rounded-lg text-zinc-600 hover:text-zinc-900"
+                  >
+                    {hoveredTopLeft === 'search' && (
+                      <motion.div
+                        layoutId="top-left-hover-bg"
+                        initial={false}
+                        animate={{ opacity: 1 }}
+                        transition={{
+                          layout: { type: "spring", stiffness: 350, damping: 30, mass: 0.8 },
+                          opacity: { duration: 0.2 }
+                        }}
+                        className="absolute inset-0 rounded-lg bg-zinc-100 -z-10"
+                      />
+                    )}
+                    <motion.div variants={{ hover: { scale: 1.1, rotate: -15 } }} transition={{ duration: 0.3, type: "spring" }}>
+                      <Search className="w-5 h-5 relative z-10" />
+                    </motion.div>
+                  </motion.button>
+                </Tooltip>
+              </motion.div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      <AnimatePresence>
+        {mode === 'edit' && (
+          <motion.div 
+            className="fixed top-8 left-8 flex items-center gap-1 px-2 py-1.5 bg-white/90 backdrop-blur-md shadow-none border border-zinc-200 pointer-events-auto rounded-xl"
             onPointerLeave={() => setHoveredTopLeft(null)}
             initial="hidden"
             animate="visible"
@@ -616,14 +721,14 @@ export const Toolbar: React.FC = () => {
             }}
           >
             <motion.div variants={{ hidden: { opacity: 0, scale: 0.5 }, visible: { opacity: 1, scale: 1, transition: { type: "spring", bounce: 0.4 } } }}>
-              <Tooltip content="Search" shortcut="⌘K" position="bottom">
+              <Tooltip content="Menu" position="bottom">
                 <motion.button 
                   type="button"
                   whileHover="hover"
-                  onPointerEnter={() => setHoveredTopLeft('search')}
+                  onPointerEnter={() => setHoveredTopLeft('more')}
                   className="relative w-9 h-9 p-2 transition-colors flex items-center justify-center rounded-lg text-zinc-600 hover:text-zinc-900"
                 >
-                  {hoveredTopLeft === 'search' && (
+                  {hoveredTopLeft === 'more' && (
                     <motion.div
                       layoutId="top-left-hover-bg"
                       initial={false}
@@ -635,8 +740,8 @@ export const Toolbar: React.FC = () => {
                       className="absolute inset-0 rounded-lg bg-zinc-100 -z-10"
                     />
                   )}
-                  <motion.div variants={{ hover: { scale: 1.1, rotate: -15 } }} transition={{ duration: 0.3, type: "spring" }}>
-                    <Search className="w-5 h-5 relative z-10" />
+                  <motion.div variants={{ hover: { scale: 1.1, rotate: 90 } }} transition={{ duration: 0.3, type: "spring" }}>
+                    <MoreVertical className="w-5 h-5 relative z-10" />
                   </motion.div>
                 </motion.button>
               </Tooltip>
@@ -646,33 +751,6 @@ export const Toolbar: React.FC = () => {
               <span className="text-sm font-medium text-zinc-900 min-w-[120px] text-center truncate px-2">
                 {canvasTitle}
               </span>
-            </motion.div>
-
-            <motion.div variants={{ hidden: { opacity: 0, scale: 0.5 }, visible: { opacity: 1, scale: 1, transition: { type: "spring", bounce: 0.4 } } }}>
-              <Tooltip content="Share" shortcut="⌘⇧S" position="bottom">
-                <motion.button 
-                  type="button"
-                  whileHover="hover"
-                  onPointerEnter={() => setHoveredTopLeft('share')}
-                  className="relative w-9 h-9 p-2 transition-colors flex items-center justify-center rounded-lg text-zinc-600 hover:text-zinc-900"
-                >
-                  {hoveredTopLeft === 'share' && (
-                    <motion.div
-                      layoutId="top-left-hover-bg"
-                      initial={false}
-                      animate={{ opacity: 1 }}
-                      transition={{
-                        layout: { type: "spring", stiffness: 350, damping: 30, mass: 0.8 },
-                        opacity: { duration: 0.2 }
-                      }}
-                      className="absolute inset-0 rounded-lg bg-zinc-100 -z-10"
-                    />
-                  )}
-                  <motion.div variants={{ hover: { scale: 1.1, x: 2, y: -2 } }} transition={{ duration: 0.3, type: "spring" }}>
-                    <Send className="w-5 h-5 relative z-10" />
-                  </motion.div>
-                </motion.button>
-              </Tooltip>
             </motion.div>
           </motion.div>
         )}
