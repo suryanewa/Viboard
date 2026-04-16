@@ -12,6 +12,7 @@ import { UploadCloud } from 'lucide-react';
 
 function App() {
   const blocks = useBoardStore((state) => state.blocks);
+  const mode = useBoardStore((state) => state.mode);
   const [isDraggingOver, setIsDraggingOver] = useState(false);
 
   useEffect(() => {
@@ -96,7 +97,7 @@ function App() {
         ))}
       </Canvas>
       <Toolbar />
-      <PropertyToolbar />
+      {mode === 'edit' && <PropertyToolbar />}
     </div>
   );
 }

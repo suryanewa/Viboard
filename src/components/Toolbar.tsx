@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useBoardStore } from '../store';
-import { Type, Link, Magnet, Pencil, Circle, MousePointer, Hand, ZoomIn, ZoomOut, Search, Send } from 'lucide-react';
+import { Type, Link, Magnet, Pencil, Circle, MousePointer, Hand, ZoomIn, ZoomOut, Search, Send, Eye, Edit3 } from 'lucide-react';
 import { v4 as uuidv4 } from 'uuid';
 import { motion, AnimatePresence } from 'framer-motion';
 import clsx from 'clsx';
@@ -16,6 +16,8 @@ export const Toolbar: React.FC = () => {
   const gridView = useBoardStore((state) => state.gridView);
   const setGridView = useBoardStore((state) => state.setGridView);
   const canvasTitle = useBoardStore((state) => state.canvasTitle);
+  const mode = useBoardStore((state) => state.mode);
+  const setMode = useBoardStore((state) => state.setMode);
 
   const tool = useBoardStore((state) => state.tool);
   const setTool = useBoardStore((state) => state.setTool);
@@ -180,111 +182,7 @@ export const Toolbar: React.FC = () => {
   }, [handleAddBlock]);
 
   return (
-    <div className="fixed bottom-8 left-0 right-0 flex justify-center z-[9999] pointer-events-none">
-      <div 
-        className="flex items-center gap-2 px-4 py-2 bg-white/90 backdrop-blur-md shadow-none border border-zinc-200 pointer-events-auto rounded-xl"
-        onPointerLeave={() => setHoveredTool(null)}
-      >
-        {TOOLS.map((t) => {
-          const isSelected = tool === t.id;
-          const Icon = t.icon;
-          
-          return (
-            <Tooltip key={t.id} content={t.id.charAt(0).toUpperCase() + t.id.slice(1)} shortcut={t.shortcut} position="top">
-              <motion.button
-                type="button"
-                initial="rest"
-                animate={isSelected ? "selected" : "rest"}
-                whileHover={!isSelected ? "hover" : undefined}
-                onPointerEnter={() => setHoveredTool(t.id)}
-                onPointerDown={(e) => {
-                  e.stopPropagation();
-                  handleToolSelect(t.id as 'select' | 'marker' | 'shape' | 'text' | 'pan' | 'sticky' | 'link');
-                }}
-                className="relative p-2 flex items-center justify-center w-10 h-10 rounded-lg transition-colors"
-              >
-                {(hoveredTool || tool) === t.id && (
-                  <motion.div
-                    layoutId="toolbar-hover-bg"
-                    initial={false}
-                    animate={{ opacity: hoveredTool === t.id && !isSelected ? 1 : 0 }}
-                    transition={{
-                      layout: { type: "spring", stiffness: 350, damping: 30, mass: 0.8 },
-                      opacity: { duration: 0.2 }
-                    }}
-                    className="absolute inset-0 rounded-lg bg-zinc-100 -z-20"
-                  />
-                )}
-
-                <AnimatePresence>
-                  {isSelected && animationState === 'animating-out' && (
-                    <motion.div
-                      initial={{ opacity: 1, scale: 1 }}
-                      exit={{ opacity: 0, scale: 1.2, transition: { duration: 0.2 } }}
-                      className="absolute inset-0 border-2 border-current rounded-lg"
-                    />
-                  )}
-                </AnimatePresence>
-
-                {isSelected && (
-                  <motion.div
-                    layoutId="active-tool-bg"
-                    transition={{
-                      layout: {
-                        type: "spring",
-                        stiffness: 250,
-                        damping: 25,
-                        mass: 0.5
-                      },
-                      y: { duration: 0.4, times: [0, 0.5, 1], ease: ["circOut", "circIn"] },
-                      rotate: { duration: animationState === 'hopping' ? 0.45 : 0, times: [0, 0.85, 1], ease: ["easeInOut", "easeOut"] },
-                      scale: { duration: 0.45, times: [0, 0.4, 0.85, 1], ease: ["easeOut", "easeIn", "easeOut"] }
-                    }}
-                    animate={
-                      animationState === 'hopping' 
-                        ? { 
-                            rotate: [0, hopDirection === 1 ? 385 : -385, hopDirection === 1 ? 360 : -360], 
-                            y: [0, -50, 0], 
-                            scale: [1, 1.15, 0.9, 1] 
-                          } 
-                        : { rotate: 0, y: 0, scale: 1 }
-                    }
-                    className={clsx(
-                      "absolute inset-0 rounded-lg -z-10",
-                      t.color === 'blue' ? 'bg-blue-100' :
-                      t.color === 'yellow' ? 'bg-yellow-100' : 'bg-red-100'
-                    )}
-                  />
-                )}
-
-                <motion.div
-                  variants={{ 
-                    hover: t.hoverAnim,
-                    rest: { scale: 1, rotate: 0, x: 0, y: 0 },
-                    selected: { 
-                      scale: [1, 0.8, 1.2, 1],
-                      rotate: [0, -10, 10, 0],
-                      x: 0,
-                      y: 0
-                    }
-                  }}
-                  transition={{ duration: 0.3, type: "spring" }}
-                  className={clsx(
-                    "relative z-10 transition-colors duration-200",
-                    isSelected 
-                      ? `text-${t.color}-600` 
-                      : "text-zinc-600 hover:text-zinc-900"
-                  )}
-                >
-                  <Icon className={clsx("w-5 h-5", isSelected && `fill-${t.color}-600/10`)} />
-                </motion.div>
-              </motion.button>
-            </Tooltip>
-          );
-        })}
-
-      </div>
-
+    <>
       <div 
         className="fixed top-8 right-8 flex items-center gap-1 px-2 py-1.5 bg-white/90 backdrop-blur-md shadow-none border border-zinc-200 pointer-events-auto rounded-xl"
         onPointerLeave={() => setHoveredTopRight(null)}
@@ -422,6 +320,36 @@ export const Toolbar: React.FC = () => {
           </motion.button>
         </Tooltip>
 
+        <Tooltip content={mode === 'view' ? 'Edit' : 'View'} shortcut={mode === 'view' ? 'E' : 'V'} position="bottom">
+          <motion.button 
+            type="button"
+            whileHover="hover"
+            onClick={() => setMode(mode === 'view' ? 'edit' : 'view')}
+            onPointerEnter={() => setHoveredTopRight('mode')}
+            className="relative w-9 h-9 p-2 transition-colors flex items-center justify-center rounded-lg text-zinc-600 hover:text-zinc-900"
+          >
+            {hoveredTopRight === 'mode' && (
+              <motion.div
+                layoutId="top-right-hover-bg"
+                initial={false}
+                animate={{ opacity: 1 }}
+                transition={{
+                  layout: { type: "spring", stiffness: 350, damping: 30, mass: 0.8 },
+                  opacity: { duration: 0.2 }
+                }}
+                className="absolute inset-0 rounded-lg bg-zinc-100 -z-10"
+              />
+            )}
+            <motion.div variants={{ hover: { scale: 1.1 } }} transition={{ duration: 0.3, type: "spring" }}>
+              {mode === 'view' ? (
+                <Edit3 className="w-5 h-5 relative z-10" />
+              ) : (
+                <Eye className="w-5 h-5 relative z-10" />
+              )}
+            </motion.div>
+          </motion.button>
+        </Tooltip>
+
         <div className="w-px h-6 bg-zinc-200 mx-1" />
 
         <Tooltip content="Zoom Out" shortcut="⌘-" position="bottom">
@@ -503,64 +431,225 @@ export const Toolbar: React.FC = () => {
         </Tooltip>
       </div>
 
-      <div 
-        className="fixed top-8 left-8 flex items-center gap-2 px-3 py-2 bg-white/90 backdrop-blur-md shadow-none border border-zinc-200 pointer-events-auto rounded-xl"
-        onPointerLeave={() => setHoveredTopLeft(null)}
-      >
-        <Tooltip content="Search" shortcut="⌘K" position="bottom">
-          <motion.button 
-            type="button"
-            whileHover="hover"
-            onPointerEnter={() => setHoveredTopLeft('search')}
-            className="relative w-9 h-9 p-2 transition-colors flex items-center justify-center rounded-lg text-zinc-600 hover:text-zinc-900"
+      <AnimatePresence>
+        {mode === 'edit' && (
+          <motion.div 
+            className="fixed bottom-8 left-0 right-0 flex justify-center z-[9999] pointer-events-none"
+            initial="hidden"
+            animate="visible"
+            exit="hidden"
           >
-            {hoveredTopLeft === 'search' && (
-              <motion.div
-                layoutId="top-left-hover-bg"
-                initial={false}
-                animate={{ opacity: 1 }}
-                transition={{
-                  layout: { type: "spring", stiffness: 350, damping: 30, mass: 0.8 },
-                  opacity: { duration: 0.2 }
-                }}
-                className="absolute inset-0 rounded-lg bg-zinc-100 -z-10"
-              />
-            )}
-            <motion.div variants={{ hover: { scale: 1.1, rotate: -15 } }} transition={{ duration: 0.3, type: "spring" }}>
-              <Search className="w-5 h-5 relative z-10" />
+            <motion.div 
+              className="flex items-center gap-2 bg-white/90 backdrop-blur-md shadow-none border border-zinc-200 pointer-events-auto rounded-xl overflow-hidden"
+              onPointerLeave={() => setHoveredTool(null)}
+              variants={{
+                hidden: { width: 0, opacity: 0, paddingLeft: 0, paddingRight: 0, paddingTop: "0.5rem", paddingBottom: "0.5rem" },
+                visible: { 
+                  width: "auto", 
+                  opacity: 1,
+                  paddingLeft: "1rem",
+                  paddingRight: "1rem",
+                  paddingTop: "0.5rem",
+                  paddingBottom: "0.5rem",
+                  transition: { 
+                    type: "spring", bounce: 0.1, duration: 0.4,
+                    when: "beforeChildren",
+                    staggerChildren: 0.05
+                  } 
+                }
+              }}
+            >
+              {TOOLS.map((t) => {
+                const isSelected = tool === t.id;
+                const Icon = t.icon;
+                
+                return (
+                  <motion.div key={t.id} variants={{ hidden: { opacity: 0, scale: 0.5 }, visible: { opacity: 1, scale: 1, transition: { type: "spring", bounce: 0.4 } } }}>
+                    <Tooltip content={t.id.charAt(0).toUpperCase() + t.id.slice(1)} shortcut={t.shortcut} position="top">
+                      <motion.button
+                        type="button"
+                        initial="rest"
+                        animate={isSelected ? "selected" : "rest"}
+                        whileHover={!isSelected ? "hover" : undefined}
+                        onPointerEnter={() => setHoveredTool(t.id)}
+                        onPointerDown={(e) => {
+                          e.stopPropagation();
+                          handleToolSelect(t.id as 'select' | 'marker' | 'shape' | 'text' | 'pan' | 'sticky' | 'link');
+                        }}
+                        className="relative p-2 flex items-center justify-center w-10 h-10 rounded-lg transition-colors"
+                      >
+                        {(hoveredTool || tool) === t.id && (
+                          <motion.div
+                            layoutId="toolbar-hover-bg"
+                            initial={false}
+                            animate={{ opacity: hoveredTool === t.id && !isSelected ? 1 : 0 }}
+                            transition={{
+                              layout: { type: "spring", stiffness: 350, damping: 30, mass: 0.8 },
+                              opacity: { duration: 0.2 }
+                            }}
+                            className="absolute inset-0 rounded-lg bg-zinc-100 -z-20"
+                          />
+                        )}
+
+                        <AnimatePresence>
+                          {isSelected && animationState === 'animating-out' && (
+                            <motion.div
+                              initial={{ opacity: 1, scale: 1 }}
+                              exit={{ opacity: 0, scale: 1.2, transition: { duration: 0.2 } }}
+                              className="absolute inset-0 border-2 border-current rounded-lg"
+                            />
+                          )}
+                        </AnimatePresence>
+
+                        {isSelected && (
+                          <motion.div
+                            layoutId="active-tool-bg"
+                            transition={{
+                              layout: {
+                                type: "spring",
+                                stiffness: 250,
+                                damping: 25,
+                                mass: 0.5
+                              },
+                              y: { duration: 0.4, times: [0, 0.5, 1], ease: ["circOut", "circIn"] },
+                              rotate: { duration: animationState === 'hopping' ? 0.45 : 0, times: [0, 0.85, 1], ease: ["easeInOut", "easeOut"] },
+                              scale: { duration: 0.45, times: [0, 0.4, 0.85, 1], ease: ["easeOut", "easeIn", "easeOut"] }
+                            }}
+                            animate={
+                              animationState === 'hopping' 
+                                ? { 
+                                    rotate: [0, hopDirection === 1 ? 385 : -385, hopDirection === 1 ? 360 : -360], 
+                                    y: [0, -50, 0], 
+                                    scale: [1, 1.15, 0.9, 1] 
+                                  } 
+                                : { rotate: 0, y: 0, scale: 1 }
+                            }
+                            className={clsx(
+                              "absolute inset-0 rounded-lg -z-10",
+                              t.color === 'blue' ? 'bg-blue-100' :
+                              t.color === 'yellow' ? 'bg-yellow-100' : 'bg-red-100'
+                            )}
+                          />
+                        )}
+
+                        <motion.div
+                          variants={{ 
+                            hover: t.hoverAnim,
+                            rest: { scale: 1, rotate: 0, x: 0, y: 0 },
+                            selected: { 
+                              scale: [1, 0.8, 1.2, 1],
+                              rotate: [0, -10, 10, 0],
+                              x: 0,
+                              y: 0
+                            }
+                          }}
+                          transition={{ duration: 0.3, type: "spring" }}
+                          className={clsx(
+                            "relative z-10 transition-colors duration-200",
+                            isSelected 
+                              ? `text-${t.color}-600` 
+                              : "text-zinc-600 hover:text-zinc-900"
+                          )}
+                        >
+                          <Icon className={clsx("w-5 h-5", isSelected && `fill-${t.color}-600/10`)} />
+                        </motion.div>
+                      </motion.button>
+                    </Tooltip>
+                  </motion.div>
+                );
+              })}
             </motion.div>
-          </motion.button>
-        </Tooltip>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
-        <span className="text-sm font-medium text-zinc-900 min-w-[120px] text-center truncate px-2">
-          {canvasTitle}
-        </span>
-
-        <Tooltip content="Share" shortcut="⌘⇧S" position="bottom">
-          <motion.button 
-            type="button"
-            whileHover="hover"
-            onPointerEnter={() => setHoveredTopLeft('share')}
-            className="relative w-9 h-9 p-2 transition-colors flex items-center justify-center rounded-lg text-zinc-600 hover:text-zinc-900"
+      <AnimatePresence>
+        {mode === 'edit' && (
+          <motion.div 
+            className="fixed top-8 left-8 flex items-center gap-2 bg-white/90 backdrop-blur-md shadow-none border border-zinc-200 pointer-events-auto rounded-xl overflow-hidden"
+            onPointerLeave={() => setHoveredTopLeft(null)}
+            initial="hidden"
+            animate="visible"
+            exit="hidden"
+            variants={{
+              hidden: { width: 0, opacity: 0, paddingLeft: 0, paddingRight: 0, paddingTop: "0.5rem", paddingBottom: "0.5rem" },
+              visible: { 
+                width: "auto", 
+                opacity: 1,
+                paddingLeft: "0.75rem",
+                paddingRight: "0.75rem",
+                paddingTop: "0.5rem",
+                paddingBottom: "0.5rem",
+                transition: { 
+                  type: "spring", bounce: 0.1, duration: 0.4,
+                  when: "beforeChildren",
+                  staggerChildren: 0.05
+                } 
+              }
+            }}
           >
-            {hoveredTopLeft === 'share' && (
-              <motion.div
-                layoutId="top-left-hover-bg"
-                initial={false}
-                animate={{ opacity: 1 }}
-                transition={{
-                  layout: { type: "spring", stiffness: 350, damping: 30, mass: 0.8 },
-                  opacity: { duration: 0.2 }
-                }}
-                className="absolute inset-0 rounded-lg bg-zinc-100 -z-10"
-              />
-            )}
-            <motion.div variants={{ hover: { scale: 1.1, x: 2, y: -2 } }} transition={{ duration: 0.3, type: "spring" }}>
-              <Send className="w-5 h-5 relative z-10" />
+            <motion.div variants={{ hidden: { opacity: 0, scale: 0.5 }, visible: { opacity: 1, scale: 1, transition: { type: "spring", bounce: 0.4 } } }}>
+              <Tooltip content="Search" shortcut="⌘K" position="bottom">
+                <motion.button 
+                  type="button"
+                  whileHover="hover"
+                  onPointerEnter={() => setHoveredTopLeft('search')}
+                  className="relative w-9 h-9 p-2 transition-colors flex items-center justify-center rounded-lg text-zinc-600 hover:text-zinc-900"
+                >
+                  {hoveredTopLeft === 'search' && (
+                    <motion.div
+                      layoutId="top-left-hover-bg"
+                      initial={false}
+                      animate={{ opacity: 1 }}
+                      transition={{
+                        layout: { type: "spring", stiffness: 350, damping: 30, mass: 0.8 },
+                        opacity: { duration: 0.2 }
+                      }}
+                      className="absolute inset-0 rounded-lg bg-zinc-100 -z-10"
+                    />
+                  )}
+                  <motion.div variants={{ hover: { scale: 1.1, rotate: -15 } }} transition={{ duration: 0.3, type: "spring" }}>
+                    <Search className="w-5 h-5 relative z-10" />
+                  </motion.div>
+                </motion.button>
+              </Tooltip>
             </motion.div>
-          </motion.button>
-        </Tooltip>
-      </div>
-    </div>
+
+            <motion.div variants={{ hidden: { opacity: 0, scale: 0.5 }, visible: { opacity: 1, scale: 1, transition: { type: "spring", bounce: 0.4 } } }}>
+              <span className="text-sm font-medium text-zinc-900 min-w-[120px] text-center truncate px-2">
+                {canvasTitle}
+              </span>
+            </motion.div>
+
+            <motion.div variants={{ hidden: { opacity: 0, scale: 0.5 }, visible: { opacity: 1, scale: 1, transition: { type: "spring", bounce: 0.4 } } }}>
+              <Tooltip content="Share" shortcut="⌘⇧S" position="bottom">
+                <motion.button 
+                  type="button"
+                  whileHover="hover"
+                  onPointerEnter={() => setHoveredTopLeft('share')}
+                  className="relative w-9 h-9 p-2 transition-colors flex items-center justify-center rounded-lg text-zinc-600 hover:text-zinc-900"
+                >
+                  {hoveredTopLeft === 'share' && (
+                    <motion.div
+                      layoutId="top-left-hover-bg"
+                      initial={false}
+                      animate={{ opacity: 1 }}
+                      transition={{
+                        layout: { type: "spring", stiffness: 350, damping: 30, mass: 0.8 },
+                        opacity: { duration: 0.2 }
+                      }}
+                      className="absolute inset-0 rounded-lg bg-zinc-100 -z-10"
+                    />
+                  )}
+                  <motion.div variants={{ hover: { scale: 1.1, x: 2, y: -2 } }} transition={{ duration: 0.3, type: "spring" }}>
+                    <Send className="w-5 h-5 relative z-10" />
+                  </motion.div>
+                </motion.button>
+              </Tooltip>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </>
   );
 };

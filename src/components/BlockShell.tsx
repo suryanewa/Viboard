@@ -91,7 +91,7 @@ const ResizeHandle = ({ direction, cursor, styles, delay = 0, onPointerDown, onP
       border: '2px solid #3b82f6',
       borderRadius: '50%',
       cursor,
-      zIndex: 20,
+      zIndex: 2147483647,
       ...styles,
     }}
     whileHover={{ scale: 1.3 }}
@@ -734,7 +734,8 @@ export const BlockShell: React.FC<BlockShellProps> = ({ block, children }) => {
                 height,
                 scale,
                 pointerEvents: 'none',
-                zIndex: 9999
+                zIndex: 9999,
+                isolation: 'isolate'
               }}
             >
               {[
@@ -748,7 +749,7 @@ export const BlockShell: React.FC<BlockShellProps> = ({ block, children }) => {
                   width,
                   height,
                   overflow: 'visible', 
-                  zIndex: 10 
+                  zIndex: 50 
                 }}
               >
                 <motion.path

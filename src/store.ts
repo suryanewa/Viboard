@@ -44,6 +44,7 @@ interface BoardState {
   snapping: boolean;
   gridView: 'box' | 'dot' | 'none';
   canvasTitle: string;
+  mode: 'view' | 'edit';
   mousePos: { x: number, y: number };
   clipboard: Block[];
   tool: 'select' | 'marker' | 'shape' | 'text' | 'pan' | 'sticky' | 'link';
@@ -77,6 +78,7 @@ interface BoardState {
   setSnapping: (snapping: boolean) => void;
   setGridView: (gridView: 'box' | 'dot' | 'none') => void;
   setCanvasTitle: (title: string) => void;
+  setMode: (mode: 'view' | 'edit') => void;
   setMousePos: (x: number, y: number) => void;
   setTool: (tool: 'select' | 'marker' | 'shape' | 'text' | 'pan' | 'sticky' | 'link') => void;
   setAnimationState: (state: 'idle' | 'animating-out' | 'hopping' | 'animating-in') => void;
@@ -116,6 +118,7 @@ export const useBoardStore = create<BoardState>((set, get) => ({
   snapping: false,
   gridView: 'none' as 'box' | 'dot' | 'none',
   canvasTitle: 'Untitled Board',
+  mode: 'edit' as 'view' | 'edit',
   mousePos: { x: 0, y: 0 },
   clipboard: [],
   tool: 'select',
@@ -242,6 +245,7 @@ export const useBoardStore = create<BoardState>((set, get) => ({
   setGridView: (gridView) => set({ gridView }),
 
   setCanvasTitle: (title) => set({ canvasTitle: title }),
+  setMode: (mode) => set({ mode }),
 
   setMousePos: (x, y) => set({ mousePos: { x, y } }),
   setTool: (tool) => set({ tool }),
