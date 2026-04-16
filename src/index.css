@@ -21,7 +21,7 @@
 }
 
 @keyframes snap-march {
-  from { stroke-dashoffset: var(--dash-offset, 12); }
+  from { stroke-dashoffset: 12; }
   to { stroke-dashoffset: 0; }
 }
 

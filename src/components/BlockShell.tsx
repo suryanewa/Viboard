@@ -1,5 +1,5 @@
 import React, { useRef, useEffect, useState } from 'react';
-import { motion, useMotionValue, AnimatePresence, animate } from 'framer-motion';
+import { motion, useMotionValue, AnimatePresence } from 'framer-motion';
 import type { Block } from '../types';
 import { useBoardStore } from '../store';
 import clsx from 'clsx';
@@ -164,9 +164,6 @@ export const BlockShell: React.FC<BlockShellProps> = ({ block, children }) => {
   const width = useMotionValue(block.width);
   const height = useMotionValue(block.height);
   const scale = useMotionValue(1);
-
-  const lastSnapX = useRef<number | null>(null);
-  const lastSnapY = useRef<number | null>(null);
   const boxShadow = useMotionValue('0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06)');
 
   const pathCw = useMotionValue('');
@@ -201,26 +198,9 @@ export const BlockShell: React.FC<BlockShellProps> = ({ block, children }) => {
   // During active drag, handlePointerMove writes x.set/y.set directly (takes precedence).
   // During group drag, this ensures all selected blocks follow the store position.
   useEffect(() => {
-    if (isDragging.current || isResizing.current) return;
-
-    const { isDraggingGroup, snapLines } = useBoardStore.getState();
-    const hasSnapX = snapLines.some(l => l.x !== undefined);
-    const hasSnapY = snapLines.some(l => l.y !== undefined);
-
-    if (isDraggingGroup && hasSnapX) {
-      animate(x, block.x, { type: 'spring', stiffness: 600, damping: 30, mass: 0.5 });
-    } else {
-      x.stop();
-      x.set(block.x);
-    }
-
-    if (isDraggingGroup && hasSnapY) {
-      animate(y, block.y, { type: 'spring', stiffness: 600, damping: 30, mass: 0.5 });
-    } else {
-      y.stop();
-      y.set(block.y);
-    }
-  }, [block.x, block.y, x, y]);
+    x.set(block.x);
+    y.set(block.y);
+  }, [block.x, block.y]);
 
   const altDupeIds = useRef<string[]>([]);
 
@@ -303,7 +283,7 @@ export const BlockShell: React.FC<BlockShellProps> = ({ block, children }) => {
       snapX = Math.round(rawX / GRID_SIZE) * GRID_SIZE;
       snapY = Math.round(rawY / GRID_SIZE) * GRID_SIZE;
     } else {
-      const SNAP_THRESHOLD = 10 / zoom;
+      const SNAP_THRESHOLD = 5 / zoom;
       const currentW = width.get();
       const currentH = height.get();
 
@@ -430,8 +410,8 @@ export const BlockShell: React.FC<BlockShellProps> = ({ block, children }) => {
           const otherEdgesX = [other.x, other.x + other.width / 2, other.x + other.width];
           snappedEdgesX.forEach(myEx => {
             otherEdgesX.forEach(otherEx => {
-              if (Math.abs(myEx - otherEx) < 1.0) {
-                if (!activeSnapLines.some(l => l.x !== undefined && Math.abs(l.x - otherEx) < 1.0)) {
+              if (Math.abs(myEx - otherEx) < 0.1) {
+                if (!activeSnapLines.some(l => l.x !== undefined && Math.abs(l.x - otherEx) < 0.1)) {
                   activeSnapLines.push({ x: otherEx });
                 }
               }
@@ -448,8 +428,8 @@ export const BlockShell: React.FC<BlockShellProps> = ({ block, children }) => {
           const otherEdgesY = [other.y, other.y + other.height / 2, other.y + other.height];
           snappedEdgesY.forEach(myEy => {
             otherEdgesY.forEach(otherEy => {
-              if (Math.abs(myEy - otherEy) < 1.0) {
-                if (!activeSnapLines.some(l => l.y !== undefined && Math.abs(l.y - otherEy) < 1.0)) {
+              if (Math.abs(myEy - otherEy) < 0.1) {
+                if (!activeSnapLines.some(l => l.y !== undefined && Math.abs(l.y - otherEy) < 0.1)) {
                   activeSnapLines.push({ y: otherEy });
                 }
               }
@@ -461,35 +441,6 @@ export const BlockShell: React.FC<BlockShellProps> = ({ block, children }) => {
 
     const snapOffsetX = snapX - dragStartPos.current.x;
     const snapOffsetY = snapY - dragStartPos.current.y;
-
-    const isSnappedX = activeSnapLines.some(l => l.x !== undefined);
-    const isSnappedY = activeSnapLines.some(l => l.y !== undefined);
-
-    const applyMotion = () => {
-      if (isSnappedX) {
-        if (lastSnapX.current !== snapX) {
-          animate(x, snapX, { type: 'spring', stiffness: 600, damping: 30, mass: 0.5 });
-          lastSnapX.current = snapX;
-        }
-      } else {
-        x.stop();
-        x.set(snapX);
-        lastSnapX.current = null;
-      }
-
-      if (isSnappedY) {
-        if (lastSnapY.current !== snapY) {
-          animate(y, snapY, { type: 'spring', stiffness: 600, damping: 30, mass: 0.5 });
-          lastSnapY.current = snapY;
-        }
-      } else {
-        y.stop();
-        y.set(snapY);
-        lastSnapY.current = null;
-      }
-    };
-
-    setSnapLines(activeSnapLines);
 
     if (altDupeIds.current.length > 0) {
       const updates = altDupeIds.current.map((id, index) => {
@@ -507,10 +458,14 @@ export const BlockShell: React.FC<BlockShellProps> = ({ block, children }) => {
       }).filter(Boolean) as { id: string, updates: any }[];
       
       updateBlocks(updates, true);
-      applyMotion();
+      x.set(snapX);
+      y.set(snapY);
     } else if (selection.includes(block.id)) {
-      applyMotion();
+      x.set(snapX);
+      y.set(snapY);
     }
+
+    setSnapLines(activeSnapLines);
   };
 
   const handlePointerUp = (e: React.PointerEvent) => {
@@ -587,7 +542,7 @@ export const BlockShell: React.FC<BlockShellProps> = ({ block, children }) => {
     const deltaY = (e.clientY - resizeStartPos.current.y) / zoom;
 
     const GRID_SIZE = 24;
-    const SNAP_THRESHOLD = 10 / zoom;
+    const SNAP_THRESHOLD = 5 / zoom;
     const handle = resizeHandle.current!;
     const { groupBounds, selectedBlocks, blockX, blockY, width: oldWidth, height: oldHeight } = resizeStartPos.current;
 
