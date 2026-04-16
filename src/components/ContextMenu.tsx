@@ -148,7 +148,7 @@ export const ContextMenu: React.FC = () => {
             exit="exit"
             variants={menuVariants}
             custom={hasSelection ? 8 : 3}
-            className="bg-white/95 backdrop-blur-md border border-zinc-200/80 shadow-2xl rounded-xl min-w-[180px] overflow-hidden"
+            className="bg-white/95 backdrop-blur-md border border-zinc-200/80 shadow-none rounded-xl min-w-[180px] overflow-hidden"
             style={{ originX: 0, originY: 0, pointerEvents: 'auto' }}
           >
             <div className="py-1.5 flex flex-col">

@@ -40,7 +40,7 @@ export const StickyBlock: React.FC<BlockContentProps> = ({ block }) => {
 
   return (
     <div 
-      className="w-full min-h-full p-6 flex flex-col shadow-sm"
+      className="w-full min-h-full p-6 flex flex-col shadow-none"
       style={{ backgroundColor: bgColor }}
     >
       <p

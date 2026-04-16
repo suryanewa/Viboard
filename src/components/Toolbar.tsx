@@ -182,7 +182,7 @@ export const Toolbar: React.FC = () => {
   return (
     <div className="fixed bottom-8 left-0 right-0 flex justify-center z-[9999] pointer-events-none">
       <div 
-        className="flex items-center gap-2 px-4 py-2 bg-white/90 backdrop-blur-md shadow-lg border border-zinc-200 pointer-events-auto rounded-xl"
+        className="flex items-center gap-2 px-4 py-2 bg-white/90 backdrop-blur-md shadow-none border border-zinc-200 pointer-events-auto rounded-xl"
         onPointerLeave={() => setHoveredTool(null)}
       >
         {TOOLS.map((t) => {
@@ -286,7 +286,7 @@ export const Toolbar: React.FC = () => {
       </div>
 
       <div 
-        className="fixed top-8 right-8 flex items-center gap-1 px-2 py-1.5 bg-white/90 backdrop-blur-md shadow-lg border border-zinc-200 pointer-events-auto rounded-xl"
+        className="fixed top-8 right-8 flex items-center gap-1 px-2 py-1.5 bg-white/90 backdrop-blur-md shadow-none border border-zinc-200 pointer-events-auto rounded-xl"
         onPointerLeave={() => setHoveredTopRight(null)}
       >
         <Tooltip content="Snap" shortcut="G" position="bottom">
@@ -504,7 +504,7 @@ export const Toolbar: React.FC = () => {
       </div>
 
       <div 
-        className="fixed top-8 left-8 flex items-center gap-2 px-3 py-2 bg-white/90 backdrop-blur-md shadow-lg border border-zinc-200 pointer-events-auto rounded-xl"
+        className="fixed top-8 left-8 flex items-center gap-2 px-3 py-2 bg-white/90 backdrop-blur-md shadow-none border border-zinc-200 pointer-events-auto rounded-xl"
         onPointerLeave={() => setHoveredTopLeft(null)}
       >
         <Tooltip content="Search" shortcut="⌘K" position="bottom">

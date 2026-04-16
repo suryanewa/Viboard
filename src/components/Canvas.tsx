@@ -480,7 +480,7 @@ export const Canvas: React.FC<{ children: React.ReactNode }> = ({ children }) =>
                   stiffness: 400,
                   mass: 0.5
                 }}
-                className="absolute pointer-events-none z-[1000] rounded-md border-[1.5px] border-blue-500/50 bg-blue-500/10 shadow-[inset_0_0_0_1px_rgba(255,255,255,0.15),_0_8px_32px_rgba(59,130,246,0.12)] backdrop-blur-[0.5px]"
+                className="absolute pointer-events-none z-[1000] rounded-md border-[1.5px] border-blue-500/50 bg-blue-500/10 shadow-none backdrop-blur-[0.5px]"
               />
             )}
           </AnimatePresence>
