@@ -1,7 +1,7 @@
 import React, { useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useBoardStore } from '../store';
-import { Search, Plus, Mic, X } from 'lucide-react';
+import { Search } from 'lucide-react';
 
 export const SearchOverlay: React.FC = () => {
   const isSearchOpen = useBoardStore((state) => state.isSearchOpen);
@@ -51,36 +51,16 @@ export const SearchOverlay: React.FC = () => {
               <div className="absolute -inset-[2px] rounded-2xl bg-[conic-gradient(from_var(--rotation),#4285f4,#34a853,#fbbc05,#ea4335,#4285f4)] animate-rotate-gradient opacity-100 blur-[2px]" />
               
               <div className="relative flex items-center bg-white rounded-2xl p-4 shadow-2xl border border-white/20">
-                <Plus className="w-5 h-5 text-zinc-400 mr-3 cursor-pointer hover:text-zinc-600 transition-colors" />
+                <Search className="w-5 h-5 text-zinc-400 mr-3 cursor-pointer hover:text-zinc-600 transition-colors" />
                 <input
                   ref={inputRef}
                   type="text"
                   placeholder="Ask Gemini"
                   className="flex-1 bg-transparent border-none outline-none text-xl text-zinc-900 placeholder-zinc-400 font-medium"
                 />
-                <div className="flex items-center gap-3 ml-3">
-                  <Mic className="w-5 h-5 text-zinc-400 cursor-pointer hover:text-zinc-600 transition-colors" />
-                  <div className="w-px h-6 bg-zinc-200" />
-                  <Search className="w-5 h-5 text-zinc-400 cursor-pointer hover:text-zinc-600 transition-colors" />
-                </div>
               </div>
             </div>
 
-            <motion.div 
-              initial={{ opacity: 0, y: 10 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: 0.2 }}
-              className="mt-4 flex justify-center"
-            >
-              <button
-                type="button"
-                onClick={() => setIsSearchOpen(false)}
-                className="flex items-center gap-2 px-4 py-2 bg-white/10 hover:bg-white/20 backdrop-blur-md rounded-full text-white text-sm font-medium transition-colors border border-white/10"
-              >
-                <X className="w-4 h-4" />
-                Close Search
-              </button>
-            </motion.div>
           </motion.div>
         </motion.div>
       )}
