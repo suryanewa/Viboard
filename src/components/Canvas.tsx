@@ -531,41 +531,46 @@ export const Canvas: React.FC<{ children: React.ReactNode }> = ({ children }) =>
             )}
           </svg>
 
-          {snapLines.length > 0 && (
-            <svg 
-              aria-hidden="true"
-              className="absolute pointer-events-none z-[2000]"
-              style={{ left: 0, top: 0, width: 0, height: 0, overflow: 'visible' }}
-            >
-              {snapLines.map((line) => {
-                if (line.x !== undefined) {
-                  return (
-                    <line
-                      key={`snap-x-${line.x}-${crypto.randomUUID()}`}
-                      x1={line.x} y1={-10000} x2={line.x} y2={10000}
-                      stroke="#3b82f6"
-                      strokeWidth={1.5 / viewport.zoom}
-                      strokeDasharray={`${6 / viewport.zoom} ${6 / viewport.zoom}`}
-                      className="animate-snap-march"
-                    />
-                  );
-                }
-                if (line.y !== undefined) {
-                  return (
-                    <line
-                      key={`snap-y-${line.y}-${crypto.randomUUID()}`}
-                      x1={-10000} y1={line.y} x2={10000} y2={line.y}
-                      stroke="#3b82f6"
-                      strokeWidth={1.5 / viewport.zoom}
-                      strokeDasharray={`${6 / viewport.zoom} ${6 / viewport.zoom}`}
-                      className="animate-snap-march"
-                    />
-                  );
-                }
-                return null;
-              })}
-            </svg>
-          )}
+          <svg 
+            aria-hidden="true"
+            className="absolute pointer-events-none z-[2000] overflow-visible transition-opacity duration-150"
+            style={{ 
+              left: 0, top: 0, width: 1, height: 1,
+              opacity: snapLines.length > 0 ? 1 : 0 
+            }}
+          >
+            {snapLines.map((line) => {
+              const dashOffset = 12 / viewport.zoom;
+              
+              if (line.x !== undefined) {
+                return (
+                  <line
+                    key={`snap-x-${Math.round(line.x * 10) / 10}`}
+                    x1={line.x} y1={-10000} x2={line.x} y2={10000}
+                    stroke="#3b82f6"
+                    strokeWidth={1.5 / viewport.zoom}
+                    strokeDasharray={`${6 / viewport.zoom} ${6 / viewport.zoom}`}
+                    className="animate-snap-march"
+                    style={{ '--dash-offset': dashOffset } as React.CSSProperties}
+                  />
+                );
+              }
+              if (line.y !== undefined) {
+                return (
+                  <line
+                    key={`snap-y-${Math.round(line.y * 10) / 10}`}
+                    x1={-10000} y1={line.y} x2={10000} y2={line.y}
+                    stroke="#3b82f6"
+                    strokeWidth={1.5 / viewport.zoom}
+                    strokeDasharray={`${6 / viewport.zoom} ${6 / viewport.zoom}`}
+                    className="animate-snap-march"
+                    style={{ '--dash-offset': dashOffset } as React.CSSProperties}
+                  />
+                );
+              }
+              return null;
+            })}
+          </svg>
         </motion.div>
       </button>
     </main>
