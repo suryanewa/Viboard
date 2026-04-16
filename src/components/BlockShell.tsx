@@ -700,7 +700,7 @@ export const BlockShell: React.FC<BlockShellProps> = ({ block, children }) => {
         x,
         y,
         scale,
-        boxShadow: (block.type === 'shape' || block.type === 'drawing' || block.type === 'text' || block.type === 'link') ? 'none' : boxShadow,
+        boxShadow: (block.type === 'shape' || block.type === 'drawing' || block.type === 'text' || block.type === 'link' || block.type === 'sticky') ? 'none' : boxShadow,
         width,
         height,
         zIndex: block.zIndex,
