@@ -183,11 +183,30 @@ export const Toolbar: React.FC = () => {
 
   return (
     <>
-      <div 
-        className="fixed top-8 right-8 flex items-center gap-1 px-2 py-1.5 bg-white/90 backdrop-blur-md shadow-none border border-zinc-200 pointer-events-auto rounded-xl"
-        onPointerLeave={() => setHoveredTopRight(null)}
+      <motion.div 
+        className="fixed top-8 right-8 flex justify-center z-[9999] pointer-events-none"
+        initial="hidden"
+        animate="visible"
+        variants={{
+          hidden: { 
+            clipPath: "inset(0 0 0 100% round 12px)", 
+            opacity: 0,
+            transition: { type: "spring", bounce: 0, duration: 0.4, staggerChildren: 0.03, staggerDirection: -1 } 
+          },
+          visible: { 
+            clipPath: "inset(0 0% 0 0% round 12px)", 
+            opacity: 1,
+            transitionEnd: { clipPath: "none" },
+            transition: { type: "spring", bounce: 0, duration: 0.4, delayChildren: 0.1, staggerChildren: 0.05 } 
+          }
+        }}
       >
-        <Tooltip content="Snap" shortcut="G" position="bottom">
+        <motion.div 
+          className="flex items-center gap-1 px-2 py-1.5 bg-white/90 backdrop-blur-md shadow-none border border-zinc-200 pointer-events-auto rounded-xl"
+          onPointerLeave={() => setHoveredTopRight(null)}
+        >
+        <motion.div variants={{ hidden: { opacity: 0, scale: 0.5 }, visible: { opacity: 1, scale: 1, transition: { type: "spring", bounce: 0.4 } } }}>
+          <Tooltip content="Snap" shortcut="G" position="bottom">
           <motion.button 
             type="button"
             whileHover="hover"
@@ -223,8 +242,10 @@ export const Toolbar: React.FC = () => {
             </motion.div>
           </motion.button>
         </Tooltip>
+          </motion.div>
 
-        <Tooltip content="Grid" shortcut="⇧G" position="bottom">
+        <motion.div variants={{ hidden: { opacity: 0, scale: 0.5 }, visible: { opacity: 1, scale: 1, transition: { type: "spring", bounce: 0.4 } } }}>
+          <Tooltip content="Grid" shortcut="⇧G" position="bottom">
           <motion.button 
             type="button"
             whileHover="hover"
@@ -319,8 +340,10 @@ export const Toolbar: React.FC = () => {
             </motion.div>
           </motion.button>
         </Tooltip>
+          </motion.div>
 
-        <Tooltip content={mode === 'view' ? 'Edit' : 'View'} shortcut={mode === 'view' ? 'E' : 'V'} position="bottom">
+        <motion.div variants={{ hidden: { opacity: 0, scale: 0.5 }, visible: { opacity: 1, scale: 1, transition: { type: "spring", bounce: 0.4 } } }}>
+          <Tooltip content={mode === 'view' ? 'Edit' : 'View'} shortcut={mode === 'view' ? 'E' : 'V'} position="bottom">
           <motion.button 
             type="button"
             whileHover="hover"
@@ -349,10 +372,14 @@ export const Toolbar: React.FC = () => {
             </motion.div>
           </motion.button>
         </Tooltip>
+          </motion.div>
 
-        <div className="w-px h-6 bg-zinc-200 mx-1" />
+        <motion.div variants={{ hidden: { opacity: 0, scale: 0.5 }, visible: { opacity: 1, scale: 1, transition: { type: "spring", bounce: 0.4 } } }}>
+          <div className="w-px h-6 bg-zinc-200 mx-1" />
+          </motion.div>
 
-        <Tooltip content="Zoom Out" shortcut="⌘-" position="bottom">
+        <motion.div variants={{ hidden: { opacity: 0, scale: 0.5 }, visible: { opacity: 1, scale: 1, transition: { type: "spring", bounce: 0.4 } } }}>
+          <Tooltip content="Zoom Out" shortcut="⌘-" position="bottom">
           <motion.button 
             type="button"
             whileHover="hover"
@@ -377,8 +404,10 @@ export const Toolbar: React.FC = () => {
             </motion.div>
           </motion.button>
         </Tooltip>
+          </motion.div>
 
-        <Tooltip content="Zoom" shortcut="⌘0" position="bottom">
+        <motion.div variants={{ hidden: { opacity: 0, scale: 0.5 }, visible: { opacity: 1, scale: 1, transition: { type: "spring", bounce: 0.4 } } }}>
+          <Tooltip content="Zoom" shortcut="⌘0" position="bottom">
           <motion.button 
             type="button"
             whileHover="hover"
@@ -403,8 +432,10 @@ export const Toolbar: React.FC = () => {
             </motion.span>
           </motion.button>
         </Tooltip>
+          </motion.div>
 
-        <Tooltip content="Zoom In" shortcut="⌘+" position="bottom">
+        <motion.div variants={{ hidden: { opacity: 0, scale: 0.5 }, visible: { opacity: 1, scale: 1, transition: { type: "spring", bounce: 0.4 } } }}>
+          <Tooltip content="Zoom In" shortcut="⌘+" position="bottom">
           <motion.button 
             type="button"
             whileHover="hover"
@@ -429,7 +460,9 @@ export const Toolbar: React.FC = () => {
             </motion.div>
           </motion.button>
         </Tooltip>
-      </div>
+          </motion.div>
+        </motion.div>
+      </motion.div>
 
       <AnimatePresence>
         {mode === 'edit' && (
@@ -440,22 +473,19 @@ export const Toolbar: React.FC = () => {
             exit="hidden"
           >
             <motion.div 
-              className="flex items-center gap-2 bg-white/90 backdrop-blur-md shadow-none border border-zinc-200 pointer-events-auto rounded-xl overflow-hidden"
+              className="flex items-center gap-2 px-4 py-2 bg-white/90 backdrop-blur-md shadow-none border border-zinc-200 pointer-events-auto rounded-xl"
               onPointerLeave={() => setHoveredTool(null)}
               variants={{
-                hidden: { width: 0, opacity: 0, paddingLeft: 0, paddingRight: 0, paddingTop: "0.5rem", paddingBottom: "0.5rem" },
+                hidden: { 
+                  clipPath: "inset(0 50% 0 50% round 12px)", 
+                  opacity: 0,
+                  transition: { type: "spring", bounce: 0, duration: 0.4, staggerChildren: 0.03, staggerDirection: -1 } 
+                },
                 visible: { 
-                  width: "auto", 
+                  clipPath: "inset(0 0% 0 0% round 12px)", 
                   opacity: 1,
-                  paddingLeft: "1rem",
-                  paddingRight: "1rem",
-                  paddingTop: "0.5rem",
-                  paddingBottom: "0.5rem",
-                  transition: { 
-                    type: "spring", bounce: 0.1, duration: 0.4,
-                    when: "beforeChildren",
-                    staggerChildren: 0.05
-                  } 
+                  transitionEnd: { clipPath: "none" },
+                  transition: { type: "spring", bounce: 0, duration: 0.4, delayChildren: 0.1, staggerChildren: 0.05 } 
                 }
               }}
             >
@@ -566,25 +596,22 @@ export const Toolbar: React.FC = () => {
       <AnimatePresence>
         {mode === 'edit' && (
           <motion.div 
-            className="fixed top-8 left-8 flex items-center gap-2 bg-white/90 backdrop-blur-md shadow-none border border-zinc-200 pointer-events-auto rounded-xl overflow-hidden"
+            className="fixed top-8 left-8 flex items-center gap-2 px-3 py-2 bg-white/90 backdrop-blur-md shadow-none border border-zinc-200 pointer-events-auto rounded-xl"
             onPointerLeave={() => setHoveredTopLeft(null)}
             initial="hidden"
             animate="visible"
             exit="hidden"
             variants={{
-              hidden: { width: 0, opacity: 0, paddingLeft: 0, paddingRight: 0, paddingTop: "0.5rem", paddingBottom: "0.5rem" },
+              hidden: { 
+                clipPath: "inset(0 100% 0 0% round 12px)", 
+                opacity: 0,
+                transition: { type: "spring", bounce: 0, duration: 0.4, staggerChildren: 0.03, staggerDirection: -1 } 
+              },
               visible: { 
-                width: "auto", 
+                clipPath: "inset(0 0% 0 0% round 12px)", 
                 opacity: 1,
-                paddingLeft: "0.75rem",
-                paddingRight: "0.75rem",
-                paddingTop: "0.5rem",
-                paddingBottom: "0.5rem",
-                transition: { 
-                  type: "spring", bounce: 0.1, duration: 0.4,
-                  when: "beforeChildren",
-                  staggerChildren: 0.05
-                } 
+                transitionEnd: { clipPath: "none" },
+                transition: { type: "spring", bounce: 0, duration: 0.4, delayChildren: 0.1, staggerChildren: 0.05 } 
               }
             }}
           >
