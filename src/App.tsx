@@ -7,6 +7,7 @@ import { KeyboardShortcuts } from './components/KeyboardShortcuts';
 import { ContextMenu } from './components/ContextMenu';
 import { PropertyToolbar } from './components/PropertyToolbar';
 import { useBoardStore } from './store';
+import { initializeCollection, syncAllBlocks } from './lib/typesense';
 import { AnimatePresence, motion } from 'framer-motion';
 import { UploadCloud } from 'lucide-react';
 
@@ -14,6 +15,14 @@ function App() {
   const blocks = useBoardStore((state) => state.blocks);
   const mode = useBoardStore((state) => state.mode);
   const [isDraggingOver, setIsDraggingOver] = useState(false);
+
+  useEffect(() => {
+    const syncInitialBlocks = async () => {
+      await initializeCollection();
+      syncAllBlocks(blocks);
+    };
+    syncInitialBlocks();
+  }, [blocks]);
 
   useEffect(() => {
     const handleDragOver = (e: DragEvent) => {
