@@ -6,6 +6,8 @@ import { motion, AnimatePresence } from 'framer-motion';
 import clsx from 'clsx';
 import type { Block, BlockType } from '../types';
 import { Tooltip } from './Tooltip';
+import { SearchOverlay } from './SearchOverlay';
+
 export const Toolbar: React.FC = () => {
   const addBlock = useBoardStore((state) => state.addBlock);
   const viewport = useBoardStore((state) => state.viewport);
@@ -18,6 +20,7 @@ export const Toolbar: React.FC = () => {
   const canvasTitle = useBoardStore((state) => state.canvasTitle);
   const mode = useBoardStore((state) => state.mode);
   const setMode = useBoardStore((state) => state.setMode);
+  const setIsSearchOpen = useBoardStore((state) => state.setIsSearchOpen);
 
   const tool = useBoardStore((state) => state.tool);
   const setTool = useBoardStore((state) => state.setTool);
@@ -183,6 +186,7 @@ export const Toolbar: React.FC = () => {
 
   return (
     <>
+      <SearchOverlay />
       <motion.div 
         className="fixed bottom-8 right-8 flex justify-center z-[9999] pointer-events-none"
         initial="hidden"
@@ -672,6 +676,7 @@ export const Toolbar: React.FC = () => {
                   <motion.button 
                     type="button"
                     whileHover="hover"
+                    onClick={() => setIsSearchOpen(true)}
                     onPointerEnter={() => setHoveredTopLeft('search')}
                     className="relative w-9 h-9 p-2 transition-colors flex items-center justify-center rounded-lg text-zinc-600 hover:text-zinc-900"
                   >

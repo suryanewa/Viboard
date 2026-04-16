@@ -45,6 +45,7 @@ interface BoardState {
   gridView: 'box' | 'dot' | 'none';
   canvasTitle: string;
   mode: 'view' | 'edit';
+  isSearchOpen: boolean;
   mousePos: { x: number, y: number };
   clipboard: Block[];
   tool: 'select' | 'marker' | 'shape' | 'text' | 'pan' | 'sticky' | 'link';
@@ -79,6 +80,7 @@ interface BoardState {
   setGridView: (gridView: 'box' | 'dot' | 'none') => void;
   setCanvasTitle: (title: string) => void;
   setMode: (mode: 'view' | 'edit') => void;
+  setIsSearchOpen: (isOpen: boolean) => void;
   setMousePos: (x: number, y: number) => void;
   setTool: (tool: 'select' | 'marker' | 'shape' | 'text' | 'pan' | 'sticky' | 'link') => void;
   setAnimationState: (state: 'idle' | 'animating-out' | 'hopping' | 'animating-in') => void;
@@ -119,6 +121,7 @@ export const useBoardStore = create<BoardState>((set, get) => ({
   gridView: 'none' as 'box' | 'dot' | 'none',
   canvasTitle: 'Untitled Board',
   mode: 'edit' as 'view' | 'edit',
+  isSearchOpen: false,
   mousePos: { x: 0, y: 0 },
   clipboard: [],
   tool: 'select',
@@ -246,8 +249,9 @@ export const useBoardStore = create<BoardState>((set, get) => ({
 
   setCanvasTitle: (title) => set({ canvasTitle: title }),
   setMode: (mode) => set({ mode }),
-
+  setIsSearchOpen: (isSearchOpen) => set({ isSearchOpen }),
   setMousePos: (x, y) => set({ mousePos: { x, y } }),
+
   setTool: (tool) => set({ tool }),
   setAnimationState: (animationState) => set({ animationState }),
   setMarkerType: (markerType) => set({ markerType }),
