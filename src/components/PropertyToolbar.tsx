@@ -4,6 +4,8 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { Pencil, Highlighter, Eraser, Circle, Square, Triangle, Upload, CornerDownLeft } from 'lucide-react';
 import clsx from 'clsx';
 
+import { ColorSlider } from './ColorSlider';
+
 const STICKY_COLORS = [
   { name: 'yellow', hue: 55 },
   { name: 'orange', hue: 30 },
@@ -49,8 +51,7 @@ export const PropertyToolbar: React.FC = () => {
   const [hoveredProperty, setHoveredProperty] = useState<string | null>(null);
   const [linkUrl, setLinkUrl] = useState('');
 
-  const handleHueChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const newHue = parseInt(e.target.value, 10);
+  const handleHueChangeSlider = (newHue: number) => {
     setCurrentHue(newHue);
     if (tool === 'sticky' && hasSelectedStickies) {
       selection.forEach(id => {
@@ -114,11 +115,11 @@ export const PropertyToolbar: React.FC = () => {
     <AnimatePresence mode="wait">
       {(tool === 'sticky' || tool === 'marker' || tool === 'shape' || tool === 'link') && (animationState === 'animating-in' || animationState === 'idle') && (
         <motion.div
-          initial={{ opacity: 0, y: 20, clipPath: 'circle(0% at 50% 100%)' }}
-          animate={{ opacity: 1, y: 0, clipPath: 'circle(150% at 50% 100%)' }}
-          exit={{ opacity: 0, y: 10, clipPath: 'circle(0% at 50% 100%)', transition: { duration: 0.15, ease: 'easeIn' } }}
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          exit={{ opacity: 0, y: 10, transition: { duration: 0.15, ease: 'easeIn' } }}
           transition={{ type: 'spring', stiffness: 400, damping: 25 }}
-          className="fixed bottom-[110px] left-1/2 -translate-x-1/2 flex items-center justify-center px-[10px] bg-white/90 backdrop-blur-md shadow-none border border-zinc-200 pointer-events-auto rounded-full z-[9998] w-[380px] h-[52px]"
+          className="fixed bottom-[110px] left-1/2 -translate-x-1/2 flex items-center justify-center px-[10px] bg-white/90 backdrop-blur-md border border-zinc-200 pointer-events-auto rounded-full z-[9998] w-[380px] h-[52px] !overflow-visible"
         >
           {tool === 'sticky' && (
           <div className="flex items-center justify-center gap-3 w-full h-8">
@@ -160,7 +161,7 @@ export const PropertyToolbar: React.FC = () => {
 
         {tool === 'marker' && (
           <div 
-            className="flex items-center gap-4 w-full h-8"
+            className="flex items-center gap-4 w-full h-8 !overflow-visible"
             onPointerLeave={() => setHoveredProperty(null)}
           >
             <div className="flex items-center gap-1 border-r border-zinc-200 pr-4">
@@ -298,25 +299,11 @@ export const PropertyToolbar: React.FC = () => {
               </div>
             </div>
 
-            <div className="flex items-center gap-3 flex-1">
-              <input 
-                type="range" 
-                min="0" 
-                max="360" 
+            <div className="flex items-center gap-3 flex-1 px-2 !overflow-visible">
+              <ColorSlider 
                 value={currentHue} 
-                onChange={handleHueChange}
-                className="flex-1 w-full h-2 appearance-none rounded-full outline-none"
-                style={{
-                  background: `linear-gradient(to right, 
-                    hsl(0, 90%, 65%), 
-                    hsl(60, 90%, 65%), 
-                    hsl(120, 90%, 65%), 
-                    hsl(180, 90%, 65%), 
-                    hsl(240, 90%, 65%), 
-                    hsl(300, 90%, 65%), 
-                    hsl(360, 90%, 65%)
-                  )`
-                }}
+                onChange={handleHueChangeSlider}
+                className="flex-1"
               />
             </div>
             <style>{`
@@ -381,7 +368,7 @@ export const PropertyToolbar: React.FC = () => {
         )}
         {tool === 'shape' && (
           <div 
-            className="flex items-center gap-4 w-full h-8"
+            className="flex items-center gap-4 w-full h-8 !overflow-visible"
             onPointerLeave={() => setHoveredProperty(null)}
           >
             <div className="flex items-center gap-1 border-r border-zinc-200 pr-4">
@@ -507,25 +494,11 @@ export const PropertyToolbar: React.FC = () => {
               </motion.button>
             </div>
             
-            <div className="flex items-center gap-3 flex-1">
-              <input 
-                type="range" 
-                min="0" 
-                max="360" 
+            <div className="flex items-center gap-3 flex-1 px-2 !overflow-visible">
+              <ColorSlider 
                 value={currentHue} 
-                onChange={handleHueChange}
-                className="flex-1 w-full h-2 appearance-none rounded-full outline-none"
-                style={{
-                  background: `linear-gradient(to right, 
-                    hsl(0, 90%, 65%), 
-                    hsl(60, 90%, 65%), 
-                    hsl(120, 90%, 65%), 
-                    hsl(180, 90%, 65%), 
-                    hsl(240, 90%, 65%), 
-                    hsl(300, 90%, 65%), 
-                    hsl(360, 90%, 65%)
-                  )`
-                }}
+                onChange={handleHueChangeSlider}
+                className="flex-1"
               />
             </div>
           </div>
