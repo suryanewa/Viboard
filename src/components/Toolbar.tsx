@@ -369,9 +369,9 @@ export const Toolbar: React.FC = () => {
             )}
             <motion.div variants={{ hover: { scale: 1.1 } }} transition={{ duration: 0.3, type: "spring" }}>
               {mode === 'view' ? (
-                <Edit3 className="w-5 h-5 relative z-10" />
-              ) : (
                 <Eye className="w-5 h-5 relative z-10" />
+              ) : (
+                <Edit3 className="w-5 h-5 relative z-10" />
               )}
             </motion.div>
           </motion.button>
@@ -489,32 +489,36 @@ export const Toolbar: React.FC = () => {
         <motion.div 
           className="flex items-center gap-1 px-2 py-1.5 bg-white/90 backdrop-blur-md shadow-none border border-zinc-200 pointer-events-auto rounded-xl"
         >
-          <motion.div variants={{ hidden: { opacity: 0, scale: 0.5 }, visible: { opacity: 1, scale: 1, transition: { type: "spring", bounce: 0.4 } } }}>
-            <Tooltip content="Share" shortcut="⌘⇧S" position="bottom">
-              <motion.button 
-                type="button"
-                whileHover="hover"
-                onPointerEnter={() => setHoveredTopRight('share')}
-                className="relative w-9 h-9 p-2 transition-colors flex items-center justify-center rounded-lg text-zinc-600 hover:text-zinc-900"
-              >
-                {hoveredTopRight === 'share' && (
-                  <motion.div
-                    layoutId="top-right-share-hover-bg"
-                    initial={false}
-                    animate={{ opacity: 1 }}
-                    transition={{
-                      layout: { type: "spring", stiffness: 350, damping: 30, mass: 0.8 },
-                      opacity: { duration: 0.2 }
-                    }}
-                    className="absolute inset-0 rounded-lg bg-zinc-100 -z-10"
-                  />
-                )}
-                <motion.div variants={{ hover: { scale: 1.1, x: 2, y: -2 } }} transition={{ duration: 0.3, type: "spring" }}>
-                  <Send className="w-5 h-5 relative z-10" />
-                </motion.div>
-              </motion.button>
-            </Tooltip>
-          </motion.div>
+          <AnimatePresence>
+            {mode === 'edit' && (
+              <motion.div variants={{ hidden: { opacity: 0, scale: 0.5 }, visible: { opacity: 1, scale: 1, transition: { type: "spring", bounce: 0.4 } } }}>
+                <Tooltip content="Share" shortcut="⌘⇧S" position="bottom">
+                  <motion.button 
+                    type="button"
+                    whileHover="hover"
+                    onPointerEnter={() => setHoveredTopRight('share')}
+                    className="relative w-9 h-9 p-2 transition-colors flex items-center justify-center rounded-lg text-zinc-600 hover:text-zinc-900"
+                  >
+                    {hoveredTopRight === 'share' && (
+                      <motion.div
+                        layoutId="top-right-share-hover-bg"
+                        initial={false}
+                        animate={{ opacity: 1 }}
+                        transition={{
+                          layout: { type: "spring", stiffness: 350, damping: 30, mass: 0.8 },
+                          opacity: { duration: 0.2 }
+                        }}
+                        className="absolute inset-0 rounded-lg bg-zinc-100 -z-10"
+                      />
+                    )}
+                    <motion.div variants={{ hover: { scale: 1.1, x: 2, y: -2 } }} transition={{ duration: 0.3, type: "spring" }}>
+                      <Send className="w-5 h-5 relative z-10" />
+                    </motion.div>
+                  </motion.button>
+                </Tooltip>
+              </motion.div>
+            )}
+          </AnimatePresence>
         </motion.div>
       </motion.div>
 
