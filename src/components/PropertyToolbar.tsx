@@ -5,6 +5,7 @@ import { Pencil, Highlighter, Eraser, Circle, Square, Triangle, Upload, CornerDo
 import clsx from 'clsx';
 
 import { ColorSlider } from './ColorSlider';
+import { ThicknessSlider } from './ThicknessSlider';
 
 const STICKY_COLORS = [
   { name: 'yellow', hue: 55 },
@@ -77,10 +78,6 @@ export const PropertyToolbar: React.FC = () => {
         updateBlock(id, { data: { ...blocks[id].data, hue } });
       });
     }
-  };
-
-  const handleStrokeChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    setMarkerThickness(parseFloat(e.target.value));
   };
 
   const handleLinkSubmit = (e: React.FormEvent) => {
@@ -273,28 +270,11 @@ export const PropertyToolbar: React.FC = () => {
             </div>
             
             <div className="flex items-center gap-3 border-r border-zinc-200 pr-4">
-              <div 
-                className="relative w-24 h-8 flex items-center"
-                style={{ '--thumb-size': `${Math.max(10, Math.min(22, markerThickness + 4))}px` } as React.CSSProperties}
-              >
-                <svg 
-                  className="absolute left-0 w-full h-full overflow-visible pointer-events-none"
-                  viewBox="0 0 96 32"
-                  aria-label="Thickness slider"
-                >
-                  <path 
-                    d="M 5 15 A 1 1 0 0 0 5 17 L 85 25 A 9 9 0 0 0 85 7 Z"
-                    fill={`hsl(${currentHue}, 90%, 65%)`}
-                  />
-                </svg>
-                <input 
-                  type="range" 
-                  min="1" 
-                  max="20" 
-                  step="0.1"
+              <div className="relative w-24 h-8 flex items-center !overflow-visible">
+                <ThicknessSlider 
                   value={markerThickness} 
-                  onChange={handleStrokeChange}
-                  className="thickness-slider relative w-full h-full cursor-pointer z-10 m-0"
+                  onChange={setMarkerThickness}
+                  color={`hsl(${currentHue}, 90%, 65%)`}
                 />
               </div>
             </div>
@@ -307,7 +287,7 @@ export const PropertyToolbar: React.FC = () => {
               />
             </div>
             <style>{`
-              input[type="range"]:not(.thickness-slider)::-webkit-slider-thumb {
+              input[type="range"]::-webkit-slider-thumb {
                 -webkit-appearance: none;
                 appearance: none;
                 width: 18px;
@@ -318,45 +298,9 @@ export const PropertyToolbar: React.FC = () => {
                 cursor: pointer;
                 box-shadow: 0 1px 3px rgba(0,0,0,0.1);
               }
-              input[type="range"]:not(.thickness-slider)::-moz-range-thumb {
+              input[type="range"]::-moz-range-thumb {
                 width: 18px;
                 height: 18px;
-                border-radius: 50%;
-                background: white;
-                border: 2px solid #a1a1aa;
-                cursor: pointer;
-                box-shadow: 0 1px 3px rgba(0,0,0,0.1);
-              }
-              
-              .thickness-slider {
-                -webkit-appearance: none;
-                appearance: none;
-                background: transparent;
-              }
-              .thickness-slider::-webkit-slider-runnable-track {
-                background: transparent;
-                height: 100%;
-              }
-              .thickness-slider::-moz-range-track {
-                background: transparent;
-                height: 100%;
-                border: none;
-              }
-              .thickness-slider::-webkit-slider-thumb {
-                -webkit-appearance: none;
-                appearance: none;
-                width: var(--thumb-size);
-                height: var(--thumb-size);
-                border-radius: 50%;
-                background: white;
-                border: 2px solid #a1a1aa;
-                cursor: pointer;
-                box-shadow: 0 1px 3px rgba(0,0,0,0.1);
-                margin-top: calc(16px - (var(--thumb-size) / 2));
-              }
-              .thickness-slider::-moz-range-thumb {
-                width: var(--thumb-size);
-                height: var(--thumb-size);
                 border-radius: 50%;
                 background: white;
                 border: 2px solid #a1a1aa;
