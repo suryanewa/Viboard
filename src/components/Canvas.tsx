@@ -102,6 +102,90 @@ export const Canvas: React.FC<{ children: React.ReactNode }> = ({ children }) =>
   const transform = useMotionTemplate`translate(${mx}px, ${my}px) scale(${mZoom})`;
 
   useEffect(() => {
+    const handlePaste = async (e: ClipboardEvent) => {
+      const isInput = document.activeElement instanceof HTMLInputElement ||
+        document.activeElement instanceof HTMLTextAreaElement ||
+        (document.activeElement as HTMLElement)?.isContentEditable;
+      if (isInput) return;
+
+      e.preventDefault();
+      const { viewport, mousePos, blocks, addBlock, setSelection } = useBoardStore.getState();
+
+      const targetX = mousePos.x !== 0 || mousePos.y !== 0
+        ? mousePos.x
+        : -viewport.x / viewport.zoom + window.innerWidth / 2 / viewport.zoom;
+      const targetY = mousePos.x !== 0 || mousePos.y !== 0
+        ? mousePos.y
+        : -viewport.y / viewport.zoom + window.innerHeight / 2 / viewport.zoom;
+
+      const highestZ = Math.max(0, ...Object.values(blocks).map((b) => b.zIndex));
+
+      const files = e.clipboardData?.files;
+      if (files && files.length > 0) {
+        const imageFiles = Array.from(files).filter(f => f.type.startsWith('image/'));
+        if (imageFiles.length > 0) {
+          const newSelection: string[] = [];
+          imageFiles.forEach((file, i) => {
+            const reader = new FileReader();
+            reader.onload = () => {
+              const id = uuidv4();
+              addBlock({
+                id,
+                type: 'image',
+                x: targetX - 120 + i * 20,
+                y: targetY - 120 + i * 20,
+                width: 240,
+                height: 240,
+                zIndex: highestZ + 1 + i,
+                data: { url: reader.result as string }
+              });
+              newSelection.push(id);
+              if (newSelection.length === imageFiles.length) {
+                setSelection(newSelection);
+              }
+            };
+            reader.readAsDataURL(file);
+          });
+          return;
+        }
+      }
+
+      const text = e.clipboardData?.getData('text/plain');
+      if (text) {
+        const urlRegex = /^(https?:\/\/[^\s]+)$/;
+        const lines = text.split('\n').filter(line => line.trim() !== '');
+        const newSelection: string[] = [];
+
+        lines.forEach((line, i) => {
+          const trimmed = line.trim();
+          if (urlRegex.test(trimmed)) {
+            const id = uuidv4();
+            addBlock({
+              id,
+              type: 'link',
+              x: targetX - 240 + i * 20,
+              y: targetY - 120 + i * 20,
+              width: 480,
+              height: 240,
+              zIndex: highestZ + 1 + i,
+              data: { url: trimmed, title: '', description: '' }
+            });
+            newSelection.push(id);
+          }
+        });
+
+        if (newSelection.length > 0) {
+          setSelection(newSelection);
+          return;
+        }
+      }
+    };
+
+    window.addEventListener('paste', handlePaste);
+    return () => window.removeEventListener('paste', handlePaste);
+  }, []);
+
+  useEffect(() => {
     const container = containerRef.current;
     if (!container) return;
 

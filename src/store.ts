@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 import type { Block, Viewport, DrawingPath } from './types';
 import { v4 as uuidv4 } from 'uuid';
+import { indexBlock, removeBlockFromIndex, syncAllBlocks } from './lib/typesense';
 
 const createMockBlocks = (): Record<string, Block> => {
   return {
@@ -46,6 +47,7 @@ interface BoardState {
   canvasTitle: string;
   mode: 'view' | 'edit';
   isSearchOpen: boolean;
+  isPlusMenuOpen: boolean;
   mousePos: { x: number, y: number };
   clipboard: Block[];
   tool: 'select' | 'marker' | 'shape' | 'text' | 'pan' | 'sticky' | 'link';
@@ -81,6 +83,7 @@ interface BoardState {
   setCanvasTitle: (title: string) => void;
   setMode: (mode: 'view' | 'edit') => void;
   setIsSearchOpen: (isOpen: boolean) => void;
+  setIsPlusMenuOpen: (isOpen: boolean) => void;
   setMousePos: (x: number, y: number) => void;
   setTool: (tool: 'select' | 'marker' | 'shape' | 'text' | 'pan' | 'sticky' | 'link') => void;
   setAnimationState: (state: 'idle' | 'animating-out' | 'hopping' | 'animating-in') => void;
@@ -109,6 +112,7 @@ interface BoardState {
   duplicate: (ids: string[], noOffset?: boolean) => void;
   undo: () => void;
   redo: () => void;
+  syncBlocksToTypeSense: () => void;
 }
 
 const MAX_HISTORY = 50;
@@ -122,6 +126,7 @@ export const useBoardStore = create<BoardState>((set, get) => ({
   canvasTitle: 'Untitled Board',
   mode: 'edit' as 'view' | 'edit',
   isSearchOpen: false,
+  isPlusMenuOpen: false,
   mousePos: { x: 0, y: 0 },
   clipboard: [],
   tool: 'select',
@@ -164,16 +169,29 @@ export const useBoardStore = create<BoardState>((set, get) => ({
         future: [],
       }
     });
+    if (block.type === 'sticky' || block.type === 'text' || block.type === 'link') {
+      indexBlock(block);
+    }
   },
 
   updateBlock: (id, updates, noHistory = false) => {
     const { blocks, drawings, history } = get();
     const block = blocks[id];
     if (!block) return;
+    
+    const updatedBlock = { ...block, ...updates };
+    if (
+      (updates.data?.text !== undefined || updates.data?.url !== undefined ||
+       updates.data?.title !== undefined || updates.data?.description !== undefined) &&
+      (block.type === 'sticky' || block.type === 'text' || block.type === 'link')
+    ) {
+      indexBlock(updatedBlock);
+    }
+    
     set({
       blocks: {
         ...blocks,
-        [id]: { ...block, ...updates }
+        [id]: updatedBlock
       },
       history: noHistory ? history : {
         past: [...history.past.slice(-MAX_HISTORY + 1), { blocks, drawings }],
@@ -210,6 +228,7 @@ export const useBoardStore = create<BoardState>((set, get) => ({
     const newBlocks = { ...blocks };
     ids.forEach((id) => {
       delete newBlocks[id];
+      removeBlockFromIndex(id);
     });
     
     set({
@@ -250,6 +269,7 @@ export const useBoardStore = create<BoardState>((set, get) => ({
   setCanvasTitle: (title) => set({ canvasTitle: title }),
   setMode: (mode) => set({ mode }),
   setIsSearchOpen: (isSearchOpen) => set({ isSearchOpen }),
+  setIsPlusMenuOpen: (isPlusMenuOpen) => set({ isPlusMenuOpen }),
   setMousePos: (x, y) => set({ mousePos: { x, y } }),
 
   setTool: (tool) => set({ tool }),
@@ -542,5 +562,10 @@ export const useBoardStore = create<BoardState>((set, get) => ({
         future: newFuture,
       }
     });
+  },
+
+  syncBlocksToTypeSense: () => {
+    const { blocks } = get();
+    syncAllBlocks(blocks);
   },
 }));

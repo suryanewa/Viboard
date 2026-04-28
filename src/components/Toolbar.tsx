@@ -1,12 +1,31 @@
 import React, { useState, useEffect } from 'react';
 import { useBoardStore } from '../store';
-import { Type, Link, Magnet, Pencil, Circle, MousePointer, Hand, ZoomIn, ZoomOut, Search, Send, Eye, Edit3, MoreVertical } from 'lucide-react';
+import { Type, Link, Magnet, Pencil, Circle, MousePointer, Hand, ZoomIn, ZoomOut, Search, Send, Eye, Edit3, MoreVertical, Plus } from 'lucide-react';
 import { v4 as uuidv4 } from 'uuid';
 import { motion, AnimatePresence } from 'framer-motion';
 import clsx from 'clsx';
 import type { Block, BlockType } from '../types';
 import { Tooltip } from './Tooltip';
 import { SearchOverlay } from './SearchOverlay';
+
+
+const VennDiagramIcon = ({ className }: { className?: string }) => (
+  <svg className={className || ''} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+    <circle cx="12" cy="9" r="4.5" />
+    <circle cx="8" cy="15" r="4.5" />
+    <circle cx="16" cy="15" r="4.5" />
+  </svg>
+);
+
+const SerifAIcon = ({ className }: { className?: string }) => (
+  <svg className={className || ''} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+    <path d="M12 4 L4 20 M12 4 L20 20 M8 14 L16 14" />
+    <path d="M3 20 L5 20 M19 20 L21 20 M10 4 L14 4" />
+  </svg>
+);
+
+type ToolbarTool = 'select' | 'marker' | 'shape' | 'text' | 'pan' | 'sticky' | 'link' | 'palette' | 'font';
+type ToolbarVisualTool = ToolbarTool | 'plus';
 
 export const Toolbar: React.FC = () => {
   const addBlock = useBoardStore((state) => state.addBlock);
@@ -21,6 +40,8 @@ export const Toolbar: React.FC = () => {
   const mode = useBoardStore((state) => state.mode);
   const setMode = useBoardStore((state) => state.setMode);
   const setIsSearchOpen = useBoardStore((state) => state.setIsSearchOpen);
+  const isPlusMenuOpen = useBoardStore((state) => state.isPlusMenuOpen);
+  const setIsPlusMenuOpen = useBoardStore((state) => state.setIsPlusMenuOpen);
 
   const tool = useBoardStore((state) => state.tool);
   const setTool = useBoardStore((state) => state.setTool);
@@ -31,6 +52,10 @@ export const Toolbar: React.FC = () => {
   const [hoveredTool, setHoveredTool] = useState<string | null>(null);
   const [hoveredTopRight, setHoveredTopRight] = useState<string | null>(null);
   const [hoveredTopLeft, setHoveredTopLeft] = useState<string | null>(null);
+  const [activeToolbarTool, setActiveToolbarTool] = useState<ToolbarVisualTool>(tool);
+  const [activePlusTool, setActivePlusTool] = useState<ToolbarVisualTool>('plus');
+  const animationTimeoutRef = React.useRef<number | null>(null);
+  const plusMenuCloseTimeoutRef = React.useRef<number | null>(null);
 
   const ZOOM_LEVELS = [0.25, 0.5, 0.75, 1, 2];
   const cycleZoom = () => {
@@ -49,34 +74,117 @@ export const Toolbar: React.FC = () => {
   const TOOLS = React.useMemo(() => [
     { id: 'select', icon: MousePointer, shortcut: 'V', color: 'blue', hasSecondary: false, hoverAnim: { scale: 1.1, rotate: -15, x: -1, y: -1 } as any },
     { id: 'pan', icon: Hand, shortcut: 'P', color: 'blue', hasSecondary: false, hoverAnim: { scale: 1.1, rotate: [0, -15, 15, -10, 0] } as any },
-    { id: 'sticky', icon: () => <div className={clsx("w-4 h-4 border-2 transition-colors", tool === 'sticky' ? 'border-red-600' : 'border-currentColor')} />, shortcut: 'S', color: 'red', hasSecondary: true, hoverAnim: { scale: 1.15, rotate: 10, y: -1 } as any },
+    { id: 'sticky', icon: ({ isSelected }: { isSelected?: boolean }) => <div className={clsx("w-4 h-4 border-2 transition-colors", isSelected ? 'border-red-600' : 'border-currentColor')} />, shortcut: 'S', color: 'red', hasSecondary: true, hoverAnim: { scale: 1.15, rotate: 10, y: -1 } as any },
     { id: 'text', icon: Type, shortcut: 'T', color: 'red', hasSecondary: false, hoverAnim: { scale: 1.1, y: -2 } as any },
     { id: 'marker', icon: Pencil, shortcut: 'M', color: 'red', hasSecondary: true, hoverAnim: { scale: 1.1, rotate: -20, x: 2, y: -2 } as any },
     { id: 'shape', icon: Circle, shortcut: 'K', color: 'red', hasSecondary: true, hoverAnim: { scale: 1.15 } as any },
-    { id: 'link', icon: Link, shortcut: 'L', color: 'red', hasSecondary: true, hoverAnim: { scale: 1.1, rotate: 15 } as any },
-  ], [tool]);
+    { id: 'plus', icon: Plus, shortcut: 'L', color: 'red', hasSecondary: false, hoverAnim: { scale: 1.1, rotate: 90 } as any },
+    { id: 'link', icon: Link, shortcut: 'L', color: 'red', hasSecondary: false, hoverAnim: { scale: 1.1 } as any },
+    { id: 'palette', icon: VennDiagramIcon, shortcut: 'C', color: 'red', hasSecondary: false, hoverAnim: { scale: 1.1 } as any },
+    { id: 'font', icon: SerifAIcon, shortcut: 'F', color: 'red', hasSecondary: false, hoverAnim: { scale: 1.1 } as any },
+  ], []);
 
-  const handleToolSelect = React.useCallback((nextTool: 'select' | 'marker' | 'shape' | 'text' | 'pan' | 'sticky' | 'link') => {
-    if (tool === nextTool) return;
+  const handleToolSelect = React.useCallback((nextTool: ToolbarVisualTool, options?: { deferPlusMenuClose?: boolean, isSubTool?: boolean }) => {
+    const currentState = useBoardStore.getState();
+    const currentVisualTool = options?.isSubTool ? 'plus' : activeToolbarTool;
     
-    const currentIndex = TOOLS.findIndex(t => t.id === tool);
+    if (currentVisualTool === nextTool && !options?.isSubTool) {
+      if (nextTool === 'plus' ? currentState.isPlusMenuOpen : !currentState.isPlusMenuOpen) {
+        return;
+      }
+    }
+    
+    const currentIndex = TOOLS.findIndex(t => t.id === currentVisualTool);
     const nextIndex = TOOLS.findIndex(t => t.id === nextTool);
-    setHopDirection(nextIndex > currentIndex ? 1 : -1);
+    if (currentIndex !== -1 && nextIndex !== -1 && currentIndex !== nextIndex) {
+      setHopDirection(nextIndex > currentIndex ? 1 : -1);
+    }
     
-    const nextToolHasSecondary = TOOLS.find(t => t.id === nextTool)?.hasSecondary;
+    const nextToolHasSecondary = TOOLS.find(t => t.id === (options?.isSubTool ? 'plus' : nextTool))?.hasSecondary;
     
-    setTool(nextTool);
-    if (nextTool === 'sticky' || nextTool === 'text' || nextTool === 'shape' || nextTool === 'marker' || nextTool === 'link') {
-      useBoardStore.getState().setSelection([]);
-      useBoardStore.getState().setDrawingSelection([]);
+    if (options?.isSubTool) {
+      setActivePlusTool(nextTool);
+      setActiveToolbarTool('plus');
+    } else {
+      setActiveToolbarTool(nextTool);
+    }
+
+    if (plusMenuCloseTimeoutRef.current !== null) {
+      window.clearTimeout(plusMenuCloseTimeoutRef.current);
+      plusMenuCloseTimeoutRef.current = null;
+    }
+    
+    if (nextTool !== 'plus' && !options?.isSubTool) {
+      setTool(nextTool === 'palette' || nextTool === 'font' ? 'text' : nextTool as any);
+      if (nextTool === 'sticky' || nextTool === 'text' || nextTool === 'shape' || nextTool === 'marker' || nextTool === 'link' || nextTool === 'palette' || nextTool === 'font') {
+        currentState.setSelection([]);
+        currentState.setDrawingSelection([]);
+      }
+      if (currentState.isPlusMenuOpen && options?.deferPlusMenuClose) {
+        plusMenuCloseTimeoutRef.current = window.setTimeout(() => {
+          setIsPlusMenuOpen(false);
+          plusMenuCloseTimeoutRef.current = null;
+        }, 520);
+      } else {
+        setIsPlusMenuOpen(false);
+      }
+    } else if (nextTool === 'plus') {
+      const isOpening = !currentState.isPlusMenuOpen;
+      setIsPlusMenuOpen(isOpening);
+    } else if (options?.isSubTool) {
+      setTool(nextTool === 'palette' || nextTool === 'font' ? 'text' : nextTool as any);
+      if (nextTool === 'sticky' || nextTool === 'text' || nextTool === 'shape' || nextTool === 'marker' || nextTool === 'link' || nextTool === 'palette' || nextTool === 'font') {
+        currentState.setSelection([]);
+        currentState.setDrawingSelection([]);
+      }
+      if (currentState.isPlusMenuOpen) {
+        plusMenuCloseTimeoutRef.current = window.setTimeout(() => {
+          setIsPlusMenuOpen(false);
+          plusMenuCloseTimeoutRef.current = null;
+        }, 520);
+      }
     }
     
     setAnimationState('hopping');
+    if (animationTimeoutRef.current !== null) {
+      window.clearTimeout(animationTimeoutRef.current);
+    }
     
-    setTimeout(() => {
-      setAnimationState(nextToolHasSecondary ? 'animating-in' : 'idle');
+    animationTimeoutRef.current = window.setTimeout(() => {
+      setAnimationState(nextToolHasSecondary && (nextTool !== 'plus' || options?.isSubTool) ? 'animating-in' : 'idle');
+      animationTimeoutRef.current = null;
     }, 450);
-  }, [tool, setAnimationState, setTool, TOOLS]);
+  }, [activeToolbarTool, setAnimationState, setTool, TOOLS, setIsPlusMenuOpen]);
+
+  const activeToolbarToolRef = React.useRef(activeToolbarTool);
+  activeToolbarToolRef.current = activeToolbarTool;
+  const activePlusToolRef = React.useRef(activePlusTool);
+  activePlusToolRef.current = activePlusTool;
+
+  useEffect(() => {
+    if (!isPlusMenuOpen) {
+      if (tool === 'link') {
+        setActiveToolbarTool('plus');
+        setActivePlusTool('link');
+      } else if (tool === 'text' && activeToolbarToolRef.current === 'plus' && (activePlusToolRef.current === 'font' || activePlusToolRef.current === 'palette')) {
+        return;
+      } else {
+        setActiveToolbarTool(tool);
+        setActivePlusTool('plus');
+      }
+    }
+  }, [isPlusMenuOpen, tool]);
+
+  useEffect(() => {
+    return () => {
+      if (animationTimeoutRef.current !== null) {
+        window.clearTimeout(animationTimeoutRef.current);
+      }
+      if (plusMenuCloseTimeoutRef.current !== null) {
+        window.clearTimeout(plusMenuCloseTimeoutRef.current);
+      }
+    };
+  }, []);
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -114,10 +222,22 @@ export const Toolbar: React.FC = () => {
       if (cmdOrCtrl) {
         if (e.key === '=' || e.key === '+') {
           e.preventDefault();
-          setViewport({ zoom: Math.min(5, viewport.zoom + 0.1) });
+          const newZoom = Math.min(5, viewport.zoom + 0.1);
+          const centerX = window.innerWidth / 2;
+          const centerY = window.innerHeight / 2;
+          const scaleRatio = newZoom / viewport.zoom;
+          const newX = centerX - (centerX - viewport.x) * scaleRatio;
+          const newY = centerY - (centerY - viewport.y) * scaleRatio;
+          setViewport({ x: newX, y: newY, zoom: newZoom });
         } else if (e.key === '-') {
           e.preventDefault();
-          setViewport({ zoom: Math.max(0, viewport.zoom - 0.1) });
+          const newZoom = Math.max(0.1, viewport.zoom - 0.1);
+          const centerX = window.innerWidth / 2;
+          const centerY = window.innerHeight / 2;
+          const scaleRatio = newZoom / viewport.zoom;
+          const newX = centerX - (centerX - viewport.x) * scaleRatio;
+          const newY = centerY - (centerY - viewport.y) * scaleRatio;
+          setViewport({ x: newX, y: newY, zoom: newZoom });
         } else if (e.key === '0') {
           e.preventDefault();
           setViewport({ x: 300, y: 200, zoom: 0.5 });
@@ -128,6 +248,22 @@ export const Toolbar: React.FC = () => {
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [snapping, gridView, viewport, handleToolSelect, setSnapping, setGridView, setViewport]);
+
+  const plusMenuRef = React.useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const handleClickOutside = (e: Event) => {
+      if (plusMenuRef.current && !plusMenuRef.current.contains(e.target as Node)) {
+        if (useBoardStore.getState().isPlusMenuOpen) {
+          handleToolSelect(useBoardStore.getState().tool);
+        }
+      }
+    };
+    window.addEventListener('pointerdown', handleClickOutside);
+    return () => {
+      window.removeEventListener('pointerdown', handleClickOutside);
+    };
+  }, [handleToolSelect]);
 
   const handleAddBlock = React.useCallback((type: BlockType, dataOverride: any = {}) => {
     setTool('select');
@@ -369,9 +505,9 @@ export const Toolbar: React.FC = () => {
             )}
             <motion.div variants={{ hover: { scale: 1.1 } }} transition={{ duration: 0.3, type: "spring" }}>
               {mode === 'view' ? (
-                <Edit3 className="w-5 h-5 relative z-10" />
-              ) : (
                 <Eye className="w-5 h-5 relative z-10" />
+              ) : (
+                <Edit3 className="w-5 h-5 relative z-10" />
               )}
             </motion.div>
           </motion.button>
@@ -387,7 +523,15 @@ export const Toolbar: React.FC = () => {
           <motion.button 
             type="button"
             whileHover="hover"
-            onClick={() => setViewport({ zoom: Math.max(0, viewport.zoom - 0.1) })}
+            onClick={() => {
+              const newZoom = Math.max(0.1, viewport.zoom - 0.1);
+              const centerX = window.innerWidth / 2;
+              const centerY = window.innerHeight / 2;
+              const scaleRatio = newZoom / viewport.zoom;
+              const newX = centerX - (centerX - viewport.x) * scaleRatio;
+              const newY = centerY - (centerY - viewport.y) * scaleRatio;
+              setViewport({ x: newX, y: newY, zoom: newZoom });
+            }}
             onPointerEnter={() => setHoveredTopRight('zoom-out')}
             className="relative w-9 h-9 p-2 transition-colors flex items-center justify-center rounded-lg text-zinc-600 hover:text-zinc-900"
           >
@@ -443,7 +587,15 @@ export const Toolbar: React.FC = () => {
           <motion.button 
             type="button"
             whileHover="hover"
-            onClick={() => setViewport({ zoom: Math.min(5, viewport.zoom + 0.1) })}
+            onClick={() => {
+              const newZoom = Math.min(5, viewport.zoom + 0.1);
+              const centerX = window.innerWidth / 2;
+              const centerY = window.innerHeight / 2;
+              const scaleRatio = newZoom / viewport.zoom;
+              const newX = centerX - (centerX - viewport.x) * scaleRatio;
+              const newY = centerY - (centerY - viewport.y) * scaleRatio;
+              setViewport({ x: newX, y: newY, zoom: newZoom });
+            }}
             onPointerEnter={() => setHoveredTopRight('zoom-in')}
             className="relative w-9 h-9 p-2 transition-colors flex items-center justify-center rounded-lg text-zinc-600 hover:text-zinc-900"
           >
@@ -489,32 +641,36 @@ export const Toolbar: React.FC = () => {
         <motion.div 
           className="flex items-center gap-1 px-2 py-1.5 bg-white/90 backdrop-blur-md shadow-none border border-zinc-200 pointer-events-auto rounded-xl"
         >
-          <motion.div variants={{ hidden: { opacity: 0, scale: 0.5 }, visible: { opacity: 1, scale: 1, transition: { type: "spring", bounce: 0.4 } } }}>
-            <Tooltip content="Share" shortcut="⌘⇧S" position="bottom">
-              <motion.button 
-                type="button"
-                whileHover="hover"
-                onPointerEnter={() => setHoveredTopRight('share')}
-                className="relative w-9 h-9 p-2 transition-colors flex items-center justify-center rounded-lg text-zinc-600 hover:text-zinc-900"
-              >
-                {hoveredTopRight === 'share' && (
-                  <motion.div
-                    layoutId="top-right-share-hover-bg"
-                    initial={false}
-                    animate={{ opacity: 1 }}
-                    transition={{
-                      layout: { type: "spring", stiffness: 350, damping: 30, mass: 0.8 },
-                      opacity: { duration: 0.2 }
-                    }}
-                    className="absolute inset-0 rounded-lg bg-zinc-100 -z-10"
-                  />
-                )}
-                <motion.div variants={{ hover: { scale: 1.1, x: 2, y: -2 } }} transition={{ duration: 0.3, type: "spring" }}>
-                  <Send className="w-5 h-5 relative z-10" />
-                </motion.div>
-              </motion.button>
-            </Tooltip>
-          </motion.div>
+          <AnimatePresence>
+            {mode === 'edit' && (
+              <motion.div variants={{ hidden: { opacity: 0, scale: 0.5 }, visible: { opacity: 1, scale: 1, transition: { type: "spring", bounce: 0.4 } } }}>
+                <Tooltip content="Share" shortcut="⌘⇧S" position="bottom">
+                  <motion.button 
+                    type="button"
+                    whileHover="hover"
+                    onPointerEnter={() => setHoveredTopRight('share')}
+                    className="relative w-9 h-9 p-2 transition-colors flex items-center justify-center rounded-lg text-zinc-600 hover:text-zinc-900"
+                  >
+                    {hoveredTopRight === 'share' && (
+                      <motion.div
+                        layoutId="top-right-share-hover-bg"
+                        initial={false}
+                        animate={{ opacity: 1 }}
+                        transition={{
+                          layout: { type: "spring", stiffness: 350, damping: 30, mass: 0.8 },
+                          opacity: { duration: 0.2 }
+                        }}
+                        className="absolute inset-0 rounded-lg bg-zinc-100 -z-10"
+                      />
+                    )}
+                    <motion.div variants={{ hover: { scale: 1.1, x: 2, y: -2 } }} transition={{ duration: 0.3, type: "spring" }}>
+                      <Send className="w-5 h-5 relative z-10" />
+                    </motion.div>
+                  </motion.button>
+                </Tooltip>
+              </motion.div>
+            )}
+          </AnimatePresence>
         </motion.div>
       </motion.div>
 
@@ -543,102 +699,209 @@ export const Toolbar: React.FC = () => {
                 }
               }}
             >
-              {TOOLS.map((t) => {
-                const isSelected = tool === t.id;
-                const Icon = t.icon;
+              {TOOLS.filter(t => !['link', 'palette', 'font'].includes(t.id)).map((t) => {
+                const isSelected = activeToolbarTool === t.id;
+                const Icon = t.id === 'plus' && activePlusTool !== 'plus' ? TOOLS.find(tool => tool.id === activePlusTool)?.icon || t.icon : t.icon;
                 
-                return (
-                  <motion.div key={t.id} variants={{ hidden: { opacity: 0, scale: 0.5 }, visible: { opacity: 1, scale: 1, transition: { type: "spring", bounce: 0.4 } } }}>
-                    <Tooltip content={t.id.charAt(0).toUpperCase() + t.id.slice(1)} shortcut={t.shortcut} position="top">
-                      <motion.button
-                        type="button"
-                        initial="rest"
-                        animate={isSelected ? "selected" : "rest"}
-                        whileHover={!isSelected ? "hover" : undefined}
-                        onPointerEnter={() => setHoveredTool(t.id)}
-                        onPointerDown={(e) => {
-                          e.stopPropagation();
-                          handleToolSelect(t.id as 'select' | 'marker' | 'shape' | 'text' | 'pan' | 'sticky' | 'link');
+                const ButtonContent = (
+                    <motion.button
+                      type="button"
+                      initial="rest"
+                      animate={isSelected ? "selected" : "rest"}
+                      whileHover={!isSelected ? "hover" : undefined}
+                      onPointerEnter={() => setHoveredTool(t.id)}
+                      onPointerDown={(e) => {
+                        e.stopPropagation();
+                        if (t.id === 'plus' || activeToolbarTool !== t.id) {
+                          handleToolSelect(t.id as ToolbarVisualTool);
+                        }
+                      }}
+                      className="relative p-2 flex items-center justify-center w-10 h-10 rounded-lg transition-colors"
+                    >
+                    {(hoveredTool || activeToolbarTool) === t.id && (
+                      <motion.div
+                        layoutId="toolbar-hover-bg"
+                        initial={false}
+                        animate={{ opacity: hoveredTool === t.id && !isSelected ? 1 : 0 }}
+                        transition={{
+                          layout: { type: "spring", stiffness: 350, damping: 30, mass: 0.8 },
+                          opacity: { duration: 0.2 }
                         }}
-                        className="relative p-2 flex items-center justify-center w-10 h-10 rounded-lg transition-colors"
-                      >
-                        {(hoveredTool || tool) === t.id && (
-                          <motion.div
-                            layoutId="toolbar-hover-bg"
-                            initial={false}
-                            animate={{ opacity: hoveredTool === t.id && !isSelected ? 1 : 0 }}
-                            transition={{
-                              layout: { type: "spring", stiffness: 350, damping: 30, mass: 0.8 },
-                              opacity: { duration: 0.2 }
-                            }}
-                            className="absolute inset-0 rounded-lg bg-zinc-100 -z-20"
-                          />
-                        )}
+                        className="absolute inset-0 rounded-lg bg-zinc-100 -z-20"
+                      />
+                    )}
 
-                        <AnimatePresence>
-                          {isSelected && animationState === 'animating-out' && (
+                    <AnimatePresence>
+                      
+                    {t.id === 'plus' && (
+                      <AnimatePresence>
+                        {isPlusMenuOpen && (
                             <motion.div
-                              initial={{ opacity: 1, scale: 1 }}
-                              exit={{ opacity: 0, scale: 1.2, transition: { duration: 0.2 } }}
-                              className="absolute inset-0 border-2 border-current rounded-lg"
-                            />
-                          )}
-                        </AnimatePresence>
-
-                        {isSelected && (
-                          <motion.div
-                            layoutId="active-tool-bg"
-                            transition={{
-                              layout: {
-                                type: "spring",
-                                stiffness: 250,
-                                damping: 25,
-                                mass: 0.5
-                              },
-                              y: { duration: 0.4, times: [0, 0.5, 1], ease: ["circOut", "circIn"] },
-                              rotate: { duration: animationState === 'hopping' ? 0.45 : 0, times: [0, 0.85, 1], ease: ["easeInOut", "easeOut"] },
-                              scale: { duration: 0.45, times: [0, 0.4, 0.85, 1], ease: ["easeOut", "easeIn", "easeOut"] }
-                            }}
-                            animate={
-                              animationState === 'hopping' 
-                                ? { 
-                                    rotate: [0, hopDirection === 1 ? 385 : -385, hopDirection === 1 ? 360 : -360], 
-                                    y: [0, -50, 0], 
-                                    scale: [1, 1.15, 0.9, 1] 
-                                  } 
-                                : { rotate: 0, y: 0, scale: 1 }
-                            }
-                            className={clsx(
-                              "absolute inset-0 rounded-lg -z-10",
-                              t.color === 'blue' ? 'bg-blue-100' :
-                              t.color === 'yellow' ? 'bg-yellow-100' : 'bg-red-100'
-                            )}
-                          />
+                              initial="hidden"
+                              animate="visible"
+                              exit="hidden"
+                              className="absolute bottom-1/2 left-1/2 -translate-x-1/2 translate-y-1/2 z-50 pointer-events-none"
+                              variants={{
+                                hidden: { opacity: 0 },
+                                visible: { 
+                                  opacity: 1,
+                                  transition: { staggerChildren: 0.05, delayChildren: 0.05 } 
+                                }
+                              }}
+                            >
+                              {[
+                                { id: 'link', icon: Link, title: 'Link', x: 0, y: -56 },
+                                { id: 'palette', icon: VennDiagramIcon, title: 'Palette', x: 56, y: -56 },
+                                { id: 'font', icon: SerifAIcon, title: 'Font', x: 56, y: 0 }
+                              ].map((sub, i) => {
+                                const isSelected = activePlusTool === sub.id;
+                                const isAnySelected = activePlusTool !== 'plus';
+                                
+                                return (
+                                <motion.button
+                                  key={sub.id}
+                                  type="button"
+                                  onPointerEnter={(e) => {
+                                    e.stopPropagation();
+                                  }}
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    handleToolSelect(sub.id as ToolbarVisualTool, { deferPlusMenuClose: true, isSubTool: true });
+                                  }}
+                                  variants={{
+                                    hidden: { 
+                                      opacity: 0, 
+                                      x: 0, 
+                                      y: 0, 
+                                      scale: 0.5,
+                                      backgroundColor: "#ffffff",
+                                      borderRadius: "9999px",
+                                      boxShadow: "0 8px 16px -4px rgba(0,0,0,0), 0 4px 8px -2px rgba(0,0,0,0)",
+                                      width: 44,
+                                      height: 44,
+                                      transition: { type: "spring", stiffness: 300, damping: 25 }
+                                    },
+                                    visible: { 
+                                      opacity: isAnySelected && !isSelected ? 0 : 1, 
+                                      x: isSelected ? 0 : sub.x, 
+                                      y: isSelected ? 0 : sub.y, 
+                                      scale: 1, 
+                                      zIndex: isSelected ? 10 : 1,
+                                      backgroundColor: isSelected ? "#fee2e2" : "#ffffff",
+                                      borderRadius: isSelected ? "8px" : "9999px",
+                                      boxShadow: isSelected ? "0 8px 16px -4px rgba(0,0,0,0), 0 4px 8px -2px rgba(0,0,0,0)" : "0 8px 16px -4px rgba(0,0,0,0.1), 0 4px 8px -2px rgba(0,0,0,0.05)",
+                                      width: isSelected ? 40 : 44,
+                                      height: isSelected ? 40 : 44,
+                                      transition: { type: "spring", stiffness: 300, damping: 25 } 
+                                    }
+                                  }}
+                                  whileHover={!isAnySelected ? { scale: 1.15, rotate: i % 2 === 0 ? 5 : -5 } : undefined}
+                                  className={clsx(
+                                    "absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 flex items-center justify-center border border-solid pointer-events-auto transition-colors duration-300",
+                                    isSelected ? "text-red-600 border-transparent" : "text-zinc-700 hover:text-zinc-900 border-zinc-200"
+                                  )}
+                                >
+                                  <sub.icon className="w-5 h-5" />
+                                </motion.button>
+                              )})}
+                            </motion.div>
                         )}
+                      </AnimatePresence>
+                    )}
 
+                    {isSelected && animationState === 'animating-out' && (
                         <motion.div
-                          variants={{ 
-                            hover: t.hoverAnim,
-                            rest: { scale: 1, rotate: 0, x: 0, y: 0 },
-                            selected: { 
-                              scale: [1, 0.8, 1.2, 1],
-                              rotate: [0, -10, 10, 0],
-                              x: 0,
-                              y: 0
-                            }
-                          }}
-                          transition={{ duration: 0.3, type: "spring" }}
-                          className={clsx(
-                            "relative z-10 transition-colors duration-200",
-                            isSelected 
-                              ? `text-${t.color}-600` 
-                              : "text-zinc-600 hover:text-zinc-900"
-                          )}
+                          initial={{ opacity: 1, scale: 1 }}
+                          exit={{ opacity: 0, scale: 1.2, transition: { duration: 0.2 } }}
+                          className="absolute inset-0 border-2 border-current rounded-lg"
+                        />
+                      )}
+                    </AnimatePresence>
+
+                    {isSelected && (
+                      <motion.div
+                        layoutId="active-tool-bg"
+                        transition={{
+                          layout: {
+                            type: "spring",
+                            stiffness: 250,
+                            damping: 25,
+                            mass: 0.5
+                          },
+                          y: { duration: 0.4, times: [0, 0.5, 1], ease: ["circOut", "circIn"] },
+                          rotate: { duration: animationState === 'hopping' ? 0.45 : 0, times: [0, 0.85, 1], ease: ["easeInOut", "easeOut"] },
+                          scale: { duration: 0.45, times: [0, 0.4, 0.85, 1], ease: ["easeOut", "easeIn", "easeOut"] }
+                        }}
+                        animate={
+                          animationState === 'hopping' 
+                            ? { 
+                                rotate: [0, hopDirection === 1 ? 385 : -385, hopDirection === 1 ? 360 : -360], 
+                                y: [0, -50, 0], 
+                                scale: [1, 1.15, 0.9, 1] 
+                              } 
+                            : { rotate: 0, y: 0, scale: 1 }
+                        }
+                        className={clsx(
+                          "absolute inset-0 rounded-lg -z-10",
+                          t.color === 'blue' ? 'bg-blue-100' : 'bg-red-100'
+                        )}
+                      />
+                    )}
+                    
+                    <motion.div
+                      variants={{ 
+                        hover: t.hoverAnim,
+                        rest: { scale: 1, rotate: 0, x: 0, y: 0 },
+                        selected: { 
+                          scale: [1, 0.8, 1.2, 1],
+                          rotate: 0,
+                          x: 0,
+                          y: 0
+                        }
+                      }}
+                      transition={{ duration: 0.3, type: "spring" }}
+                      className={clsx(
+                        "relative z-10 transition-colors duration-200 flex items-center justify-center w-5 h-5",
+                        isSelected 
+                          ? (t.color === 'blue' ? 'text-blue-600' : 'text-red-600')
+                          : "text-zinc-600 hover:text-zinc-900"
+                      )}
+                    >
+                      <AnimatePresence mode="wait">
+                        <motion.div
+                          key={t.id === 'plus' ? activePlusTool : t.id}
+                          initial={{ opacity: 0, scale: 0.5, rotate: -45 }}
+                          animate={{ opacity: 1, scale: 1, rotate: 0 }}
+                          exit={{ opacity: 0, scale: 0.5, rotate: 45 }}
+                          transition={{ duration: 0.15 }}
+                          className="flex items-center justify-center absolute inset-0"
                         >
-                          <Icon className={clsx("w-5 h-5", isSelected && `fill-${t.color}-600/10`)} />
+                          <Icon 
+                            className={clsx(
+                              "w-5 h-5 transition-colors duration-200", 
+                              isSelected && (t.color === 'blue' ? 'fill-blue-600/10' : 'fill-red-600/10')
+                            )} 
+                            isSelected={isSelected} 
+                          />
                         </motion.div>
-                      </motion.button>
-                    </Tooltip>
+                      </AnimatePresence>
+                    </motion.div>
+                  </motion.button>
+                );
+
+                return (
+                  <motion.div 
+                    key={t.id} 
+                    ref={t.id === 'plus' ? plusMenuRef : undefined}
+                    variants={{ hidden: { opacity: 0, scale: 0.5 }, visible: { opacity: 1, scale: 1, transition: { type: "spring", bounce: 0.4 } } }}
+                  >
+                    {t.id === 'plus' ? (
+                      ButtonContent
+                    ) : (
+                      <Tooltip content={t.id.charAt(0).toUpperCase() + t.id.slice(1)} shortcut={t.shortcut} position="top">
+                        {ButtonContent}
+                      </Tooltip>
+                    )}
                   </motion.div>
                 );
               })}
