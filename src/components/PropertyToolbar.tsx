@@ -36,6 +36,7 @@ export const PropertyToolbar: React.FC = () => {
   const shapeHue = useBoardStore((state) => state.shapeHue);
   const setShapeHue = useBoardStore((state) => state.setShapeHue);
   const animationState = useBoardStore((state) => state.animationState);
+  const isPlusMenuOpen = useBoardStore((state) => state.isPlusMenuOpen);
 
   const selectedBlocks = selection.map(id => blocks[id]).filter(Boolean);
   const hasSelectedStickies = selectedBlocks.length > 0 && selectedBlocks.every(b => b.type === 'sticky');
@@ -110,7 +111,7 @@ export const PropertyToolbar: React.FC = () => {
 
   return (
     <AnimatePresence mode="wait">
-      {(tool === 'sticky' || tool === 'marker' || tool === 'shape' || tool === 'link') && (animationState === 'animating-in' || animationState === 'idle') && (
+      {!isPlusMenuOpen && (tool === 'sticky' || tool === 'marker' || tool === 'shape' || tool === 'link') && (animationState === 'animating-in' || animationState === 'idle') && (
         <motion.div
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}

@@ -47,6 +47,7 @@ interface BoardState {
   canvasTitle: string;
   mode: 'view' | 'edit';
   isSearchOpen: boolean;
+  isPlusMenuOpen: boolean;
   mousePos: { x: number, y: number };
   clipboard: Block[];
   tool: 'select' | 'marker' | 'shape' | 'text' | 'pan' | 'sticky' | 'link';
@@ -82,6 +83,7 @@ interface BoardState {
   setCanvasTitle: (title: string) => void;
   setMode: (mode: 'view' | 'edit') => void;
   setIsSearchOpen: (isOpen: boolean) => void;
+  setIsPlusMenuOpen: (isOpen: boolean) => void;
   setMousePos: (x: number, y: number) => void;
   setTool: (tool: 'select' | 'marker' | 'shape' | 'text' | 'pan' | 'sticky' | 'link') => void;
   setAnimationState: (state: 'idle' | 'animating-out' | 'hopping' | 'animating-in') => void;
@@ -124,6 +126,7 @@ export const useBoardStore = create<BoardState>((set, get) => ({
   canvasTitle: 'Untitled Board',
   mode: 'edit' as 'view' | 'edit',
   isSearchOpen: false,
+  isPlusMenuOpen: false,
   mousePos: { x: 0, y: 0 },
   clipboard: [],
   tool: 'select',
@@ -266,6 +269,7 @@ export const useBoardStore = create<BoardState>((set, get) => ({
   setCanvasTitle: (title) => set({ canvasTitle: title }),
   setMode: (mode) => set({ mode }),
   setIsSearchOpen: (isSearchOpen) => set({ isSearchOpen }),
+  setIsPlusMenuOpen: (isPlusMenuOpen) => set({ isPlusMenuOpen }),
   setMousePos: (x, y) => set({ mousePos: { x, y } }),
 
   setTool: (tool) => set({ tool }),
