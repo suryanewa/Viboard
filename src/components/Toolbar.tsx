@@ -778,7 +778,7 @@ export const Toolbar: React.FC = () => {
                                       x: 0,
                                       y: 0,
                                       scale: 1,
-                                      borderRadius: "8px",
+                                      borderRadius: 8,
                                       width: 40,
                                       height: 40,
                                       transition: { duration: 0 }
@@ -787,7 +787,7 @@ export const Toolbar: React.FC = () => {
                                       x: 0, 
                                       y: 0, 
                                       scale: 0.5,
-                                      borderRadius: "9999px",
+                                      borderRadius: 22,
                                       boxShadow: "0 8px 16px -4px rgba(0,0,0,0), 0 4px 8px -2px rgba(0,0,0,0)",
                                       width: 44,
                                       height: 44,
@@ -799,14 +799,11 @@ export const Toolbar: React.FC = () => {
                                       y: isSelected ? 0 : sub.y, 
                                       scale: 1, 
                                       zIndex: isSelected ? 10 : 1,
-                                      borderRadius: isSelected ? "8px" : "9999px",
+                                      borderRadius: isSelected ? 8 : 22,
                                       boxShadow: isSelected ? "0 8px 16px -4px rgba(0,0,0,0), 0 4px 8px -2px rgba(0,0,0,0)" : "0 8px 16px -4px rgba(0,0,0,0.1), 0 4px 8px -2px rgba(0,0,0,0.05)",
                                       width: isSelected ? 40 : 44,
                                       height: isSelected ? 40 : 44,
-                                      transition: { 
-                                        type: "spring", stiffness: 300, damping: 25,
-                                        borderRadius: { type: "tween", delay: isSelected ? 0.15 : 0, duration: 0.2 }
-                                      } 
+                                      transition: { type: "spring", stiffness: 300, damping: 25 } 
                                     }
                                   }}
                                   whileHover={isAnySelected ? {} : { scale: 1.15, rotate: i % 2 === 0 ? 5 : -5 }}
