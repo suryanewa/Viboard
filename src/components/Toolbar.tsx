@@ -749,7 +749,7 @@ export const Toolbar: React.FC = () => {
                                 hidden: { opacity: 0 },
                                 visible: { 
                                   opacity: 1,
-                                  transition: { staggerChildren: 0.05, delayChildren: 0.05 } 
+                                  transition: { staggerChildren: 0.02, delayChildren: 0.02 } 
                                 }
                               }}
                             >
