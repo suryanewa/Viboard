@@ -139,10 +139,7 @@ export const Toolbar: React.FC = () => {
         currentState.setDrawingSelection([]);
       }
       if (currentState.isPlusMenuOpen) {
-        plusMenuCloseTimeoutRef.current = window.setTimeout(() => {
-          setIsPlusMenuOpen(false);
-          plusMenuCloseTimeoutRef.current = null;
-        }, 250);
+        setIsPlusMenuOpen(false);
       }
     }
     
@@ -781,7 +778,10 @@ export const Toolbar: React.FC = () => {
                                       borderRadius: 8,
                                       width: 40,
                                       height: 40,
-                                      transition: { duration: 0 }
+                                      transition: { 
+                                        type: "spring", stiffness: 250, damping: 25, mass: 0.5,
+                                        opacity: { delay: 0.3, duration: 0 }
+                                      }
                                     } : { 
                                       opacity: 0, 
                                       x: 0, 
@@ -842,7 +842,7 @@ export const Toolbar: React.FC = () => {
                           y: { duration: 0.4, times: [0, 0.5, 1], ease: ["circOut", "circIn"] },
                           rotate: { duration: animationState === 'hopping' ? 0.45 : 0, times: [0, 0.85, 1], ease: ["easeInOut", "easeOut"] },
                           scale: { duration: 0.45, times: [0, 0.4, 0.85, 1], ease: ["easeOut", "easeIn", "easeOut"] },
-                          opacity: { duration: 0 }
+                          opacity: { delay: (t.id === 'plus' && activePlusTool !== 'plus' && !isPlusMenuOpen) ? 0.3 : 0, duration: 0 }
                         }}
                         animate={
                           animationState === 'hopping' 
