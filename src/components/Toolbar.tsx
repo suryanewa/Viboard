@@ -125,7 +125,7 @@ export const Toolbar: React.FC = () => {
         plusMenuCloseTimeoutRef.current = window.setTimeout(() => {
           setIsPlusMenuOpen(false);
           plusMenuCloseTimeoutRef.current = null;
-        }, 520);
+        }, 250);
       } else {
         setIsPlusMenuOpen(false);
       }
@@ -142,7 +142,7 @@ export const Toolbar: React.FC = () => {
         plusMenuCloseTimeoutRef.current = window.setTimeout(() => {
           setIsPlusMenuOpen(false);
           plusMenuCloseTimeoutRef.current = null;
-        }, 520);
+        }, 250);
       }
     }
     
