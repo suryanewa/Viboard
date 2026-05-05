@@ -778,7 +778,6 @@ export const Toolbar: React.FC = () => {
                                       x: 0, 
                                       y: 0, 
                                       scale: 0.5,
-                                      backgroundColor: "#ffffff",
                                       borderRadius: "9999px",
                                       boxShadow: "0 8px 16px -4px rgba(0,0,0,0), 0 4px 8px -2px rgba(0,0,0,0)",
                                       width: 44,
@@ -791,7 +790,6 @@ export const Toolbar: React.FC = () => {
                                       y: isSelected ? 0 : sub.y, 
                                       scale: 1, 
                                       zIndex: isSelected ? 10 : 1,
-                                      backgroundColor: isSelected ? "#fee2e2" : "#ffffff",
                                       borderRadius: isSelected ? "8px" : "9999px",
                                       boxShadow: isSelected ? "0 8px 16px -4px rgba(0,0,0,0), 0 4px 8px -2px rgba(0,0,0,0)" : "0 8px 16px -4px rgba(0,0,0,0.1), 0 4px 8px -2px rgba(0,0,0,0.05)",
                                       width: isSelected ? 40 : 44,
@@ -802,7 +800,7 @@ export const Toolbar: React.FC = () => {
                                   whileHover={isAnySelected ? {} : { scale: 1.15, rotate: i % 2 === 0 ? 5 : -5 }}
                                   className={clsx(
                                     "absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 flex items-center justify-center border border-solid pointer-events-auto transition-colors duration-300",
-                                    isSelected ? "text-red-600 border-transparent" : "text-zinc-700 hover:text-zinc-900 border-zinc-200"
+                                    isSelected ? "text-red-600 border-transparent bg-red-100" : "text-zinc-700 hover:text-zinc-900 border-zinc-200 bg-white"
                                   )}
                                 >
                                   <sub.icon className="w-5 h-5" />
