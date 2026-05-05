@@ -1,7 +1,8 @@
-import React, { useRef, useState, useEffect, useCallback } from 'react';
+import React, { useRef, useState, useEffect, useCallback, useLayoutEffect } from 'react';
 import type { Block, DrawingPath } from '../types';
 import { useBoardStore } from '../store';
 import clsx from 'clsx';
+import { ArrowUpRight } from 'lucide-react';
 
 interface BlockContentProps {
   block: Block;
@@ -68,8 +69,17 @@ export const StickyBlock: React.FC<BlockContentProps> = ({ block }) => {
 
 export const TextBlock: React.FC<BlockContentProps> = ({ block }) => {
   const textRef = useRef<HTMLParagraphElement>(null);
+  const wrapRef = useRef<HTMLDivElement>(null);
   const updateBlock = useBoardStore((state) => state.updateBlock);
+  const zoom = useBoardStore((state) => state.viewport.zoom);
   const hasFocused = useRef(false);
+
+  const fontSize = block.data.fontSize ?? 20;
+  const color =
+    block.data.color ??
+    (block.data.hue !== undefined
+      ? `hsl(${block.data.hue}, 75%, 28%)`
+      : '#27272a');
 
   const setRef = (el: HTMLParagraphElement | null) => {
     textRef.current = el;
@@ -89,34 +99,68 @@ export const TextBlock: React.FC<BlockContentProps> = ({ block }) => {
     }
   };
 
-  const handleInput = () => {
+  const syncShellHeight = useCallback(() => {
     const el = textRef.current;
-    if (el) {
-      el.style.height = 'auto';
-      el.style.height = `${el.scrollHeight}px`;
+    const wrap = wrapRef.current;
+    if (!el || !wrap) return;
+    el.style.height = 'auto';
+    el.style.height = `${el.scrollHeight}px`;
+    const z = useBoardStore.getState().viewport.zoom;
+    const measured = Math.ceil(wrap.getBoundingClientRect().height / z);
+    const nextH = Math.max(24, measured);
+    if (Math.abs(nextH - block.height) < 0.5) return;
+    updateBlock(block.id, { height: nextH }, true);
+  }, [block.id, block.height, updateBlock]);
+
+  useLayoutEffect(() => {
+    const el = textRef.current;
+    if (!el) return;
+    if (document.activeElement !== el) {
+      const t = block.data.text ?? '';
+      if (el.innerText !== t) {
+        el.textContent = t;
+      }
     }
+  }, [block.data.text, block.id]);
+
+  useLayoutEffect(() => {
+    syncShellHeight();
+  }, [syncShellHeight, block.width, fontSize, color, zoom, block.data.text]);
+
+  const handleInput = () => {
+    syncShellHeight();
   };
 
   const handleBlur = () => {
-    if (textRef.current) {
-      updateBlock(block.id, { data: { ...block.data, text: textRef.current.innerText } });
+    const el = textRef.current;
+    const wrap = wrapRef.current;
+    if (el && wrap) {
+      el.style.height = 'auto';
+      el.style.height = `${el.scrollHeight}px`;
+      const z = useBoardStore.getState().viewport.zoom;
+      const nextH = Math.max(24, Math.ceil(wrap.getBoundingClientRect().height / z));
+      updateBlock(block.id, {
+        height: nextH,
+        data: { ...block.data, text: el.innerText },
+      });
     }
     window.getSelection()?.removeAllRanges();
   };
 
   return (
-    <div className="w-full min-h-full p-2 bg-transparent flex flex-col">
+    <div
+      ref={wrapRef}
+      className="w-full p-2 bg-transparent flex flex-col box-border"
+    >
       <p
         ref={setRef}
-        className="text-zinc-800 font-sans text-xl outline-none"
+        className="font-sans outline-none whitespace-pre-wrap break-words"
         contentEditable
         suppressContentEditableWarning
         onInput={handleInput}
         onBlur={handleBlur}
-        style={{ minHeight: '1.5em' }}
-      >
-        {block.data.text}
-      </p>
+        style={{ minHeight: '1.5em', fontSize, color }}
+      />
     </div>
   );
 };
@@ -210,7 +254,12 @@ export const ImageBlock: React.FC<BlockContentProps> = ({ block }) => {
 
   return (
     <div className="w-full h-full flex items-center justify-center overflow-hidden">
-      {block.data.url ? (
+      {block.data.loading ? (
+        <div className="flex flex-col items-center justify-center gap-4 text-zinc-400">
+          <div className="w-8 h-8 border-4 border-zinc-200 border-t-zinc-400 rounded-full animate-spin" />
+          <span className="text-sm font-medium animate-pulse">{block.data.alt || 'Loading...'}</span>
+        </div>
+      ) : block.data.url ? (
         <img
           src={block.data.url}
           alt={block.data.alt || "User content"}
@@ -716,8 +765,88 @@ export const PdfBlock: React.FC<BlockContentProps> = ({ block }) => {
   );
 };
 
+export const FrameBlock: React.FC<BlockContentProps> = ({ block }) => {
+  const isSelected = useBoardStore((state) => state.selection.includes(block.id));
+  const updateBlock = useBoardStore((state) => state.updateBlock);
+  const [isEditingTitle, setIsEditingTitle] = useState(false);
+  const [draftTitle, setDraftTitle] = useState(block.data.title || 'Frame');
+  const titleInputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    if (!isEditingTitle) {
+      setDraftTitle(block.data.title || 'Frame');
+    }
+  }, [block.data.title, isEditingTitle]);
+
+  useEffect(() => {
+    if (isEditingTitle) {
+      requestAnimationFrame(() => {
+        titleInputRef.current?.focus();
+        titleInputRef.current?.select();
+      });
+    }
+  }, [isEditingTitle]);
+
+  const commitTitle = useCallback(() => {
+    const nextTitle = draftTitle.trim() || 'Frame';
+    updateBlock(block.id, {
+      data: {
+        ...block.data,
+        title: nextTitle,
+      }
+    });
+    setIsEditingTitle(false);
+  }, [block.id, block.data, draftTitle, updateBlock]);
+  
+  return (
+    <div 
+      className={clsx(
+        "w-full h-full border-2 transition-colors duration-200 pointer-events-none",
+        isSelected ? "border-blue-500" : "border-zinc-300"
+      )}
+      style={{ 
+        backgroundColor: 'transparent'
+      }}
+    >
+      <div
+        className="absolute top-0 left-0 -translate-y-full px-2 py-1 bg-white border border-zinc-200 rounded-t-md text-xs font-medium text-zinc-600 pointer-events-auto"
+        onDoubleClick={(e) => {
+          e.stopPropagation();
+          setIsEditingTitle(true);
+        }}
+        onPointerDown={(e) => e.stopPropagation()}
+      >
+        {isEditingTitle ? (
+          <input
+            ref={titleInputRef}
+            value={draftTitle}
+            onChange={(e) => setDraftTitle(e.target.value)}
+            onBlur={commitTitle}
+            onPointerDown={(e) => e.stopPropagation()}
+            onKeyDown={(e) => {
+              e.stopPropagation();
+              if (e.key === 'Enter') {
+                e.preventDefault();
+                commitTitle();
+              } else if (e.key === 'Escape') {
+                e.preventDefault();
+                setDraftTitle(block.data.title || 'Frame');
+                setIsEditingTitle(false);
+              }
+            }}
+            className="min-w-36 bg-transparent text-xs font-medium text-zinc-600 outline-none"
+          />
+        ) : (
+          block.data.title || 'Frame'
+        )}
+      </div>
+    </div>
+  );
+};
+
 export const BlockRenderer: React.FC<BlockContentProps> = ({ block }) => {
   switch (block.type) {
+    case 'frame': return <FrameBlock block={block} />;
     case 'sticky': return <StickyBlock block={block} />;
     case 'text': return <TextBlock block={block} />;
     case 'shape': return <ShapeBlock block={block} />;

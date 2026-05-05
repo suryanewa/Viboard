@@ -1,7 +1,7 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useBoardStore } from '../store';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Pencil, Highlighter, Eraser, Circle, Square, Triangle, Upload, CornerDownLeft } from 'lucide-react';
+import { Pencil, Highlighter, Eraser, Circle, Square, Triangle, Upload, CornerDownLeft, Minus, Plus } from 'lucide-react';
 import clsx from 'clsx';
 
 import { ColorSlider } from './ColorSlider';
@@ -35,23 +35,49 @@ export const PropertyToolbar: React.FC = () => {
   const setShapeType = useBoardStore((state) => state.setShapeType);
   const shapeHue = useBoardStore((state) => state.shapeHue);
   const setShapeHue = useBoardStore((state) => state.setShapeHue);
+  const textFontSizeDefault = useBoardStore((state) => state.textFontSize);
+  const setTextFontSize = useBoardStore((state) => state.setTextFontSize);
+  const textDefaultHue = useBoardStore((state) => state.textHue);
+  const setTextHue = useBoardStore((state) => state.setTextHue);
   const animationState = useBoardStore((state) => state.animationState);
   const isPlusMenuOpen = useBoardStore((state) => state.isPlusMenuOpen);
 
   const selectedBlocks = selection.map(id => blocks[id]).filter(Boolean);
   const hasSelectedStickies = selectedBlocks.length > 0 && selectedBlocks.every(b => b.type === 'sticky');
   const hasSelectedShapes = selectedBlocks.length > 0 && selectedBlocks.every(b => b.type === 'shape');
+  const hasSelectedTexts = selectedBlocks.length > 0 && selectedBlocks.every(b => b.type === 'text');
 
   const initialHue = tool === 'marker' 
     ? parseInt(markerColor.match(/\d+/)?.[0] || '45', 10)
     : tool === 'shape'
       ? (hasSelectedShapes && selectedBlocks[0]?.data?.hue !== undefined ? selectedBlocks[0].data.hue : shapeHue)
-      : hasSelectedStickies && selectedBlocks[0]?.data?.hue !== undefined 
-        ? selectedBlocks[0].data.hue 
-        : stickyHue;
+      : tool === 'text'
+        ? (hasSelectedTexts && selectedBlocks[0]?.data?.hue !== undefined ? selectedBlocks[0].data.hue : textDefaultHue)
+        : hasSelectedStickies && selectedBlocks[0]?.data?.hue !== undefined 
+          ? selectedBlocks[0].data.hue 
+          : stickyHue;
   const [currentHue, setCurrentHue] = useState(initialHue);
+  const [currentFontSize, setCurrentFontSize] = useState(textFontSizeDefault);
   const [hoveredProperty, setHoveredProperty] = useState<string | null>(null);
   const [linkUrl, setLinkUrl] = useState('');
+
+  useEffect(() => {
+    if (tool !== 'text') return;
+    const st = useBoardStore.getState();
+    const sel = st.selection;
+    const bl = st.blocks;
+    const texts = sel.map((id) => bl[id]).filter(Boolean);
+    const allText = texts.length > 0 && texts.every((b) => b.type === 'text');
+    if (allText) {
+      const fs = texts[0]?.data?.fontSize;
+      const h = texts[0]?.data?.hue;
+      if (fs != null) setCurrentFontSize(fs);
+      if (h !== undefined) setCurrentHue(h);
+    } else {
+      setCurrentFontSize(st.textFontSize);
+      setCurrentHue(st.textHue);
+    }
+  }, [tool, selection.join(','), textFontSizeDefault, textDefaultHue]);
 
   const handleHueChangeSlider = (newHue: number) => {
     setCurrentHue(newHue);
@@ -68,6 +94,25 @@ export const PropertyToolbar: React.FC = () => {
           updateBlock(id, { data: { ...blocks[id].data, hue: newHue, color: `hsl(${newHue}, 90%, 65%)` } });
         });
       }
+    } else if (tool === 'text') {
+      setTextHue(newHue);
+      const color = `hsl(${newHue}, 75%, 28%)`;
+      if (hasSelectedTexts) {
+        selection.forEach(id => {
+          updateBlock(id, { data: { ...blocks[id].data, hue: newHue, color } });
+        });
+      }
+    }
+  };
+
+  const adjustTextFontSize = (delta: number) => {
+    const next = Math.min(64, Math.max(12, currentFontSize + delta));
+    setCurrentFontSize(next);
+    setTextFontSize(next);
+    if (hasSelectedTexts) {
+      selection.forEach(id => {
+        updateBlock(id, { data: { ...blocks[id].data, fontSize: next } });
+      });
     }
   };
 
@@ -111,7 +156,7 @@ export const PropertyToolbar: React.FC = () => {
 
   return (
     <AnimatePresence mode="wait">
-      {!isPlusMenuOpen && (tool === 'sticky' || tool === 'marker' || tool === 'shape' || tool === 'link') && (animationState === 'animating-in' || animationState === 'idle') && (
+      {!isPlusMenuOpen && (tool === 'sticky' || tool === 'marker' || tool === 'shape' || tool === 'link' || tool === 'text') && (animationState === 'animating-in' || animationState === 'idle') && (
         <motion.div
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
@@ -442,6 +487,83 @@ export const PropertyToolbar: React.FC = () => {
             <div className="flex items-center gap-3 flex-1 px-2 !overflow-visible">
               <ColorSlider 
                 value={currentHue} 
+                onChange={handleHueChangeSlider}
+                className="flex-1"
+              />
+            </div>
+          </div>
+        )}
+
+        {tool === 'text' && (
+          <div
+            className="flex items-center gap-4 w-full h-8 !overflow-visible"
+            onPointerLeave={() => setHoveredProperty(null)}
+          >
+            <div className="flex items-center gap-1 border-r border-zinc-200 pr-4">
+              <motion.button
+                type="button"
+                whileHover="hover"
+                onPointerEnter={() => setHoveredProperty('text-smaller')}
+                onClick={() => adjustTextFontSize(-2)}
+                className={clsx(
+                  'relative p-1.5 rounded-md transition-colors flex items-center justify-center w-8 h-8',
+                  currentFontSize <= 12 ? 'text-zinc-300 pointer-events-none' : 'text-zinc-500 hover:text-zinc-900'
+                )}
+                title="Smaller"
+                disabled={currentFontSize <= 12}
+              >
+                {hoveredProperty === 'text-smaller' && currentFontSize > 12 && (
+                  <motion.div
+                    layoutId="text-size-hover-minus"
+                    initial={false}
+                    animate={{ opacity: hoveredProperty === 'text-smaller' ? 1 : 0 }}
+                    transition={{
+                      layout: { type: 'spring', stiffness: 350, damping: 30, mass: 0.8 },
+                      opacity: { duration: 0.2 }
+                    }}
+                    className="absolute inset-0 rounded-md bg-zinc-100 -z-10"
+                  />
+                )}
+                <motion.div variants={{ hover: { scale: 1.1 } }} transition={{ duration: 0.3, type: 'spring' }}>
+                  <Minus className="w-4 h-4 relative z-10" />
+                </motion.div>
+              </motion.button>
+              <span className="text-xs font-medium text-zinc-700 tabular-nums w-11 text-center select-none">
+                {currentFontSize}px
+              </span>
+              <motion.button
+                type="button"
+                whileHover="hover"
+                onPointerEnter={() => setHoveredProperty('text-larger')}
+                onClick={() => adjustTextFontSize(2)}
+                className={clsx(
+                  'relative p-1.5 rounded-md transition-colors flex items-center justify-center w-8 h-8',
+                  currentFontSize >= 64 ? 'text-zinc-300 pointer-events-none' : 'text-zinc-500 hover:text-zinc-900'
+                )}
+                title="Larger"
+                disabled={currentFontSize >= 64}
+              >
+                {hoveredProperty === 'text-larger' && currentFontSize < 64 && (
+                  <motion.div
+                    layoutId="text-size-hover-plus"
+                    initial={false}
+                    animate={{ opacity: hoveredProperty === 'text-larger' ? 1 : 0 }}
+                    transition={{
+                      layout: { type: 'spring', stiffness: 350, damping: 30, mass: 0.8 },
+                      opacity: { duration: 0.2 }
+                    }}
+                    className="absolute inset-0 rounded-md bg-zinc-100 -z-10"
+                  />
+                )}
+                <motion.div variants={{ hover: { scale: 1.1 } }} transition={{ duration: 0.3, type: 'spring' }}>
+                  <Plus className="w-4 h-4 relative z-10" />
+                </motion.div>
+              </motion.button>
+            </div>
+
+            <div className="flex items-center gap-3 flex-1 px-2 !overflow-visible">
+              <ColorSlider
+                value={currentHue}
                 onChange={handleHueChangeSlider}
                 className="flex-1"
               />

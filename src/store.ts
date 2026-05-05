@@ -3,6 +3,46 @@ import type { Block, Viewport, DrawingPath } from './types';
 import { v4 as uuidv4 } from 'uuid';
 import { indexBlock, removeBlockFromIndex, syncAllBlocks } from './lib/typesense';
 
+const createDefaultBrutalistImageBlocks = (): Record<string, Block> => {
+  const blocks: Record<string, Block> = {};
+  const imageWidth = 240;
+  const imageHeight = 180;
+  const positions = [
+    { x: 60, y: 360 },
+    { x: 360, y: 410 },
+    { x: 690, y: 340 },
+    { x: 1020, y: 430 },
+    { x: 1330, y: 365 },
+    { x: 190, y: 660 },
+    { x: 520, y: 740 },
+    { x: 860, y: 620 },
+    { x: 1180, y: 730 },
+    { x: 1530, y: 640 },
+    { x: 380, y: 990 },
+    { x: 980, y: 930 },
+  ];
+
+  for (let i = 0; i < 12; i += 1) {
+    const id = `${i + 3}`;
+    const position = positions[i];
+    blocks[id] = {
+      id,
+      type: 'image',
+      x: position.x,
+      y: position.y,
+      width: imageWidth,
+      height: imageHeight,
+      zIndex: i + 3,
+      data: {
+        url: `https://loremflickr.com/960/720/brutalist,architecture?lock=${i + 1}`,
+        alt: `Brutalist architecture reference ${i + 1}`
+      }
+    };
+  }
+
+  return blocks;
+};
+
 const createMockBlocks = (): Record<string, Block> => {
   return {
     '1': {
@@ -17,23 +57,24 @@ const createMockBlocks = (): Record<string, Block> => {
     },
     '2': {
       id: '2',
-      type: 'shape',
-      x: 400,
-      y: 200,
-      width: 120,
-      height: 120,
-      zIndex: 2,
-      data: { shape: 'circle', color: '#ff6b6b' }
-    },
-    '3': {
-      id: '3',
-      type: 'link',
-      x: 150,
-      y: 400,
-      width: 480,
+      type: 'sticky',
+      x: 380,
+      y: 100,
+      width: 320,
       height: 240,
-      zIndex: 3,
-      data: { url: 'https://linear.app', title: 'Linear', description: 'A better way to build products' }
+      zIndex: 2,
+      data: { text: 'Add stickies, text, drawings, shapes, and uploads using the toolbar on the bottom.', color: 'yellow' }
+    },
+    ...createDefaultBrutalistImageBlocks(),
+    '15': {
+      id: '15',
+      type: 'frame',
+      x: 0,
+      y: 40,
+      width: 1830,
+      height: 1190,
+      zIndex: 0,
+      data: { title: 'Brutalist Architecture' }
     }
   };
 };
@@ -51,12 +92,14 @@ interface BoardState {
   isPlusMenuOpen: boolean;
   mousePos: { x: number, y: number };
   clipboard: Block[];
-  tool: 'select' | 'marker' | 'shape' | 'text' | 'pan' | 'sticky' | 'link';
+  tool: 'select' | 'marker' | 'shape' | 'text' | 'pan' | 'sticky' | 'link' | 'frame';
   animationState: 'idle' | 'animating-out' | 'hopping' | 'animating-in';
   markerType: 'marker' | 'highlighter' | 'eraser';
   markerColor: string;
   markerThickness: number;
   stickyHue: number;
+  textFontSize: number;
+  textHue: number;
   shapeType: 'circle' | 'square' | 'triangle';
   shapeHue: number;
   activeShape: { type: string, x1: number, y1: number, x2: number, y2: number } | null;
@@ -86,12 +129,14 @@ interface BoardState {
   setIsSearchOpen: (isOpen: boolean) => void;
   setIsPlusMenuOpen: (isOpen: boolean) => void;
   setMousePos: (x: number, y: number) => void;
-  setTool: (tool: 'select' | 'marker' | 'shape' | 'text' | 'pan' | 'sticky' | 'link') => void;
+  setTool: (tool: 'select' | 'marker' | 'shape' | 'text' | 'pan' | 'sticky' | 'link' | 'frame') => void;
   setAnimationState: (state: 'idle' | 'animating-out' | 'hopping' | 'animating-in') => void;
   setMarkerType: (type: 'marker' | 'highlighter' | 'eraser') => void;
   setMarkerColor: (color: string) => void;
   setMarkerThickness: (thickness: number) => void;
   setStickyHue: (hue: number) => void;
+  setTextFontSize: (size: number) => void;
+  setTextHue: (hue: number) => void;
   setShapeType: (type: 'circle' | 'square' | 'triangle') => void;
   setShapeHue: (hue: number) => void;
   setSnapLines: (snapLines: { x?: number, y?: number }[]) => void;
@@ -133,11 +178,13 @@ export const useBoardStore = create<BoardState>((set, get) => ({
   clipboard: [],
   tool: 'select',
   animationState: 'idle' as 'idle' | 'animating-out' | 'hopping' | 'animating-in',
-  pendingTool: null as 'select' | 'marker' | 'shape' | 'text' | 'pan' | 'sticky' | null,
+  pendingTool: null as 'select' | 'marker' | 'shape' | 'text' | 'pan' | 'sticky' | 'frame' | null,
   markerType: 'marker',
   markerColor: 'hsl(45, 90%, 65%)',
   markerThickness: 4,
   stickyHue: 55,
+  textFontSize: 20,
+  textHue: 240,
   shapeType: 'square',
   shapeHue: 0,
   activeShape: null,
@@ -280,6 +327,8 @@ export const useBoardStore = create<BoardState>((set, get) => ({
   setMarkerColor: (markerColor) => set({ markerColor }),
   setMarkerThickness: (markerThickness) => set({ markerThickness }),
   setStickyHue: (stickyHue) => set({ stickyHue }),
+  setTextFontSize: (textFontSize) => set({ textFontSize }),
+  setTextHue: (textHue) => set({ textHue }),
   setShapeType: (shapeType) => set({ shapeType }),
   setShapeHue: (shapeHue) => set({ shapeHue }),
   setSnapLines: (snapLines) => set({ snapLines }),

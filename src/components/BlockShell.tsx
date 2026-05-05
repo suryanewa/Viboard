@@ -101,8 +101,16 @@ const ResizeHandle = ({ direction, cursor, styles, delay = 0, onPointerDown, onP
 
 export const BlockShell: React.FC<BlockShellProps> = ({ block, children }) => {
   const isSelected = useBoardStore((state) => state.selection.includes(block.id));
+  const selection = useBoardStore((state) => state.selection);
+  const blocks = useBoardStore((state) => state.blocks);
   const updateBlock = useBoardStore((state) => state.updateBlock);
   const bringToFront = useBoardStore((state) => state.bringToFront);
+
+  const textOnlyResize =
+    block.type === 'text' &&
+    selection.length > 0 &&
+    selection.every((id) => blocks[id]?.type === 'text') &&
+    selection.includes(block.id);
   
   const clickPoint = useRef({ x: 0, y: 0, edge: 'top' });
   const wasSelected = useRef(isSelected);
@@ -194,6 +202,12 @@ export const BlockShell: React.FC<BlockShellProps> = ({ block, children }) => {
     }
   }, [scale, boxShadow]);
 
+  useEffect(() => {
+    if (isResizing.current || isDragging.current) return;
+    width.set(block.width);
+    height.set(block.height);
+  }, [block.width, block.height, block.id, width, height]);
+
   // Sync x/y motion values from store — runs on every store update.
   // During active drag, handlePointerMove writes x.set/y.set directly (takes precedence).
   // During group drag, this ensures all selected blocks follow the store position.
@@ -223,10 +237,14 @@ export const BlockShell: React.FC<BlockShellProps> = ({ block, children }) => {
     e.stopPropagation();
     e.currentTarget.setPointerCapture(e.pointerId);
     
-    const { selection, setSelection, setIsDraggingGroup } = useBoardStore.getState();
+    const { selection, setSelection } = useBoardStore.getState();
     const isCurrentlySelected = selection.includes(block.id);
 
-    bringToFront(block.id);
+    // Frames should keep their stacking position when selected/dragged.
+    // They only move in z-order via explicit arrange actions.
+    if (block.type !== 'frame') {
+      bringToFront(block.id);
+    }
     if (e.shiftKey || e.metaKey) {
       if (isCurrentlySelected) setSelection(selection.filter(id => id !== block.id));
       else setSelection([...selection, block.id]);
@@ -236,12 +254,35 @@ export const BlockShell: React.FC<BlockShellProps> = ({ block, children }) => {
 
     if (e.button !== 0) return;
 
+    let dragSelection = [...useBoardStore.getState().selection];
     const storeState = useBoardStore.getState();
-    if (storeState.selection.length > 1) {
-      setIsDraggingGroup(true);
+
+    // If dragging a frame, include all blocks that are inside it
+    if (block.type === 'frame') {
+      const frameBounds = {
+        minX: block.x,
+        minY: block.y,
+        maxX: block.x + block.width,
+        maxY: block.y + block.height
+      };
+      
+      const blocksInside = Object.values(storeState.blocks).filter(b => {
+        if (b.id === block.id) return false;
+        // Check if block center is inside the frame
+        const centerX = b.x + b.width / 2;
+        const centerY = b.y + b.height / 2;
+        return centerX >= frameBounds.minX && centerX <= frameBounds.maxX &&
+               centerY >= frameBounds.minY && centerY <= frameBounds.maxY;
+      }).map(b => b.id);
+      
+      dragSelection = [...new Set([...dragSelection, ...blocksInside])];
     }
 
-    dragStartGroupPos.current = storeState.selection.map(id => ({ id, x: storeState.blocks[id]?.x || 0, y: storeState.blocks[id]?.y || 0 }));
+    if (dragSelection.length > 1) {
+      storeState.setIsDraggingGroup(true);
+    }
+
+    dragStartGroupPos.current = dragSelection.map(id => ({ id, x: storeState.blocks[id]?.x || 0, y: storeState.blocks[id]?.y || 0 }));
     hasPushedHistory.current = false;
 
     isDragging.current = true;
@@ -253,8 +294,8 @@ export const BlockShell: React.FC<BlockShellProps> = ({ block, children }) => {
     };
 
     if (e.altKey) {
-      const { duplicate, selection: currentSelection, setIsDuplicatingGroup } = useBoardStore.getState();
-      duplicate(currentSelection, true);
+      const { duplicate, setIsDuplicatingGroup } = useBoardStore.getState();
+      duplicate(dragSelection, true);
       altDupeIds.current = useBoardStore.getState().selection;
       setIsDuplicatingGroup(true);
     } else {
@@ -299,8 +340,8 @@ export const BlockShell: React.FC<BlockShellProps> = ({ block, children }) => {
       const myEdgesX = [rawX, rawX + currentW / 2, rawX + currentW];
       const myEdgesY = [rawY, rawY + currentH / 2, rawY + currentH];
       
-      const draggedIds = altDupeIds.current.length > 0 ? altDupeIds.current : selection;
-      const unselectedBlocks = Object.values(blocks).filter(b => !draggedIds.includes(b.id) && !selection.includes(b.id));
+      const draggedIdsForSnap = altDupeIds.current.length > 0 ? altDupeIds.current : dragStartGroupPos.current.map(s => s.id);
+      const unselectedBlocks = Object.values(blocks).filter(b => !draggedIdsForSnap.includes(b.id) && !selection.includes(b.id));
 
       unselectedBlocks.forEach(other => {
         const otherEdgesX = [other.x, other.x + other.width / 2, other.x + other.width];
@@ -448,6 +489,8 @@ export const BlockShell: React.FC<BlockShellProps> = ({ block, children }) => {
     const snapOffsetX = snapX - dragStartPos.current.x;
     const snapOffsetY = snapY - dragStartPos.current.y;
 
+    const draggedIds = dragStartGroupPos.current.map(s => s.id);
+
     if (altDupeIds.current.length > 0) {
       const updates = altDupeIds.current.map((id, index) => {
         const startPos = dragStartGroupPos.current[index];
@@ -456,8 +499,8 @@ export const BlockShell: React.FC<BlockShellProps> = ({ block, children }) => {
       }).filter(Boolean) as { id: string, updates: any }[];
       
       updateBlocks(updates, true);
-    } else if (selection.length > 1 && selection.includes(block.id)) {
-      const updates = selection.map(id => {
+    } else if (draggedIds.length > 1 && draggedIds.includes(block.id)) {
+      const updates = draggedIds.map(id => {
         const startPos = dragStartGroupPos.current.find(s => s.id === id);
         if (!startPos) return null;
         return { id, updates: { x: startPos.x + snapOffsetX, y: startPos.y + snapOffsetY } };
@@ -466,7 +509,7 @@ export const BlockShell: React.FC<BlockShellProps> = ({ block, children }) => {
       updateBlocks(updates, true);
       x.set(snapX);
       y.set(snapY);
-    } else if (selection.includes(block.id)) {
+    } else if (draggedIds.includes(block.id)) {
       x.set(snapX);
       y.set(snapY);
     }
@@ -482,12 +525,13 @@ export const BlockShell: React.FC<BlockShellProps> = ({ block, children }) => {
     isDragging.current = false;
     altDupeIds.current = [];
     
-    const { selection, setIsDraggingGroup, setIsDuplicatingGroup, setSnapLines } = useBoardStore.getState();
+    const { setIsDraggingGroup, setIsDuplicatingGroup, setSnapLines } = useBoardStore.getState();
     setIsDraggingGroup(false);
     setIsDuplicatingGroup(false);
     setSnapLines([]);
 
-    if (!(selection.length > 1 && selection.includes(block.id)) && altDupeIds.current.length === 0) {
+    const draggedIds = dragStartGroupPos.current.map(s => s.id);
+    if (!(draggedIds.length > 1 && draggedIds.includes(block.id)) && altDupeIds.current.length === 0) {
       updateBlock(block.id, { x: x.get(), y: y.get(), width: width.get(), height: height.get() }, true);
     }
 
@@ -692,8 +736,95 @@ export const BlockShell: React.FC<BlockShellProps> = ({ block, children }) => {
     useBoardStore.getState().updateBlocks(finalUpdates, true);
   };
 
+  const selectionOverlay = (
+    <AnimatePresence>
+      {isSelected && (
+        <motion.div
+          key="selection-overlay"
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          exit={{ opacity: 0, transition: { duration: 0.3, ease: [0.22, 1, 0.36, 1], delay: 0.2 } }}
+          style={{
+            position: 'absolute',
+            left: 0,
+            top: 0,
+            x: block.type === 'frame' ? 0 : x,
+            y: block.type === 'frame' ? 0 : y,
+            width,
+            height,
+            scale: block.type === 'frame' ? 1 : scale,
+            pointerEvents: 'none',
+            zIndex: block.type === 'frame' ? block.zIndex : 9999,
+            isolation: 'isolate'
+          }}
+        >
+          {[
+            <motion.svg
+            key="outline"
+            aria-hidden="true"
+            className="absolute pointer-events-none"
+            style={{ 
+              top: (block.type === 'shape' || block.type === 'drawing' || block.type === 'text' || block.type === 'link' || block.type === 'audio' || block.type === 'x' || block.type === 'youtube' || block.type === 'video' || block.type === 'substack' || block.type === 'medium' || block.type === 'figma' || block.type === 'arena' || block.type === 'github' || block.type === 'wikipedia' || block.type === 'codepen' || block.type === 'reddit' || block.type === 'tiktok' || block.type === 'pdf' || block.type === 'frame') ? 0 : -1,
+              left: (block.type === 'shape' || block.type === 'drawing' || block.type === 'text' || block.type === 'link' || block.type === 'audio' || block.type === 'x' || block.type === 'youtube' || block.type === 'video' || block.type === 'substack' || block.type === 'medium' || block.type === 'figma' || block.type === 'arena' || block.type === 'github' || block.type === 'wikipedia' || block.type === 'codepen' || block.type === 'reddit' || block.type === 'tiktok' || block.type === 'pdf' || block.type === 'frame') ? 0 : -1,
+              width,
+              height,
+              overflow: 'visible', 
+              zIndex: 50 
+            }}
+          >
+            <motion.path
+              d={pathCw}
+              fill="none"
+              stroke="#3b82f6"
+              strokeWidth="2"
+              initial={{ pathLength: 0, opacity: 0 }}
+              animate={{ pathLength: 1, opacity: 1 }}
+              exit={{ pathLength: 0, opacity: 0 }}
+              transition={{ duration: 0.5, ease: [0.22, 1, 0.36, 1] }}
+            />
+            <motion.path
+              d={pathCcw}
+              fill="none"
+              stroke="#3b82f6"
+              strokeWidth="2"
+              initial={{ pathLength: 0, opacity: 0 }}
+              animate={{ pathLength: 1, opacity: 1 }}
+              exit={{ pathLength: 0, opacity: 0 }}
+              transition={{ duration: 0.5, ease: [0.22, 1, 0.36, 1] }}
+            />
+          </motion.svg>,
+
+          ...(textOnlyResize
+            ? [
+                <ResizeHandle key="l" delay={0.15} direction="left" cursor="ew-resize" styles={{ top: 'calc(50% - 6px)', left: -6, pointerEvents: 'auto' }} onPointerDown={handleResizePointerDown} onPointerMove={handleResizePointerMove} onPointerUp={handleResizePointerUp} />,
+                <ResizeHandle key="r" delay={0.15} direction="right" cursor="ew-resize" styles={{ top: 'calc(50% - 6px)', right: -6, pointerEvents: 'auto' }} onPointerDown={handleResizePointerDown} onPointerMove={handleResizePointerMove} onPointerUp={handleResizePointerUp} />,
+              ]
+            : [
+                <ResizeHandle key="tl" delay={0.1} direction="top-left" cursor="nwse-resize" styles={{ top: -6, left: -6, pointerEvents: 'auto' }} onPointerDown={handleResizePointerDown} onPointerMove={handleResizePointerMove} onPointerUp={handleResizePointerUp} />,
+                <ResizeHandle key="tr" delay={0.1} direction="top-right" cursor="nesw-resize" styles={{ top: -6, right: -6, pointerEvents: 'auto' }} onPointerDown={handleResizePointerDown} onPointerMove={handleResizePointerMove} onPointerUp={handleResizePointerUp} />,
+                <ResizeHandle key="bl" delay={0.1} direction="bottom-left" cursor="nesw-resize" styles={{ bottom: -6, left: -6, pointerEvents: 'auto' }} onPointerDown={handleResizePointerDown} onPointerMove={handleResizePointerMove} onPointerUp={handleResizePointerUp} />,
+                <ResizeHandle key="br" delay={0.1} direction="bottom-right" cursor="nwse-resize" styles={{ bottom: -6, right: -6, pointerEvents: 'auto' }} onPointerDown={handleResizePointerDown} onPointerMove={handleResizePointerMove} onPointerUp={handleResizePointerUp} />,
+                <ResizeHandle key="t" delay={0.15} direction="top" cursor="ns-resize" styles={{ top: -6, left: 'calc(50% - 6px)', pointerEvents: 'auto' }} onPointerDown={handleResizePointerDown} onPointerMove={handleResizePointerMove} onPointerUp={handleResizePointerUp} />,
+                <ResizeHandle key="b" delay={0.15} direction="bottom" cursor="ns-resize" styles={{ bottom: -6, left: 'calc(50% - 6px)', pointerEvents: 'auto' }} onPointerDown={handleResizePointerDown} onPointerMove={handleResizePointerMove} onPointerUp={handleResizePointerUp} />,
+                <ResizeHandle key="l" delay={0.15} direction="left" cursor="ew-resize" styles={{ top: 'calc(50% - 6px)', left: -6, pointerEvents: 'auto' }} onPointerDown={handleResizePointerDown} onPointerMove={handleResizePointerMove} onPointerUp={handleResizePointerUp} />,
+                <ResizeHandle key="r" delay={0.15} direction="right" cursor="ew-resize" styles={{ top: 'calc(50% - 6px)', right: -6, pointerEvents: 'auto' }} onPointerDown={handleResizePointerDown} onPointerMove={handleResizePointerMove} onPointerUp={handleResizePointerUp} />,
+              ])
+          ]}
+        </motion.div>
+      )}
+    </AnimatePresence>
+  );
+
   return (
     <motion.div
+      initial={{ opacity: 0, marginTop: 30, filter: 'blur(8px)' }}
+      animate={{ opacity: 1, marginTop: 0, filter: 'blur(0px)' }}
+      transition={{ 
+        type: "spring", 
+        stiffness: 260, 
+        damping: 20, 
+        delay: Math.min(block.zIndex * 0.04, 0.8)
+      }}
       ref={shellRef}
       onPointerDown={handlePointerDown}
       onPointerMove={handlePointerMove}
@@ -706,7 +837,7 @@ export const BlockShell: React.FC<BlockShellProps> = ({ block, children }) => {
         x,
         y,
         scale,
-        boxShadow: (block.type === 'shape' || block.type === 'drawing' || block.type === 'text' || block.type === 'link' || block.type === 'sticky' || block.type === 'audio' || block.type === 'x' || block.type === 'youtube' || block.type === 'video' || block.type === 'substack' || block.type === 'medium' || block.type === 'figma' || block.type === 'arena' || block.type === 'github' || block.type === 'wikipedia' || block.type === 'codepen' || block.type === 'reddit' || block.type === 'tiktok' || block.type === 'pdf') ? 'none' : boxShadow,
+        boxShadow: (block.type === 'shape' || block.type === 'drawing' || block.type === 'text' || block.type === 'link' || block.type === 'sticky' || block.type === 'audio' || block.type === 'x' || block.type === 'youtube' || block.type === 'video' || block.type === 'substack' || block.type === 'medium' || block.type === 'figma' || block.type === 'arena' || block.type === 'github' || block.type === 'wikipedia' || block.type === 'codepen' || block.type === 'reddit' || block.type === 'tiktok' || block.type === 'pdf' || block.type === 'frame') ? 'none' : boxShadow,
         width,
         height,
         zIndex: block.zIndex,
@@ -715,7 +846,7 @@ export const BlockShell: React.FC<BlockShellProps> = ({ block, children }) => {
       className={clsx(
         'group absolute outline-none select-none touch-none',
         'transition-colors duration-300 ease-[cubic-bezier(0.22,1,0.36,1)]',
-        block.type !== 'shape' && block.type !== 'drawing' && block.type !== 'text' && block.type !== 'link' && block.type !== 'audio' && block.type !== 'x' && block.type !== 'youtube' && block.type !== 'video' && block.type !== 'substack' && block.type !== 'medium' && block.type !== 'figma' && block.type !== 'arena' && block.type !== 'github' && block.type !== 'wikipedia' && block.type !== 'codepen' && block.type !== 'reddit' && block.type !== 'tiktok' && block.type !== 'pdf' && [
+        block.type !== 'shape' && block.type !== 'drawing' && block.type !== 'text' && block.type !== 'link' && block.type !== 'audio' && block.type !== 'x' && block.type !== 'youtube' && block.type !== 'video' && block.type !== 'substack' && block.type !== 'medium' && block.type !== 'figma' && block.type !== 'arena' && block.type !== 'github' && block.type !== 'wikipedia' && block.type !== 'codepen' && block.type !== 'reddit' && block.type !== 'tiktok' && block.type !== 'pdf' && block.type !== 'frame' && [
           'border shadow-none bg-white',
           isSelected ? 'border-transparent ring-2 ring-blue-500/20' : 'border-zinc-200 ring-2 ring-transparent hover:border-zinc-300'
         ],
@@ -723,79 +854,10 @@ export const BlockShell: React.FC<BlockShellProps> = ({ block, children }) => {
         block.type === 'shape' && (isSelected ? 'ring-2 ring-blue-500/20' : 'ring-2 ring-transparent')
       )}
     >
-      {overlayElement && createPortal(
-        <AnimatePresence>
-          {isSelected && (
-            <motion.div
-              key="selection-overlay"
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0, transition: { duration: 0.3, ease: [0.22, 1, 0.36, 1], delay: 0.2 } }}
-              style={{
-                position: 'absolute',
-                left: 0,
-                top: 0,
-                x,
-                y,
-                width,
-                height,
-                scale,
-                pointerEvents: 'none',
-                zIndex: 9999,
-                isolation: 'isolate'
-              }}
-            >
-              {[
-                <motion.svg
-                key="outline"
-                aria-hidden="true"
-                className="absolute pointer-events-none"
-                style={{ 
-                  top: (block.type === 'shape' || block.type === 'drawing' || block.type === 'text' || block.type === 'link' || block.type === 'audio' || block.type === 'x' || block.type === 'youtube' || block.type === 'video' || block.type === 'substack' || block.type === 'medium' || block.type === 'figma' || block.type === 'arena' || block.type === 'github' || block.type === 'wikipedia' || block.type === 'codepen' || block.type === 'reddit' || block.type === 'tiktok' || block.type === 'pdf') ? 0 : -1,
-                  left: (block.type === 'shape' || block.type === 'drawing' || block.type === 'text' || block.type === 'link' || block.type === 'audio' || block.type === 'x' || block.type === 'youtube' || block.type === 'video' || block.type === 'substack' || block.type === 'medium' || block.type === 'figma' || block.type === 'arena' || block.type === 'github' || block.type === 'wikipedia' || block.type === 'codepen' || block.type === 'reddit' || block.type === 'tiktok' || block.type === 'pdf') ? 0 : -1,
-                  width,
-                  height,
-                  overflow: 'visible', 
-                  zIndex: 50 
-                }}
-              >
-                <motion.path
-                  d={pathCw}
-                  fill="none"
-                  stroke="#3b82f6"
-                  strokeWidth="2"
-                  initial={{ pathLength: 0, opacity: 0 }}
-                  animate={{ pathLength: 1, opacity: 1 }}
-                  exit={{ pathLength: 0, opacity: 0 }}
-                  transition={{ duration: 0.5, ease: [0.22, 1, 0.36, 1] }}
-                />
-                <motion.path
-                  d={pathCcw}
-                  fill="none"
-                  stroke="#3b82f6"
-                  strokeWidth="2"
-                  initial={{ pathLength: 0, opacity: 0 }}
-                  animate={{ pathLength: 1, opacity: 1 }}
-                  exit={{ pathLength: 0, opacity: 0 }}
-                  transition={{ duration: 0.5, ease: [0.22, 1, 0.36, 1] }}
-                />
-              </motion.svg>,
-              
-              <ResizeHandle key="tl" delay={0.1} direction="top-left" cursor="nwse-resize" styles={{ top: -6, left: -6, pointerEvents: 'auto' }} onPointerDown={handleResizePointerDown} onPointerMove={handleResizePointerMove} onPointerUp={handleResizePointerUp} />,
-              <ResizeHandle key="tr" delay={0.1} direction="top-right" cursor="nesw-resize" styles={{ top: -6, right: -6, pointerEvents: 'auto' }} onPointerDown={handleResizePointerDown} onPointerMove={handleResizePointerMove} onPointerUp={handleResizePointerUp} />,
-              <ResizeHandle key="bl" delay={0.1} direction="bottom-left" cursor="nesw-resize" styles={{ bottom: -6, left: -6, pointerEvents: 'auto' }} onPointerDown={handleResizePointerDown} onPointerMove={handleResizePointerMove} onPointerUp={handleResizePointerUp} />,
-              <ResizeHandle key="br" delay={0.1} direction="bottom-right" cursor="nwse-resize" styles={{ bottom: -6, right: -6, pointerEvents: 'auto' }} onPointerDown={handleResizePointerDown} onPointerMove={handleResizePointerMove} onPointerUp={handleResizePointerUp} />,
-              <ResizeHandle key="t" delay={0.15} direction="top" cursor="ns-resize" styles={{ top: -6, left: 'calc(50% - 6px)', pointerEvents: 'auto' }} onPointerDown={handleResizePointerDown} onPointerMove={handleResizePointerMove} onPointerUp={handleResizePointerUp} />,
-              <ResizeHandle key="b" delay={0.15} direction="bottom" cursor="ns-resize" styles={{ bottom: -6, left: 'calc(50% - 6px)', pointerEvents: 'auto' }} onPointerDown={handleResizePointerDown} onPointerMove={handleResizePointerMove} onPointerUp={handleResizePointerUp} />,
-              <ResizeHandle key="l" delay={0.15} direction="left" cursor="ew-resize" styles={{ top: 'calc(50% - 6px)', left: -6, pointerEvents: 'auto' }} onPointerDown={handleResizePointerDown} onPointerMove={handleResizePointerMove} onPointerUp={handleResizePointerUp} />,
-              <ResizeHandle key="r" delay={0.15} direction="right" cursor="ew-resize" styles={{ top: 'calc(50% - 6px)', right: -6, pointerEvents: 'auto' }} onPointerDown={handleResizePointerDown} onPointerMove={handleResizePointerMove} onPointerUp={handleResizePointerUp} />
-              ]}
-            </motion.div>
-          )}
-        </AnimatePresence>,
-        overlayElement
-      )}
-      <div className={clsx("w-full h-full", block.type !== 'shape' && block.type !== 'drawing' && block.type !== 'audio' && "overflow-hidden")}>
+      {block.type === 'frame'
+        ? selectionOverlay
+        : overlayElement && createPortal(selectionOverlay, overlayElement)}
+      <div className={clsx("w-full h-full", block.type !== 'shape' && block.type !== 'drawing' && block.type !== 'audio' && block.type !== 'frame' && "overflow-hidden")}>
         {children}
       </div>
     </motion.div>

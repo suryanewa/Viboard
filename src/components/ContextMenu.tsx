@@ -1,9 +1,10 @@
 import React, { useEffect, useState } from 'react';
 import { useBoardStore } from '../store';
 
-import { Copy, Scissors, Clipboard, Trash2, CopyPlus, RotateCcw, RotateCw, ChevronsUp, ChevronUp, ChevronDown, ChevronsDown } from 'lucide-react';
+import { Copy, Scissors, Clipboard, Trash2, CopyPlus, RotateCcw, RotateCw, ChevronsUp, ChevronUp, ChevronDown, ChevronsDown, Image as ImageIcon, Sparkles } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import type { Variants } from 'framer-motion';
+import { v4 as uuidv4 } from 'uuid';
 
 const menuVariants: Variants = {
   hidden: { 
@@ -68,7 +69,7 @@ const itemVariants: Variants = {
 
 export const ContextMenu: React.FC = () => {
   const [visible, setVisible] = useState(false);
-  const [menuState, setMenuState] = useState({ x: 0, y: 0, hasSelection: false });
+  const [menuState, setMenuState] = useState({ x: 0, y: 0, hasSelection: false, isFrameSelected: false, frameId: null as string | null });
   const selection = useBoardStore((state) => state.selection);
   const copy = useBoardStore((state) => state.copy);
   const cut = useBoardStore((state) => state.cut);
@@ -84,6 +85,7 @@ export const ContextMenu: React.FC = () => {
   const bringForward = useBoardStore((state) => state.bringForward);
   const sendBackward = useBoardStore((state) => state.sendBackward);
   const sendToBack = useBoardStore((state) => state.sendToBack);
+  const addBlock = useBoardStore((state) => state.addBlock);
 
   useEffect(() => {
     const handleContextMenu = (e: MouseEvent) => {
@@ -115,7 +117,24 @@ export const ContextMenu: React.FC = () => {
         }
       }
 
-      setMenuState({ x: e.clientX, y: e.clientY, hasSelection: useBoardStore.getState().selection.length > 0 || useBoardStore.getState().drawingSelection.length > 0 });
+      const currentSelection = useBoardStore.getState().selection;
+      let isFrameSelected = false;
+      let frameId = null;
+      if (currentSelection.length === 1) {
+        const block = blocks[currentSelection[0]];
+        if (block?.type === 'frame') {
+          isFrameSelected = true;
+          frameId = block.id;
+        }
+      }
+
+      setMenuState({ 
+        x: e.clientX, 
+        y: e.clientY, 
+        hasSelection: currentSelection.length > 0 || useBoardStore.getState().drawingSelection.length > 0,
+        isFrameSelected,
+        frameId
+      });
       setVisible(true);
     };
 
@@ -134,7 +153,267 @@ export const ContextMenu: React.FC = () => {
     setVisible(false);
   };
 
+  const handleExportMoodboard = async () => {
+    setVisible(false);
+    const { blocks, viewport } = useBoardStore.getState();
+    
+    // Get all image blocks
+    const imageBlocks = Object.values(blocks).filter(b => b.type === 'image' && b.data?.url);
+    if (imageBlocks.length === 0) return;
+
+    // Load all images
+    const loadedImages = await Promise.all(
+      imageBlocks.map(block => {
+        return new Promise<{ img: HTMLImageElement, block: any }>((resolve) => {
+          const img = new Image();
+          img.crossOrigin = "anonymous";
+          img.onload = () => resolve({ img, block });
+          img.onerror = () => resolve({ img: null as any, block });
+          img.src = block.data.url;
+        });
+      })
+    );
+
+    const validImages = loadedImages.filter(item => item.img);
+    if (validImages.length === 0) return;
+
+    // Layout calculation (grid)
+    const cols = Math.ceil(Math.sqrt(validImages.length));
+    const rows = Math.ceil(validImages.length / cols);
+    const cellWidth = 400;
+    const cellHeight = 400;
+    const gap = 20;
+    const padding = 40;
+
+    const canvasWidth = cols * cellWidth + (cols - 1) * gap + padding * 2;
+    const canvasHeight = rows * cellHeight + (rows - 1) * gap + padding * 2;
+
+    const canvas = document.createElement('canvas');
+    canvas.width = canvasWidth;
+    canvas.height = canvasHeight;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+
+    // Draw background
+    ctx.fillStyle = '#ffffff';
+    ctx.fillRect(0, 0, canvasWidth, canvasHeight);
+
+    // Draw images
+    validImages.forEach((item, index) => {
+      const col = index % cols;
+      const row = Math.floor(index / cols);
+      const x = padding + col * (cellWidth + gap);
+      const y = padding + row * (cellHeight + gap);
+
+      // Cover fit
+      const imgAspect = item.img.width / item.img.height;
+      const cellAspect = cellWidth / cellHeight;
+      let drawWidth = cellWidth;
+      let drawHeight = cellHeight;
+      let offsetX = 0;
+      let offsetY = 0;
+
+      if (imgAspect > cellAspect) {
+        drawWidth = cellHeight * imgAspect;
+        offsetX = (cellWidth - drawWidth) / 2;
+      } else {
+        drawHeight = cellWidth / imgAspect;
+        offsetY = (cellHeight - drawHeight) / 2;
+      }
+
+      ctx.save();
+      ctx.beginPath();
+      ctx.rect(x, y, cellWidth, cellHeight);
+      ctx.clip();
+      ctx.drawImage(item.img, x + offsetX, y + offsetY, drawWidth, drawHeight);
+      ctx.restore();
+    });
+
+    // Export and copy
+    canvas.toBlob(async (blob) => {
+      if (!blob) return;
+      try {
+        await navigator.clipboard.write([
+          new ClipboardItem({ 'image/png': blob })
+        ]);
+      } catch (err) {
+        console.error('Failed to copy to clipboard:', err);
+      }
+
+      const dataUrl = canvas.toDataURL('image/png');
+      const highestZ = Math.max(0, ...Object.values(useBoardStore.getState().blocks).map((b) => b.zIndex));
+      
+      const targetX = -viewport.x / viewport.zoom + window.innerWidth / 2 / viewport.zoom;
+      const targetY = -viewport.y / viewport.zoom + window.innerHeight / 2 / viewport.zoom;
+
+      addBlock({
+        id: uuidv4(),
+        type: 'image',
+        x: targetX,
+        y: targetY,
+        width: 600,
+        height: 600 * (canvasHeight / canvasWidth),
+        zIndex: highestZ + 1,
+        data: { url: dataUrl, alt: 'Exported Moodboard' }
+      });
+    }, 'image/png');
+  };
+
+  const handleGenerateImage = async () => {
+    setVisible(false);
+    const { blocks, viewport, addBlock } = useBoardStore.getState();
+    
+    const userPrompt = window.prompt("Enter prompt for image generation:");
+    if (!userPrompt) return;
+    
+    const apiKey =
+      import.meta.env.VITE_OPENAI_API_KEY ||
+      localStorage.getItem('OPENAI_API_KEY') ||
+      window.prompt("Enter OpenAI API Key:");
+    if (!apiKey) return;
+    localStorage.setItem('OPENAI_API_KEY', apiKey);
+
+    // Get all image blocks
+    const imageBlocks = Object.values(blocks).filter(b => b.type === 'image' && b.data?.url);
+    if (imageBlocks.length === 0) {
+      alert("No images found in the frame to create a moodboard.");
+      return;
+    }
+
+    // Load all images
+    const loadedImages = await Promise.all(
+      imageBlocks.map(block => {
+        return new Promise<{ img: HTMLImageElement, block: any }>((resolve) => {
+          const img = new Image();
+          img.crossOrigin = "anonymous";
+          img.onload = () => resolve({ img, block });
+          img.onerror = () => resolve({ img: null as any, block });
+          img.src = block.data.url;
+        });
+      })
+    );
+
+    const validImages = loadedImages.filter(item => item.img);
+    if (validImages.length === 0) return;
+
+    // Layout calculation (grid)
+    const cols = Math.ceil(Math.sqrt(validImages.length));
+    const rows = Math.ceil(validImages.length / cols);
+    const cellWidth = 400;
+    const cellHeight = 400;
+    const gap = 20;
+    const padding = 40;
+
+    const canvasWidth = cols * cellWidth + (cols - 1) * gap + padding * 2;
+    const canvasHeight = rows * cellHeight + (rows - 1) * gap + padding * 2;
+
+    const canvas = document.createElement('canvas');
+    canvas.width = canvasWidth;
+    canvas.height = canvasHeight;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+
+    ctx.fillStyle = '#ffffff';
+    ctx.fillRect(0, 0, canvasWidth, canvasHeight);
+
+    validImages.forEach((item, index) => {
+      const col = index % cols;
+      const row = Math.floor(index / cols);
+      const x = padding + col * (cellWidth + gap);
+      const y = padding + row * (cellHeight + gap);
+
+      const imgAspect = item.img.width / item.img.height;
+      const cellAspect = cellWidth / cellHeight;
+      let drawWidth = cellWidth;
+      let drawHeight = cellHeight;
+      let offsetX = 0;
+      let offsetY = 0;
+
+      if (imgAspect > cellAspect) {
+        drawWidth = cellHeight * imgAspect;
+        offsetX = (cellWidth - drawWidth) / 2;
+      } else {
+        drawHeight = cellWidth / imgAspect;
+        offsetY = (cellHeight - drawHeight) / 2;
+      }
+
+      ctx.save();
+      ctx.beginPath();
+      ctx.rect(x, y, cellWidth, cellHeight);
+      ctx.clip();
+      ctx.drawImage(item.img, x + offsetX, y + offsetY, drawWidth, drawHeight);
+      ctx.restore();
+    });
+
+    const dataUrl = canvas.toDataURL('image/png');
+    
+    const highestZ = Math.max(0, ...Object.values(useBoardStore.getState().blocks).map((b) => b.zIndex));
+    const targetX = -viewport.x / viewport.zoom + window.innerWidth / 2 / viewport.zoom;
+    const targetY = -viewport.y / viewport.zoom + window.innerHeight / 2 / viewport.zoom;
+    const newBlockId = uuidv4();
+
+    // Add loading block
+    addBlock({
+      id: newBlockId,
+      type: 'image',
+      x: targetX,
+      y: targetY,
+      width: 512,
+      height: 512,
+      zIndex: highestZ + 1,
+      data: { url: '', alt: 'Generating...', loading: true }
+    });
+
+    try {
+      // Convert data URL to Blob for FormData
+      const res = await fetch(dataUrl);
+      const blob = await res.blob();
+      
+      const formData = new FormData();
+      formData.append('image[]', blob, 'moodboard.png');
+      formData.append('prompt', `${userPrompt} PLEASE REFERENCE THE ATTACHED MOODBOARD FOR THE AESTHETIC`);
+      formData.append('n', '1');
+      formData.append('size', '1024x1024');
+      formData.append('model', 'gpt-image-2');
+
+      const response = await fetch('https://api.openai.com/v1/images/edits', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${apiKey}`
+        },
+        body: formData
+      });
+
+      const data = await response.json();
+      
+      if (data.error) {
+        throw new Error(data.error.message);
+      }
+
+      if (data.data && data.data[0]) {
+        const imgData = data.data[0];
+        const finalUrl = imgData.url || (imgData.b64_json ? `data:image/png;base64,${imgData.b64_json}` : null);
+        if (finalUrl) {
+          useBoardStore.getState().updateBlock(newBlockId, {
+            data: { url: finalUrl, alt: userPrompt, loading: false }
+          });
+        } else {
+          throw new Error("No image returned");
+        }
+      } else {
+        throw new Error("No image returned");
+      }
+    } catch (err: any) {
+      console.error(err);
+      alert(`Failed to generate image: ${err.message}`);
+      useBoardStore.getState().removeBlocks([newBlockId]);
+    }
+  };
+
   const hasSelection = menuState.hasSelection;
+  const isFrameSelected = menuState.isFrameSelected;
+  const totalItems = hasSelection ? (isFrameSelected ? 16 : 13) : 3;
+  let itemIndex = 0;
 
   return (
     <AnimatePresence>
@@ -151,12 +430,12 @@ export const ContextMenu: React.FC = () => {
             animate="visible"
             exit="exit"
             variants={menuVariants}
-            custom={hasSelection ? 12 : 3}
+            custom={totalItems}
             className="bg-white/95 backdrop-blur-md border border-zinc-200/80 shadow-none rounded-xl min-w-[180px] overflow-hidden"
             style={{ originX: 0, originY: 0, pointerEvents: 'auto' }}
           >
             <div className="py-1.5 flex flex-col">
-              <motion.button custom={{ i: 0, total: hasSelection ? 8 : 3 }} variants={itemVariants} type="button" onClick={() => handleAction(undo)} whileHover="hover" whileTap="tap" className="relative w-full flex items-center justify-between px-3 py-1.5 text-sm outline-none group z-10 text-zinc-700 cursor-default">
+              <motion.button custom={{ i: itemIndex++, total: totalItems }} variants={itemVariants} type="button" onClick={() => handleAction(undo)} whileHover="hover" whileTap="tap" className="relative w-full flex items-center justify-between px-3 py-1.5 text-sm outline-none group z-10 text-zinc-700 cursor-default">
                 <motion.div className="absolute inset-0 rounded-lg mx-1 -z-10 bg-zinc-100" style={{ opacity: 0, scale: 0.95 }} variants={{ hover: { opacity: 1, scale: 1, transition: { type: "spring", bounce: 0.25, duration: 0.4 } }, tap: { scale: 0.95, opacity: 1 } }} />
                 <motion.div className="flex items-center gap-2.5 z-10" style={{ x: 0 }} variants={{ hover: { x: 4, transition: { type: "spring", bounce: 0.4, duration: 0.4 } } }}>
                   <motion.div style={{ scale: 1, rotate: 0 }} variants={{ hover: { rotate: -45, scale: 1.15, transition: { type: "spring", bounce: 0.6 } } }}>
@@ -167,7 +446,7 @@ export const ContextMenu: React.FC = () => {
                 <motion.span style={{ x: 0, opacity: 1 }} variants={{ hover: { x: -4, opacity: 0.6, transition: { type: "spring", bounce: 0.4, duration: 0.4 } } }} className="text-xs text-zinc-400 font-mono ml-2 z-10">⌘Z</motion.span>
               </motion.button>
 
-              <motion.button custom={{ i: 1, total: hasSelection ? 8 : 3 }} variants={itemVariants} type="button" onClick={() => handleAction(redo)} whileHover="hover" whileTap="tap" className="relative w-full flex items-center justify-between px-3 py-1.5 text-sm outline-none group z-10 text-zinc-700 cursor-default">
+              <motion.button custom={{ i: itemIndex++, total: totalItems }} variants={itemVariants} type="button" onClick={() => handleAction(redo)} whileHover="hover" whileTap="tap" className="relative w-full flex items-center justify-between px-3 py-1.5 text-sm outline-none group z-10 text-zinc-700 cursor-default">
                 <motion.div className="absolute inset-0 rounded-lg mx-1 -z-10 bg-zinc-100" style={{ opacity: 0, scale: 0.95 }} variants={{ hover: { opacity: 1, scale: 1, transition: { type: "spring", bounce: 0.25, duration: 0.4 } }, tap: { scale: 0.95, opacity: 1 } }} />
                 <motion.div className="flex items-center gap-2.5 z-10" style={{ x: 0 }} variants={{ hover: { x: 4, transition: { type: "spring", bounce: 0.4, duration: 0.4 } } }}>
                   <motion.div style={{ scale: 1, rotate: 0 }} variants={{ hover: { rotate: 45, scale: 1.15, transition: { type: "spring", bounce: 0.6 } } }}>
@@ -178,7 +457,7 @@ export const ContextMenu: React.FC = () => {
                 <motion.span style={{ x: 0, opacity: 1 }} variants={{ hover: { x: -4, opacity: 0.6, transition: { type: "spring", bounce: 0.4, duration: 0.4 } } }} className="text-xs text-zinc-400 font-mono ml-2 z-10">⌘⇧Z</motion.span>
               </motion.button>
 
-              <motion.button custom={{ i: 2, total: hasSelection ? 8 : 3 }} variants={itemVariants} type="button" onClick={() => handleAction(() => paste())} whileHover="hover" whileTap="tap" className="relative w-full flex items-center justify-between px-3 py-1.5 text-sm outline-none group z-10 text-zinc-700 cursor-default">
+              <motion.button custom={{ i: itemIndex++, total: totalItems }} variants={itemVariants} type="button" onClick={() => handleAction(() => paste())} whileHover="hover" whileTap="tap" className="relative w-full flex items-center justify-between px-3 py-1.5 text-sm outline-none group z-10 text-zinc-700 cursor-default">
                 <motion.div className="absolute inset-0 rounded-lg mx-1 -z-10 bg-zinc-100" style={{ opacity: 0, scale: 0.95 }} variants={{ hover: { opacity: 1, scale: 1, transition: { type: "spring", bounce: 0.25, duration: 0.4 } }, tap: { scale: 0.95, opacity: 1 } }} />
                 <motion.div className="flex items-center gap-2.5 z-10" style={{ x: 0 }} variants={{ hover: { x: 4, transition: { type: "spring", bounce: 0.4, duration: 0.4 } } }}>
                   <motion.div style={{ scale: 1, rotate: 0, x: 0, y: 0 }} variants={{ hover: { y: 2, scale: 1.1, transition: { type: "spring", bounce: 0.6 } } }}>
@@ -190,12 +469,12 @@ export const ContextMenu: React.FC = () => {
               </motion.button>
 
               {hasSelection && (
-                <motion.div custom={{ i: 3, total: hasSelection ? 8 : 3 }} variants={itemVariants} className="h-px bg-zinc-100 my-1 mx-2 shrink-0" />
+                <motion.div custom={{ i: itemIndex++, total: totalItems }} variants={itemVariants} className="h-px bg-zinc-100 my-1 mx-2 shrink-0" />
               )}
 
               {hasSelection && (
                 <>
-                  <motion.button custom={{ i: 4, total: hasSelection ? 12 : 3 }} variants={itemVariants} type="button" onClick={() => handleAction(copy)} whileHover="hover" whileTap="tap" className="relative w-full flex items-center justify-between px-3 py-1.5 text-sm outline-none group z-10 text-zinc-700 cursor-default">
+                  <motion.button custom={{ i: itemIndex++, total: totalItems }} variants={itemVariants} type="button" onClick={() => handleAction(copy)} whileHover="hover" whileTap="tap" className="relative w-full flex items-center justify-between px-3 py-1.5 text-sm outline-none group z-10 text-zinc-700 cursor-default">
                     <motion.div className="absolute inset-0 rounded-lg mx-1 -z-10 bg-zinc-100" style={{ opacity: 0, scale: 0.95 }} variants={{ hover: { opacity: 1, scale: 1, transition: { type: "spring", bounce: 0.25, duration: 0.4 } }, tap: { scale: 0.95, opacity: 1 } }} />
                     <motion.div className="flex items-center gap-2.5 z-10" style={{ x: 0 }} variants={{ hover: { x: 4, transition: { type: "spring", bounce: 0.4, duration: 0.4 } } }}>
                       <motion.div style={{ scale: 1, rotate: 0, x: 0, y: 0 }} variants={{ hover: { scale: 1.15, x: 1, y: -1, transition: { type: "spring", bounce: 0.6 } } }}>
@@ -206,7 +485,7 @@ export const ContextMenu: React.FC = () => {
                     <motion.span style={{ x: 0, opacity: 1 }} variants={{ hover: { x: -4, opacity: 0.6, transition: { type: "spring", bounce: 0.4, duration: 0.4 } } }} className="text-xs text-zinc-400 font-mono ml-2 z-10">⌘C</motion.span>
                   </motion.button>
 
-                  <motion.button custom={{ i: 5, total: hasSelection ? 12 : 3 }} variants={itemVariants} type="button" onClick={() => handleAction(cut)} whileHover="hover" whileTap="tap" className="relative w-full flex items-center justify-between px-3 py-1.5 text-sm outline-none group z-10 text-zinc-700 cursor-default">
+                  <motion.button custom={{ i: itemIndex++, total: totalItems }} variants={itemVariants} type="button" onClick={() => handleAction(cut)} whileHover="hover" whileTap="tap" className="relative w-full flex items-center justify-between px-3 py-1.5 text-sm outline-none group z-10 text-zinc-700 cursor-default">
                     <motion.div className="absolute inset-0 rounded-lg mx-1 -z-10 bg-zinc-100" style={{ opacity: 0, scale: 0.95 }} variants={{ hover: { opacity: 1, scale: 1, transition: { type: "spring", bounce: 0.25, duration: 0.4 } }, tap: { scale: 0.95, opacity: 1 } }} />
                     <motion.div className="flex items-center gap-2.5 z-10" style={{ x: 0 }} variants={{ hover: { x: 4, transition: { type: "spring", bounce: 0.4, duration: 0.4 } } }}>
                       <motion.div style={{ scale: 1, rotate: 0, x: 0, y: 0 }} variants={{ hover: { rotate: -25, scale: 1.15, transition: { type: "spring", bounce: 0.6 } } }}>
@@ -217,7 +496,7 @@ export const ContextMenu: React.FC = () => {
                     <motion.span style={{ x: 0, opacity: 1 }} variants={{ hover: { x: -4, opacity: 0.6, transition: { type: "spring", bounce: 0.4, duration: 0.4 } } }} className="text-xs text-zinc-400 font-mono ml-2 z-10">⌘X</motion.span>
                   </motion.button>
 
-                  <motion.button custom={{ i: 6, total: hasSelection ? 12 : 3 }} variants={itemVariants} type="button" onClick={() => handleAction(() => duplicate(selection))} whileHover="hover" whileTap="tap" className="relative w-full flex items-center justify-between px-3 py-1.5 text-sm outline-none group z-10 text-zinc-700 cursor-default">
+                  <motion.button custom={{ i: itemIndex++, total: totalItems }} variants={itemVariants} type="button" onClick={() => handleAction(() => duplicate(selection))} whileHover="hover" whileTap="tap" className="relative w-full flex items-center justify-between px-3 py-1.5 text-sm outline-none group z-10 text-zinc-700 cursor-default">
                     <motion.div className="absolute inset-0 rounded-lg mx-1 -z-10 bg-zinc-100" style={{ opacity: 0, scale: 0.95 }} variants={{ hover: { opacity: 1, scale: 1, transition: { type: "spring", bounce: 0.25, duration: 0.4 } }, tap: { scale: 0.95, opacity: 1 } }} />
                     <motion.div className="flex items-center gap-2.5 z-10" style={{ x: 0 }} variants={{ hover: { x: 4, transition: { type: "spring", bounce: 0.4, duration: 0.4 } } }}>
                       <motion.div style={{ scale: 1, rotate: 0, x: 0, y: 0 }} variants={{ hover: { scale: 1.15, x: 2, y: -2, transition: { type: "spring", bounce: 0.6 } } }}>
@@ -228,9 +507,9 @@ export const ContextMenu: React.FC = () => {
                     <motion.span style={{ x: 0, opacity: 1 }} variants={{ hover: { x: -4, opacity: 0.6, transition: { type: "spring", bounce: 0.4, duration: 0.4 } } }} className="text-xs text-zinc-400 font-mono ml-2 z-10">⌘D</motion.span>
                   </motion.button>
 
-                  <motion.div custom={{ i: 7, total: hasSelection ? 12 : 3 }} variants={itemVariants} className="h-px bg-zinc-100 my-1 mx-2 shrink-0" />
+                  <motion.div custom={{ i: itemIndex++, total: totalItems }} variants={itemVariants} className="h-px bg-zinc-100 my-1 mx-2 shrink-0" />
 
-                  <motion.button custom={{ i: 8, total: hasSelection ? 12 : 3 }} variants={itemVariants} type="button" onClick={() => handleAction(() => selection.forEach(id => bringToFront(id)))} whileHover="hover" whileTap="tap" className="relative w-full flex items-center justify-between px-3 py-1.5 text-sm outline-none group z-10 text-zinc-700 cursor-default">
+                  <motion.button custom={{ i: itemIndex++, total: totalItems }} variants={itemVariants} type="button" onClick={() => handleAction(() => selection.forEach(id => bringToFront(id)))} whileHover="hover" whileTap="tap" className="relative w-full flex items-center justify-between px-3 py-1.5 text-sm outline-none group z-10 text-zinc-700 cursor-default">
                     <motion.div className="absolute inset-0 rounded-lg mx-1 -z-10 bg-zinc-100" style={{ opacity: 0, scale: 0.95 }} variants={{ hover: { opacity: 1, scale: 1, transition: { type: "spring", bounce: 0.25, duration: 0.4 } }, tap: { scale: 0.95, opacity: 1 } }} />
                     <motion.div className="flex items-center gap-2.5 z-10" style={{ x: 0 }} variants={{ hover: { x: 4, transition: { type: "spring", bounce: 0.4, duration: 0.4 } } }}>
                       <motion.div style={{ scale: 1, rotate: 0 }} variants={{ hover: { y: -2, scale: 1.15, transition: { type: "spring", bounce: 0.6 } } }}>
@@ -241,7 +520,7 @@ export const ContextMenu: React.FC = () => {
                     <motion.span style={{ x: 0, opacity: 1 }} variants={{ hover: { x: -4, opacity: 0.6, transition: { type: "spring", bounce: 0.4, duration: 0.4 } } }} className="text-xs text-zinc-400 font-mono ml-2 z-10">⌘⇧]</motion.span>
                   </motion.button>
 
-                  <motion.button custom={{ i: 9, total: hasSelection ? 12 : 3 }} variants={itemVariants} type="button" onClick={() => handleAction(() => selection.forEach(id => bringForward(id)))} whileHover="hover" whileTap="tap" className="relative w-full flex items-center justify-between px-3 py-1.5 text-sm outline-none group z-10 text-zinc-700 cursor-default">
+                  <motion.button custom={{ i: itemIndex++, total: totalItems }} variants={itemVariants} type="button" onClick={() => handleAction(() => selection.forEach(id => bringForward(id)))} whileHover="hover" whileTap="tap" className="relative w-full flex items-center justify-between px-3 py-1.5 text-sm outline-none group z-10 text-zinc-700 cursor-default">
                     <motion.div className="absolute inset-0 rounded-lg mx-1 -z-10 bg-zinc-100" style={{ opacity: 0, scale: 0.95 }} variants={{ hover: { opacity: 1, scale: 1, transition: { type: "spring", bounce: 0.25, duration: 0.4 } }, tap: { scale: 0.95, opacity: 1 } }} />
                     <motion.div className="flex items-center gap-2.5 z-10" style={{ x: 0 }} variants={{ hover: { x: 4, transition: { type: "spring", bounce: 0.4, duration: 0.4 } } }}>
                       <motion.div style={{ scale: 1, rotate: 0 }} variants={{ hover: { y: -1, scale: 1.1, transition: { type: "spring", bounce: 0.6 } } }}>
@@ -252,7 +531,7 @@ export const ContextMenu: React.FC = () => {
                     <motion.span style={{ x: 0, opacity: 1 }} variants={{ hover: { x: -4, opacity: 0.6, transition: { type: "spring", bounce: 0.4, duration: 0.4 } } }} className="text-xs text-zinc-400 font-mono ml-2 z-10">⌘]</motion.span>
                   </motion.button>
 
-                  <motion.button custom={{ i: 10, total: hasSelection ? 12 : 3 }} variants={itemVariants} type="button" onClick={() => handleAction(() => selection.forEach(id => sendBackward(id)))} whileHover="hover" whileTap="tap" className="relative w-full flex items-center justify-between px-3 py-1.5 text-sm outline-none group z-10 text-zinc-700 cursor-default">
+                  <motion.button custom={{ i: itemIndex++, total: totalItems }} variants={itemVariants} type="button" onClick={() => handleAction(() => selection.forEach(id => sendBackward(id)))} whileHover="hover" whileTap="tap" className="relative w-full flex items-center justify-between px-3 py-1.5 text-sm outline-none group z-10 text-zinc-700 cursor-default">
                     <motion.div className="absolute inset-0 rounded-lg mx-1 -z-10 bg-zinc-100" style={{ opacity: 0, scale: 0.95 }} variants={{ hover: { opacity: 1, scale: 1, transition: { type: "spring", bounce: 0.25, duration: 0.4 } }, tap: { scale: 0.95, opacity: 1 } }} />
                     <motion.div className="flex items-center gap-2.5 z-10" style={{ x: 0 }} variants={{ hover: { x: 4, transition: { type: "spring", bounce: 0.4, duration: 0.4 } } }}>
                       <motion.div style={{ scale: 1, rotate: 0 }} variants={{ hover: { y: 1, scale: 1.1, transition: { type: "spring", bounce: 0.6 } } }}>
@@ -263,7 +542,7 @@ export const ContextMenu: React.FC = () => {
                     <motion.span style={{ x: 0, opacity: 1 }} variants={{ hover: { x: -4, opacity: 0.6, transition: { type: "spring", bounce: 0.4, duration: 0.4 } } }} className="text-xs text-zinc-400 font-mono ml-2 z-10">⌘[</motion.span>
                   </motion.button>
 
-                  <motion.button custom={{ i: 11, total: hasSelection ? 12 : 3 }} variants={itemVariants} type="button" onClick={() => handleAction(() => selection.forEach(id => sendToBack(id)))} whileHover="hover" whileTap="tap" className="relative w-full flex items-center justify-between px-3 py-1.5 text-sm outline-none group z-10 text-zinc-700 cursor-default">
+                  <motion.button custom={{ i: itemIndex++, total: totalItems }} variants={itemVariants} type="button" onClick={() => handleAction(() => selection.forEach(id => sendToBack(id)))} whileHover="hover" whileTap="tap" className="relative w-full flex items-center justify-between px-3 py-1.5 text-sm outline-none group z-10 text-zinc-700 cursor-default">
                     <motion.div className="absolute inset-0 rounded-lg mx-1 -z-10 bg-zinc-100" style={{ opacity: 0, scale: 0.95 }} variants={{ hover: { opacity: 1, scale: 1, transition: { type: "spring", bounce: 0.25, duration: 0.4 } }, tap: { scale: 0.95, opacity: 1 } }} />
                     <motion.div className="flex items-center gap-2.5 z-10" style={{ x: 0 }} variants={{ hover: { x: 4, transition: { type: "spring", bounce: 0.4, duration: 0.4 } } }}>
                       <motion.div style={{ scale: 1, rotate: 0 }} variants={{ hover: { y: 2, scale: 1.15, transition: { type: "spring", bounce: 0.6 } } }}>
@@ -274,7 +553,33 @@ export const ContextMenu: React.FC = () => {
                     <motion.span style={{ x: 0, opacity: 1 }} variants={{ hover: { x: -4, opacity: 0.6, transition: { type: "spring", bounce: 0.4, duration: 0.4 } } }} className="text-xs text-zinc-400 font-mono ml-2 z-10">⌘⇧[</motion.span>
                   </motion.button>
 
-                  <motion.button custom={{ i: 12, total: hasSelection ? 12 : 3 }} variants={itemVariants} type="button" onClick={() => handleAction(() => { if (selection.length > 0) removeBlocks(selection); if (drawingSelection.length > 0) removeDrawings(drawingSelection); })} whileHover="hover" whileTap="tap" className="relative w-full flex items-center justify-between px-3 py-1.5 text-sm outline-none group z-10 text-red-600 cursor-default">
+                  {isFrameSelected && (
+                    <>
+                      <motion.div custom={{ i: itemIndex++, total: totalItems }} variants={itemVariants} className="h-px bg-zinc-100 my-1 mx-2 shrink-0" />
+                      <motion.button custom={{ i: itemIndex++, total: totalItems }} variants={itemVariants} type="button" onClick={handleExportMoodboard} whileHover="hover" whileTap="tap" className="relative w-full flex items-center justify-between px-3 py-1.5 text-sm outline-none group z-10 text-zinc-700 cursor-default">
+                        <motion.div className="absolute inset-0 rounded-lg mx-1 -z-10 bg-zinc-100" style={{ opacity: 0, scale: 0.95 }} variants={{ hover: { opacity: 1, scale: 1, transition: { type: "spring", bounce: 0.25, duration: 0.4 } }, tap: { scale: 0.95, opacity: 1 } }} />
+                        <motion.div className="flex items-center gap-2.5 z-10" style={{ x: 0 }} variants={{ hover: { x: 4, transition: { type: "spring", bounce: 0.4, duration: 0.4 } } }}>
+                          <motion.div style={{ scale: 1, rotate: 0 }} variants={{ hover: { scale: 1.15, transition: { type: "spring", bounce: 0.6 } } }}>
+                            <ImageIcon className="w-4 h-4" />
+                          </motion.div>
+                          <span>Make Moodboard</span>
+                        </motion.div>
+                      </motion.button>
+                      <motion.button custom={{ i: itemIndex++, total: totalItems }} variants={itemVariants} type="button" onClick={handleGenerateImage} whileHover="hover" whileTap="tap" className="relative w-full flex items-center justify-between px-3 py-1.5 text-sm outline-none group z-10 text-zinc-700 cursor-default">
+                        <motion.div className="absolute inset-0 rounded-lg mx-1 -z-10 bg-zinc-100" style={{ opacity: 0, scale: 0.95 }} variants={{ hover: { opacity: 1, scale: 1, transition: { type: "spring", bounce: 0.25, duration: 0.4 } }, tap: { scale: 0.95, opacity: 1 } }} />
+                        <motion.div className="flex items-center gap-2.5 z-10" style={{ x: 0 }} variants={{ hover: { x: 4, transition: { type: "spring", bounce: 0.4, duration: 0.4 } } }}>
+                          <motion.div style={{ scale: 1, rotate: 0 }} variants={{ hover: { scale: 1.15, transition: { type: "spring", bounce: 0.6 } } }}>
+                            <Sparkles className="w-4 h-4" />
+                          </motion.div>
+                          <span>Generate Image</span>
+                        </motion.div>
+                      </motion.button>
+                    </>
+                  )}
+
+                  <motion.div custom={{ i: itemIndex++, total: totalItems }} variants={itemVariants} className="h-px bg-zinc-100 my-1 mx-2 shrink-0" />
+
+                  <motion.button custom={{ i: itemIndex++, total: totalItems }} variants={itemVariants} type="button" onClick={() => handleAction(() => { if (selection.length > 0) removeBlocks(selection); if (drawingSelection.length > 0) removeDrawings(drawingSelection); })} whileHover="hover" whileTap="tap" className="relative w-full flex items-center justify-between px-3 py-1.5 text-sm outline-none group z-10 text-red-600 cursor-default">
                     <motion.div className="absolute inset-0 rounded-lg mx-1 -z-10 bg-red-50" style={{ opacity: 0, scale: 0.95 }} variants={{ hover: { opacity: 1, scale: 1, transition: { type: "spring", bounce: 0.25, duration: 0.4 } }, tap: { scale: 0.95, opacity: 1 } }} />
                     <motion.div className="flex items-center gap-2.5 z-10" style={{ x: 0 }} variants={{ hover: { x: 4, transition: { type: "spring", bounce: 0.4, duration: 0.4 } } }}>
                       <motion.div style={{ scale: 1, rotate: 0 }} variants={{ hover: { rotate: [0, -10, 10, -10, 10, 0], scale: 1.15, transition: { duration: 0.4 } } }} className="group-hover:text-red-600 transition-colors duration-300">

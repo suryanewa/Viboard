@@ -31,6 +31,8 @@ export const Canvas: React.FC<{ children: React.ReactNode }> = ({ children }) =>
   const initialDrawingSelection = useRef<string[]>([]);
   const isDrawing = useRef(false);
   const isCreatingShape = useRef(false);
+  const isCreatingFrame = useRef(false);
+  const [activeFrame, setActiveFrame] = useState<{ x1: number, y1: number, x2: number, y2: number } | null>(null);
   const isDraggingDrawing = useRef(false);
   const isErasing = useRef(false);
 
@@ -569,6 +571,17 @@ export const Canvas: React.FC<{ children: React.ReactNode }> = ({ children }) =>
       return;
     }
 
+    if (tool === 'frame') {
+      isCreatingFrame.current = true;
+      setActiveFrame({
+        x1: canvasX,
+        y1: canvasY,
+        x2: canvasX,
+        y2: canvasY
+      });
+      return;
+    }
+
     if (tool === 'shape') {
       isCreatingShape.current = true;
       setActiveShape({
@@ -582,9 +595,10 @@ export const Canvas: React.FC<{ children: React.ReactNode }> = ({ children }) =>
     }
 
     if (tool === 'text') {
-      const { blocks } = useBoardStore.getState();
+      const { blocks, textFontSize, textHue } = useBoardStore.getState();
       const highestZ = Math.max(0, ...Object.values(blocks).map((b) => b.zIndex));
-      
+      const color = `hsl(${textHue}, 75%, 28%)`;
+
       const textId = uuidv4();
       addBlock({
         id: textId,
@@ -594,7 +608,7 @@ export const Canvas: React.FC<{ children: React.ReactNode }> = ({ children }) =>
         width: 240,
         height: 60,
         zIndex: highestZ + 1,
-        data: { text: '' }
+        data: { text: '', fontSize: textFontSize, hue: textHue, color }
       });
       useBoardStore.getState().setSelection([textId]);
       return;
@@ -652,6 +666,12 @@ export const Canvas: React.FC<{ children: React.ReactNode }> = ({ children }) =>
       setViewport({
         x: currentViewport.x + e.movementX * PAN_SENSITIVITY,
         y: currentViewport.y + e.movementY * PAN_SENSITIVITY,
+      });
+    } else if (isCreatingFrame.current && activeFrame) {
+      setActiveFrame({
+        ...activeFrame,
+        x2: canvasX,
+        y2: canvasY
       });
     } else if (isCreatingShape.current && activeShape) {
       let newX2 = canvasX;
@@ -715,7 +735,7 @@ export const Canvas: React.FC<{ children: React.ReactNode }> = ({ children }) =>
         useBoardStore.getState().setDrawingSelection(selectedDrawingIds);
       }
     }
-  }, [marquee, blocks, drawings, setMousePos, currentPath, setCurrentPath, drawingSelection, updateDrawings, activeShape, setActiveShape, markerThickness]);
+  }, [marquee, blocks, drawings, setMousePos, currentPath, setCurrentPath, drawingSelection, updateDrawings, activeShape, setActiveShape, markerThickness, activeFrame]);
 
   const handlePointerUp = useCallback(() => {
     if (isPanning.current) {
@@ -736,6 +756,27 @@ export const Canvas: React.FC<{ children: React.ReactNode }> = ({ children }) =>
       isDrawing.current = false;
       addDrawing(currentPath);
       setCurrentPath(null);
+    }
+    if (isCreatingFrame.current && activeFrame) {
+      isCreatingFrame.current = false;
+      
+      const x = Math.min(activeFrame.x1, activeFrame.x2);
+      const y = Math.min(activeFrame.y1, activeFrame.y2);
+      const width = Math.max(100, Math.abs(activeFrame.x2 - activeFrame.x1));
+      const height = Math.max(100, Math.abs(activeFrame.y2 - activeFrame.y1));
+
+      addBlock({
+        id: uuidv4(),
+        type: 'frame',
+        x,
+        y,
+        width,
+        height,
+        zIndex: 0, // Frames should be at the bottom
+        data: { title: 'Frame' }
+      });
+
+      setActiveFrame(null);
     }
     if (isCreatingShape.current && activeShape) {
       isCreatingShape.current = false;
@@ -758,7 +799,7 @@ export const Canvas: React.FC<{ children: React.ReactNode }> = ({ children }) =>
 
       setActiveShape(null);
     }
-  }, [currentPath, activeShape, addDrawing, addBlock, blocks, setCurrentPath, setActiveShape]);
+  }, [currentPath, activeShape, activeFrame, addDrawing, addBlock, blocks, setCurrentPath, setActiveShape]);
 
   return (
     <main className="absolute inset-0 w-full h-full overflow-hidden touch-none pointer-events-none">
@@ -860,6 +901,18 @@ export const Canvas: React.FC<{ children: React.ReactNode }> = ({ children }) =>
                 width: Math.abs(activeShape.x2 - activeShape.x1),
                 height: Math.abs(activeShape.y2 - activeShape.y1),
                 borderRadius: activeShape.type === 'circle' ? '9999px' : '0px'
+              }}
+            />
+          )}
+
+          {activeFrame && (
+            <div
+              className="absolute border-2 border-blue-500 bg-transparent pointer-events-none z-[1002]"
+              style={{
+                left: Math.min(activeFrame.x1, activeFrame.x2),
+                top: Math.min(activeFrame.y1, activeFrame.y2),
+                width: Math.abs(activeFrame.x2 - activeFrame.x1),
+                height: Math.abs(activeFrame.y2 - activeFrame.y1),
               }}
             />
           )}

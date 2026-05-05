@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useBoardStore } from '../store';
-import { Type, Link, Magnet, Pencil, Circle, MousePointer, Hand, ZoomIn, ZoomOut, Search, Send, Eye, Edit3, MoreVertical, Plus } from 'lucide-react';
+import { Type, Link, Magnet, Pencil, Circle, MousePointer, Hand, ZoomIn, ZoomOut, Search, Send, Eye, Edit3, MoreVertical, Plus, Frame } from 'lucide-react';
 import { v4 as uuidv4 } from 'uuid';
 import { motion, AnimatePresence } from 'framer-motion';
 import clsx from 'clsx';
@@ -24,7 +24,7 @@ const SerifAIcon = ({ className }: { className?: string }) => (
   </svg>
 );
 
-type ToolbarTool = 'select' | 'marker' | 'shape' | 'text' | 'pan' | 'sticky' | 'link' | 'palette' | 'font';
+type ToolbarTool = 'select' | 'marker' | 'shape' | 'text' | 'pan' | 'sticky' | 'link' | 'palette' | 'font' | 'frame';
 type ToolbarVisualTool = ToolbarTool | 'plus';
 
 export const Toolbar: React.FC = () => {
@@ -74,8 +74,9 @@ export const Toolbar: React.FC = () => {
   const TOOLS = React.useMemo(() => [
     { id: 'select', icon: MousePointer, shortcut: 'V', color: 'blue', hasSecondary: false, hoverAnim: { scale: 1.1, rotate: -15, x: -1, y: -1 } as any },
     { id: 'pan', icon: Hand, shortcut: 'P', color: 'blue', hasSecondary: false, hoverAnim: { scale: 1.1, rotate: [0, -15, 15, -10, 0] } as any },
+    { id: 'frame', icon: Frame, shortcut: 'F', color: 'blue', hasSecondary: false, hoverAnim: { scale: 1.1 } as any },
     { id: 'sticky', icon: ({ isSelected }: { isSelected?: boolean }) => <div className={clsx("w-4 h-4 border-2 transition-colors", isSelected ? 'border-red-600' : 'border-currentColor')} />, shortcut: 'S', color: 'red', hasSecondary: true, hoverAnim: { scale: 1.15, rotate: 10, y: -1 } as any },
-    { id: 'text', icon: Type, shortcut: 'T', color: 'red', hasSecondary: false, hoverAnim: { scale: 1.1, y: -2 } as any },
+    { id: 'text', icon: Type, shortcut: 'T', color: 'red', hasSecondary: true, hoverAnim: { scale: 1.1, y: -2 } as any },
     { id: 'marker', icon: Pencil, shortcut: 'M', color: 'red', hasSecondary: true, hoverAnim: { scale: 1.1, rotate: -20, x: 2, y: -2 } as any },
     { id: 'shape', icon: Circle, shortcut: 'K', color: 'red', hasSecondary: true, hoverAnim: { scale: 1.15 } as any },
     { id: 'plus', icon: Plus, shortcut: 'L', color: 'red', hasSecondary: false, hoverAnim: { scale: 1.1, rotate: 90 } as any },
@@ -89,7 +90,7 @@ export const Toolbar: React.FC = () => {
     const currentVisualTool = options?.isSubTool ? 'plus' : activeToolbarTool;
     
     if (currentVisualTool === nextTool && !options?.isSubTool) {
-      if (nextTool === 'plus' ? currentState.isPlusMenuOpen : !currentState.isPlusMenuOpen) {
+      if (nextTool !== 'plus' && !currentState.isPlusMenuOpen) {
         return;
       }
     }
@@ -129,8 +130,7 @@ export const Toolbar: React.FC = () => {
         setIsPlusMenuOpen(false);
       }
     } else if (nextTool === 'plus') {
-      const isOpening = !currentState.isPlusMenuOpen;
-      setIsPlusMenuOpen(isOpening);
+      setIsPlusMenuOpen(true);
     } else if (options?.isSubTool) {
       setTool(nextTool === 'palette' || nextTool === 'font' ? 'text' : nextTool as any);
       if (nextTool === 'sticky' || nextTool === 'text' || nextTool === 'shape' || nextTool === 'marker' || nextTool === 'link' || nextTool === 'palette' || nextTool === 'font') {
@@ -196,6 +196,8 @@ export const Toolbar: React.FC = () => {
 
       if (e.key.toLowerCase() === 's' && !e.shiftKey && !cmdOrCtrl) {
         handleToolSelect('sticky');
+      } else if (e.key.toLowerCase() === 'f' && !cmdOrCtrl) {
+        handleToolSelect('frame');
       } else if (e.key.toLowerCase() === 't' && !cmdOrCtrl) {
         handleToolSelect('text');
       } else if (e.key.toLowerCase() === 'm' && !cmdOrCtrl) {
@@ -296,7 +298,9 @@ export const Toolbar: React.FC = () => {
       newBlock.data = { text: 'New sticky', color: 'yellow', hue: 55 };
     } else if (type === 'text') {
       newBlock.height = 60;
-      newBlock.data = { text: '' };
+      const { textFontSize, textHue } = useBoardStore.getState();
+      const color = `hsl(${textHue}, 75%, 28%)`;
+      newBlock.data = { text: '', fontSize: textFontSize, hue: textHue, color };
     } else if (type === 'link') {
       newBlock.width = 480;
       newBlock.height = 240;
@@ -755,7 +759,6 @@ export const Toolbar: React.FC = () => {
                                 { id: 'font', icon: SerifAIcon, title: 'Font', x: 56, y: 0 }
                               ].map((sub, i) => {
                                 const isSelected = activePlusTool === sub.id;
-                                const isAnySelected = activePlusTool !== 'plus';
                                 
                                 return (
                                 <motion.button
@@ -766,7 +769,7 @@ export const Toolbar: React.FC = () => {
                                   }}
                                   onClick={(e) => {
                                     e.stopPropagation();
-                                    handleToolSelect(sub.id as ToolbarVisualTool, { deferPlusMenuClose: true, isSubTool: true });
+                                    handleToolSelect(sub.id as ToolbarVisualTool, { isSubTool: true });
                                   }}
                                   variants={{
                                     hidden: isSelected ? {
@@ -777,6 +780,9 @@ export const Toolbar: React.FC = () => {
                                       borderRadius: 8,
                                       width: 40,
                                       height: 40,
+                                      backgroundColor: "#fee2e2",
+                                      color: "#dc2626",
+                                      borderColor: "transparent",
                                       transition: { 
                                         type: "spring", stiffness: 250, damping: 25, mass: 0.5,
                                         opacity: { delay: 0.3, duration: 0 }
@@ -790,28 +796,33 @@ export const Toolbar: React.FC = () => {
                                       boxShadow: "0 8px 16px -4px rgba(0,0,0,0), 0 4px 8px -2px rgba(0,0,0,0)",
                                       width: 44,
                                       height: 44,
+                                      backgroundColor: "#ffffff",
+                                      color: "#3f3f46",
+                                      borderColor: "#e4e4e7",
                                       transition: { type: "spring", stiffness: 300, damping: 25 }
                                     },
                                     visible: { 
-                                      opacity: isAnySelected && !isSelected ? 0 : 1, 
-                                      x: isSelected ? 0 : sub.x, 
-                                      y: isSelected ? 0 : sub.y, 
+                                      opacity: 1, 
+                                      x: sub.x, 
+                                      y: sub.y, 
                                       scale: 1, 
                                       zIndex: isSelected ? 10 : 1,
-                                      borderRadius: isSelected ? 8 : 22,
-                                      boxShadow: isSelected ? "0 8px 16px -4px rgba(0,0,0,0), 0 4px 8px -2px rgba(0,0,0,0)" : "0 8px 16px -4px rgba(0,0,0,0.1), 0 4px 8px -2px rgba(0,0,0,0.05)",
-                                      width: isSelected ? 40 : 44,
-                                      height: isSelected ? 40 : 44,
+                                      borderRadius: 22,
+                                      boxShadow: "0 8px 16px -4px rgba(0,0,0,0.1), 0 4px 8px -2px rgba(0,0,0,0.05)",
+                                      width: 44,
+                                      height: 44,
+                                      backgroundColor: isSelected ? "#fee2e2" : "#ffffff",
+                                      color: isSelected ? "#dc2626" : "#3f3f46",
+                                      borderColor: isSelected ? "transparent" : "#e4e4e7",
                                       transition: { type: "spring", stiffness: 250, damping: 25, mass: 0.5 } 
                                     }
                                   }}
-                                  whileHover={isAnySelected ? {} : { scale: 1.15, rotate: i % 2 === 0 ? 5 : -5 }}
-                                  className={clsx(
-                                    "absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 flex items-center justify-center border border-solid pointer-events-auto",
-                                    isSelected ? "text-red-600 border-transparent bg-red-100" : "text-zinc-700 hover:text-zinc-900 border-zinc-200 bg-white"
-                                  )}
+                                  whileHover={{ scale: 1.15, rotate: i % 2 === 0 ? 5 : -5 }}
+                                  className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 flex items-center justify-center border border-solid pointer-events-auto"
                                 >
-                                  <sub.icon className="w-5 h-5" />
+                                  <Tooltip content={sub.title} position="top" className="w-full h-full">
+                                    <sub.icon className="w-5 h-5" />
+                                  </Tooltip>
                                 </motion.button>
                               )})}
                             </motion.div>
@@ -890,7 +901,10 @@ export const Toolbar: React.FC = () => {
                           initial={{ opacity: 0, scale: 0.5, rotate: -45 }}
                           animate={{ opacity: 1, scale: 1, rotate: 0 }}
                           exit={{ opacity: 0, scale: 0.5, rotate: 45 }}
-                          transition={{ duration: 0.15 }}
+                          transition={{ 
+                            duration: 0.15,
+                            delay: t.id === 'plus' && !isPlusMenuOpen && activePlusTool !== 'plus' ? 0.15 : 0
+                          }}
                           className="flex items-center justify-center absolute inset-0"
                         >
                           <Icon 
