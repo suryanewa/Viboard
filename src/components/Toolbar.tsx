@@ -799,7 +799,7 @@ export const Toolbar: React.FC = () => {
                                   }}
                                   whileHover={isAnySelected ? {} : { scale: 1.15, rotate: i % 2 === 0 ? 5 : -5 }}
                                   className={clsx(
-                                    "absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 flex items-center justify-center border border-solid pointer-events-auto transition-colors duration-300",
+                                    "absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 flex items-center justify-center border border-solid pointer-events-auto",
                                     isSelected ? "text-red-600 border-transparent bg-red-100" : "text-zinc-700 hover:text-zinc-900 border-zinc-200 bg-white"
                                   )}
                                 >
@@ -841,7 +841,7 @@ export const Toolbar: React.FC = () => {
                                 y: [0, -50, 0], 
                                 scale: [1, 1.15, 0.9, 1] 
                               } 
-                            : { rotate: 0, y: 0, scale: 1 }
+                            : { rotate: hopDirection === 1 ? 360 : -360, y: 0, scale: 1 }
                         }
                         className={clsx(
                           "absolute inset-0 rounded-lg -z-10",
