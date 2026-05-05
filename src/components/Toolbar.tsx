@@ -149,7 +149,7 @@ export const Toolbar: React.FC = () => {
     setHoveredTool(null);
     setHoveredTopRight(null);
     setHoveredTopLeft(null);
-    setAnimationState('hopping');
+    setAnimationState(options?.isSubTool ? 'idle' : 'hopping');
     if (animationTimeoutRef.current !== null) {
       window.clearTimeout(animationTimeoutRef.current);
     }
@@ -794,7 +794,10 @@ export const Toolbar: React.FC = () => {
                                       boxShadow: isSelected ? "0 8px 16px -4px rgba(0,0,0,0), 0 4px 8px -2px rgba(0,0,0,0)" : "0 8px 16px -4px rgba(0,0,0,0.1), 0 4px 8px -2px rgba(0,0,0,0.05)",
                                       width: isSelected ? 40 : 44,
                                       height: isSelected ? 40 : 44,
-                                      transition: { type: "spring", stiffness: 300, damping: 25 } 
+                                      transition: { 
+                                        type: "spring", stiffness: 300, damping: 25,
+                                        borderRadius: { type: "tween", delay: isSelected ? 0.15 : 0, duration: 0.2 }
+                                      } 
                                     }
                                   }}
                                   whileHover={isAnySelected ? {} : { scale: 1.15, rotate: i % 2 === 0 ? 5 : -5 }}
@@ -839,9 +842,15 @@ export const Toolbar: React.FC = () => {
                             ? { 
                                 rotate: [0, hopDirection === 1 ? 385 : -385, hopDirection === 1 ? 360 : -360], 
                                 y: [0, -50, 0], 
-                                scale: [1, 1.15, 0.9, 1] 
+                                scale: [1, 1.15, 0.9, 1],
+                                opacity: (t.id === 'plus' && activePlusTool !== 'plus' && isPlusMenuOpen) ? 0 : 1
                               } 
-                            : { rotate: hopDirection === 1 ? 360 : -360, y: 0, scale: 1 }
+                            : { 
+                                rotate: hopDirection === 1 ? 360 : -360, 
+                                y: 0, 
+                                scale: 1,
+                                opacity: (t.id === 'plus' && activePlusTool !== 'plus' && isPlusMenuOpen) ? 0 : 1
+                              }
                         }
                         className={clsx(
                           "absolute inset-0 rounded-lg -z-10",
