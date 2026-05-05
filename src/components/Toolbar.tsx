@@ -773,7 +773,16 @@ export const Toolbar: React.FC = () => {
                                     handleToolSelect(sub.id as ToolbarVisualTool, { deferPlusMenuClose: true, isSubTool: true });
                                   }}
                                   variants={{
-                                    hidden: { 
+                                    hidden: isSelected ? {
+                                      opacity: 0,
+                                      x: 0,
+                                      y: 0,
+                                      scale: 1,
+                                      borderRadius: "8px",
+                                      width: 40,
+                                      height: 40,
+                                      transition: { duration: 0 }
+                                    } : { 
                                       opacity: 0, 
                                       x: 0, 
                                       y: 0, 
@@ -835,7 +844,8 @@ export const Toolbar: React.FC = () => {
                           },
                           y: { duration: 0.4, times: [0, 0.5, 1], ease: ["circOut", "circIn"] },
                           rotate: { duration: animationState === 'hopping' ? 0.45 : 0, times: [0, 0.85, 1], ease: ["easeInOut", "easeOut"] },
-                          scale: { duration: 0.45, times: [0, 0.4, 0.85, 1], ease: ["easeOut", "easeIn", "easeOut"] }
+                          scale: { duration: 0.45, times: [0, 0.4, 0.85, 1], ease: ["easeOut", "easeIn", "easeOut"] },
+                          opacity: { duration: 0 }
                         }}
                         animate={
                           animationState === 'hopping' 
