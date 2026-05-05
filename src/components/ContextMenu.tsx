@@ -371,7 +371,13 @@ export const ContextMenu: React.FC = () => {
       
       const formData = new FormData();
       formData.append('image[]', blob, 'moodboard.png');
-      formData.append('prompt', `${userPrompt} PLEASE REFERENCE THE ATTACHED MOODBOARD FOR THE AESTHETIC`);
+      formData.append(
+        'prompt',
+        `${userPrompt}
+
+PLEASE REFERENCE THE ATTACHED MOODBOARD FOR THE AESTHETIC.
+Generate a new standalone image, not a collage, grid, moodboard, or reproduction of the reference image. Use the moodboard only for visual direction: palette, materials, lighting, composition, texture, and overall style.`
+      );
       formData.append('n', '1');
       formData.append('size', '1024x1024');
       formData.append('model', 'gpt-image-2');
