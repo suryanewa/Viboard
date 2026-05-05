@@ -335,13 +335,13 @@ export const Toolbar: React.FC = () => {
           hidden: { 
             clipPath: "inset(0 0 0 100% round 12px)", 
             opacity: 0,
-            transition: { type: "spring", bounce: 0, duration: 0.4, staggerChildren: 0.03, staggerDirection: -1 } 
+            transition: { type: "spring", bounce: 0, duration: 0.4, staggerChildren: 0.01, staggerDirection: -1 } 
           },
           visible: { 
             clipPath: "inset(0 0% 0 0% round 12px)", 
             opacity: 1,
             transitionEnd: { clipPath: "none" },
-            transition: { type: "spring", bounce: 0, duration: 0.4, delayChildren: 0.1, staggerChildren: 0.05 } 
+            transition: { type: "spring", bounce: 0, duration: 0.4, delayChildren: 0.05, staggerChildren: 0.02 } 
           }
         }}
       >
@@ -632,13 +632,13 @@ export const Toolbar: React.FC = () => {
           hidden: { 
             clipPath: "inset(0 0 0 100% round 12px)", 
             opacity: 0,
-            transition: { type: "spring", bounce: 0, duration: 0.4, staggerChildren: 0.03, staggerDirection: -1 } 
+            transition: { type: "spring", bounce: 0, duration: 0.4, staggerChildren: 0.01, staggerDirection: -1 } 
           },
           visible: { 
             clipPath: "inset(0 0% 0 0% round 12px)", 
             opacity: 1,
             transitionEnd: { clipPath: "none" },
-            transition: { type: "spring", bounce: 0, duration: 0.4, delayChildren: 0.1, staggerChildren: 0.05 } 
+            transition: { type: "spring", bounce: 0, duration: 0.4, delayChildren: 0.05, staggerChildren: 0.02 } 
           }
         }}
       >
@@ -693,13 +693,13 @@ export const Toolbar: React.FC = () => {
                 hidden: { 
                   clipPath: "inset(0 50% 0 50% round 12px)", 
                   opacity: 0,
-                  transition: { type: "spring", bounce: 0, duration: 0.4, staggerChildren: 0.03, staggerDirection: -1 } 
+                  transition: { type: "spring", bounce: 0, duration: 0.4, staggerChildren: 0.01, staggerDirection: -1 } 
                 },
                 visible: { 
                   clipPath: "inset(0 0% 0 0% round 12px)", 
                   opacity: 1,
                   transitionEnd: { clipPath: "none" },
-                  transition: { type: "spring", bounce: 0, duration: 0.4, delayChildren: 0.1, staggerChildren: 0.05 } 
+                  transition: { type: "spring", bounce: 0, duration: 0.4, delayChildren: 0.05, staggerChildren: 0.02 } 
                 }
               }}
             >
@@ -936,13 +936,13 @@ export const Toolbar: React.FC = () => {
               hidden: { 
                 clipPath: "inset(0 100% 0 0% round 12px)", 
                 opacity: 0,
-                transition: { type: "spring", bounce: 0, duration: 0.4, staggerChildren: 0.03, staggerDirection: -1 } 
+                transition: { type: "spring", bounce: 0, duration: 0.4, staggerChildren: 0.01, staggerDirection: -1 } 
               },
               visible: { 
                 clipPath: "inset(0 0% 0 0% round 12px)", 
                 opacity: 1,
                 transitionEnd: { clipPath: "none" },
-                transition: { type: "spring", bounce: 0, duration: 0.4, delayChildren: 0.1, staggerChildren: 0.05 } 
+                transition: { type: "spring", bounce: 0, duration: 0.4, delayChildren: 0.05, staggerChildren: 0.02 } 
               }
             }}
           >
@@ -1005,13 +1005,13 @@ export const Toolbar: React.FC = () => {
               hidden: { 
                 clipPath: "inset(0 100% 0 0% round 12px)", 
                 opacity: 0,
-                transition: { type: "spring", bounce: 0, duration: 0.4, staggerChildren: 0.03, staggerDirection: -1 } 
+                transition: { type: "spring", bounce: 0, duration: 0.4, staggerChildren: 0.01, staggerDirection: -1 } 
               },
               visible: { 
                 clipPath: "inset(0 0% 0 0% round 12px)", 
                 opacity: 1,
                 transitionEnd: { clipPath: "none" },
-                transition: { type: "spring", bounce: 0, duration: 0.4, delayChildren: 0.1, staggerChildren: 0.05 } 
+                transition: { type: "spring", bounce: 0, duration: 0.4, delayChildren: 0.05, staggerChildren: 0.02 } 
               }
             }}
           >
