@@ -37,6 +37,7 @@ export const Toolbar: React.FC = () => {
   const gridView = useBoardStore((state) => state.gridView);
   const setGridView = useBoardStore((state) => state.setGridView);
   const canvasTitle = useBoardStore((state) => state.canvasTitle);
+  const setCanvasTitle = useBoardStore((state) => state.setCanvasTitle);
   const mode = useBoardStore((state) => state.mode);
   const setMode = useBoardStore((state) => state.setMode);
   const setIsSearchOpen = useBoardStore((state) => state.setIsSearchOpen);
@@ -52,10 +53,13 @@ export const Toolbar: React.FC = () => {
   const [hoveredTool, setHoveredTool] = useState<string | null>(null);
   const [hoveredTopRight, setHoveredTopRight] = useState<string | null>(null);
   const [hoveredTopLeft, setHoveredTopLeft] = useState<string | null>(null);
+  const [isEditingTitle, setIsEditingTitle] = useState(false);
+  const [draftCanvasTitle, setDraftCanvasTitle] = useState(canvasTitle);
   const [activeToolbarTool, setActiveToolbarTool] = useState<ToolbarVisualTool>(tool);
   const [activePlusTool, setActivePlusTool] = useState<ToolbarVisualTool>('plus');
   const animationTimeoutRef = React.useRef<number | null>(null);
   const plusMenuCloseTimeoutRef = React.useRef<number | null>(null);
+  const titleInputRef = React.useRef<HTMLInputElement>(null);
 
   const ZOOM_LEVELS = [0.25, 0.5, 0.75, 1, 2];
   const cycleZoom = () => {
@@ -187,6 +191,19 @@ export const Toolbar: React.FC = () => {
   }, []);
 
   useEffect(() => {
+    if (!isEditingTitle) {
+      setDraftCanvasTitle(canvasTitle);
+    }
+  }, [canvasTitle, isEditingTitle]);
+
+  useEffect(() => {
+    if (isEditingTitle && titleInputRef.current) {
+      titleInputRef.current.focus();
+      titleInputRef.current.select();
+    }
+  }, [isEditingTitle]);
+
+  useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       const isInput = e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement;
       if (isInput) return;
@@ -316,6 +333,21 @@ export const Toolbar: React.FC = () => {
       useBoardStore.getState().setSelection([id]);
     }
   }, [setTool, viewport, blocks, addBlock]);
+
+  const commitCanvasTitle = React.useCallback(() => {
+    const nextTitle = draftCanvasTitle.trim();
+    if (nextTitle) {
+      setCanvasTitle(nextTitle);
+    } else {
+      setDraftCanvasTitle(canvasTitle);
+    }
+    setIsEditingTitle(false);
+  }, [canvasTitle, draftCanvasTitle, setCanvasTitle]);
+
+  const cancelCanvasTitleEdit = React.useCallback(() => {
+    setDraftCanvasTitle(canvasTitle);
+    setIsEditingTitle(false);
+  }, [canvasTitle]);
 
   useEffect(() => {
     (window as any).__handleAddBlock = handleAddBlock;
@@ -1056,9 +1088,35 @@ export const Toolbar: React.FC = () => {
             </motion.div>
 
             <motion.div variants={{ hidden: { opacity: 0, scale: 0.5 }, visible: { opacity: 1, scale: 1, transition: { type: "spring", bounce: 0.4 } } }}>
-              <span className="text-sm font-medium text-zinc-900 min-w-[120px] text-center truncate px-2">
-                {canvasTitle}
-              </span>
+              {isEditingTitle ? (
+                <input
+                  ref={titleInputRef}
+                  type="text"
+                  value={draftCanvasTitle}
+                  onChange={(e) => setDraftCanvasTitle(e.target.value)}
+                  onBlur={commitCanvasTitle}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') {
+                      e.preventDefault();
+                      commitCanvasTitle();
+                    } else if (e.key === 'Escape') {
+                      e.preventDefault();
+                      cancelCanvasTitleEdit();
+                    }
+                  }}
+                  className="text-sm font-medium text-zinc-900 min-w-[120px] px-2 py-1 rounded-md border border-zinc-300 bg-white focus:outline-none focus:ring-2 focus:ring-blue-200"
+                  aria-label="Moodboard title"
+                />
+              ) : (
+                <button
+                  type="button"
+                  onDoubleClick={() => setIsEditingTitle(true)}
+                  className="text-sm font-medium text-zinc-900 min-w-[120px] text-center truncate px-2 rounded-md hover:bg-zinc-100"
+                  title="Double-click to rename moodboard"
+                >
+                  {canvasTitle}
+                </button>
+              )}
             </motion.div>
           </motion.div>
         )}

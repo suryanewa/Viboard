@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { useBoardStore } from '../store';
 
-import { Copy, Scissors, Clipboard, Trash2, CopyPlus, RotateCcw, RotateCw, ChevronsUp, ChevronUp, ChevronDown, ChevronsDown, Image as ImageIcon, Sparkles } from 'lucide-react';
+import { Copy, Scissors, Clipboard, Trash2, CopyPlus, RotateCcw, RotateCw, ChevronsUp, ChevronUp, ChevronDown, ChevronsDown, Image as ImageIcon, Sparkles, X } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import type { Variants } from 'framer-motion';
 import { v4 as uuidv4 } from 'uuid';
@@ -69,6 +69,9 @@ const itemVariants: Variants = {
 
 export const ContextMenu: React.FC = () => {
   const [visible, setVisible] = useState(false);
+  const [showGenerateModal, setShowGenerateModal] = useState(false);
+  const [genPrompt, setGenPrompt] = useState('');
+  const [genApiKey, setGenApiKey] = useState(localStorage.getItem('OPENAI_API_KEY') || '');
   const [menuState, setMenuState] = useState({ x: 0, y: 0, hasSelection: false, isFrameSelected: false, frameId: null as string | null });
   const selection = useBoardStore((state) => state.selection);
   const copy = useBoardStore((state) => state.copy);
@@ -259,19 +262,22 @@ export const ContextMenu: React.FC = () => {
     }, 'image/png');
   };
 
-  const handleGenerateImage = async () => {
+  const executeGenerateImage = async () => {
     setVisible(false);
+    setShowGenerateModal(false);
     const { blocks, viewport, addBlock } = useBoardStore.getState();
     
-    const userPrompt = window.prompt("Enter prompt for image generation:");
+    const userPrompt = genPrompt;
     if (!userPrompt) return;
     
     const apiKey =
       import.meta.env.VITE_OPENAI_API_KEY ||
-      localStorage.getItem('OPENAI_API_KEY') ||
-      window.prompt("Enter OpenAI API Key:");
+      genApiKey;
     if (!apiKey) return;
-    localStorage.setItem('OPENAI_API_KEY', apiKey);
+    
+    if (genApiKey) {
+      localStorage.setItem('OPENAI_API_KEY', genApiKey);
+    }
 
     // Get all image blocks
     const imageBlocks = Object.values(blocks).filter(b => b.type === 'image' && b.data?.url);
@@ -422,25 +428,26 @@ Generate a new standalone image, not a collage, grid, moodboard, or reproduction
   let itemIndex = 0;
 
   return (
-    <AnimatePresence>
-      {visible && (
-        <motion.div
-          className="fixed top-0 left-0 z-[10000]"
-          initial={{ x: menuState.x, y: menuState.y }}
-          animate={{ x: menuState.x, y: menuState.y }}
-          transition={{ type: "spring", bounce: 0, duration: 0.4 }}
-          style={{ pointerEvents: 'none' }}
-        >
-          <motion.div 
-            initial="hidden"
-            animate="visible"
-            exit="exit"
-            variants={menuVariants}
-            custom={totalItems}
-            className="bg-white/95 backdrop-blur-md border border-zinc-200/80 shadow-none rounded-xl min-w-[180px] overflow-hidden"
-            style={{ originX: 0, originY: 0, pointerEvents: 'auto' }}
+    <>
+      <AnimatePresence>
+        {visible && (
+          <motion.div
+            className="fixed top-0 left-0 z-[10000]"
+            initial={{ x: menuState.x, y: menuState.y }}
+            animate={{ x: menuState.x, y: menuState.y }}
+            transition={{ type: "spring", bounce: 0, duration: 0.4 }}
+            style={{ pointerEvents: 'none' }}
           >
-            <div className="py-1.5 flex flex-col">
+            <motion.div 
+              initial="hidden"
+              animate="visible"
+              exit="exit"
+              variants={menuVariants}
+              custom={totalItems}
+              className="bg-white/95 backdrop-blur-md border border-zinc-200/80 shadow-none rounded-xl min-w-[180px] overflow-hidden"
+              style={{ originX: 0, originY: 0, pointerEvents: 'auto' }}
+            >
+              <div className="py-1.5 flex flex-col">
               <motion.button custom={{ i: itemIndex++, total: totalItems }} variants={itemVariants} type="button" onClick={() => handleAction(undo)} whileHover="hover" whileTap="tap" className="relative w-full flex items-center justify-between px-3 py-1.5 text-sm outline-none group z-10 text-zinc-700 cursor-default">
                 <motion.div className="absolute inset-0 rounded-lg mx-1 -z-10 bg-zinc-100" style={{ opacity: 0, scale: 0.95 }} variants={{ hover: { opacity: 1, scale: 1, transition: { type: "spring", bounce: 0.25, duration: 0.4 } }, tap: { scale: 0.95, opacity: 1 } }} />
                 <motion.div className="flex items-center gap-2.5 z-10" style={{ x: 0 }} variants={{ hover: { x: 4, transition: { type: "spring", bounce: 0.4, duration: 0.4 } } }}>
@@ -571,7 +578,7 @@ Generate a new standalone image, not a collage, grid, moodboard, or reproduction
                           <span>Make Moodboard</span>
                         </motion.div>
                       </motion.button>
-                      <motion.button custom={{ i: itemIndex++, total: totalItems }} variants={itemVariants} type="button" onClick={handleGenerateImage} whileHover="hover" whileTap="tap" className="relative w-full flex items-center justify-between px-3 py-1.5 text-sm outline-none group z-10 text-zinc-700 cursor-default">
+                      <motion.button custom={{ i: itemIndex++, total: totalItems }} variants={itemVariants} type="button" onClick={() => { setVisible(false); setShowGenerateModal(true); }} whileHover="hover" whileTap="tap" className="relative w-full flex items-center justify-between px-3 py-1.5 text-sm outline-none group z-10 text-zinc-700 cursor-default">
                         <motion.div className="absolute inset-0 rounded-lg mx-1 -z-10 bg-zinc-100" style={{ opacity: 0, scale: 0.95 }} variants={{ hover: { opacity: 1, scale: 1, transition: { type: "spring", bounce: 0.25, duration: 0.4 } }, tap: { scale: 0.95, opacity: 1 } }} />
                         <motion.div className="flex items-center gap-2.5 z-10" style={{ x: 0 }} variants={{ hover: { x: 4, transition: { type: "spring", bounce: 0.4, duration: 0.4 } } }}>
                           <motion.div style={{ scale: 1, rotate: 0 }} variants={{ hover: { scale: 1.15, transition: { type: "spring", bounce: 0.6 } } }}>
@@ -597,10 +604,90 @@ Generate a new standalone image, not a collage, grid, moodboard, or reproduction
                   </motion.button>
                 </>
               )}
-            </div>
+              </div>
+            </motion.div>
           </motion.div>
-        </motion.div>
-      )}
-    </AnimatePresence>
+        )}
+      </AnimatePresence>
+      
+      <AnimatePresence>
+        {showGenerateModal && (
+          <motion.div
+            className="fixed inset-0 z-[10001] bg-black/20 backdrop-blur-sm flex items-center justify-center p-4"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            onClick={() => setShowGenerateModal(false)}
+          >
+            <motion.div
+              className="bg-white rounded-2xl shadow-2xl w-full max-w-md overflow-hidden flex flex-col"
+              initial={{ scale: 0.95, opacity: 0, y: 10 }}
+              animate={{ scale: 1, opacity: 1, y: 0 }}
+              exit={{ scale: 0.95, opacity: 0, y: 10 }}
+              transition={{ type: "spring", bounce: 0, duration: 0.4 }}
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className="px-6 py-5 border-b border-zinc-100 flex items-center justify-between bg-white">
+                <div className="flex items-center gap-2 text-zinc-900">
+                  <Sparkles className="w-5 h-5 text-blue-500" />
+                  <h2 className="text-lg font-semibold tracking-tight">Generate Image</h2>
+                </div>
+                <button 
+                  onClick={() => setShowGenerateModal(false)}
+                  className="p-1.5 text-zinc-400 hover:text-zinc-600 hover:bg-zinc-100 rounded-lg transition-colors"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+              
+              <div className="p-6 flex flex-col gap-5 bg-zinc-50/50">
+                <div className="flex flex-col gap-2">
+                  <label className="text-sm font-medium text-zinc-700">Image Prompt</label>
+                  <textarea
+                    value={genPrompt}
+                    onChange={(e) => setGenPrompt(e.target.value)}
+                    placeholder="Describe the image you want to generate..."
+                    className="w-full min-h-[100px] p-3 text-sm border border-zinc-200 rounded-xl outline-none focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10 transition-all resize-none bg-white placeholder:text-zinc-400"
+                    autoFocus
+                  />
+                </div>
+                
+                {!import.meta.env.VITE_OPENAI_API_KEY && (
+                  <div className="flex flex-col gap-2">
+                    <label className="text-sm font-medium text-zinc-700 flex justify-between">
+                      OpenAI API Key
+                      <span className="text-xs text-zinc-400 font-normal">Saved locally</span>
+                    </label>
+                    <input
+                      type="password"
+                      value={genApiKey}
+                      onChange={(e) => setGenApiKey(e.target.value)}
+                      placeholder="sk-..."
+                      className="w-full p-3 text-sm border border-zinc-200 rounded-xl outline-none focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10 transition-all bg-white font-mono placeholder:font-sans placeholder:text-zinc-400"
+                    />
+                  </div>
+                )}
+              </div>
+              
+              <div className="px-6 py-4 border-t border-zinc-100 flex items-center justify-end gap-3 bg-white">
+                <button
+                  onClick={() => setShowGenerateModal(false)}
+                  className="px-4 py-2 text-sm font-medium text-zinc-600 hover:text-zinc-900 hover:bg-zinc-100 rounded-lg transition-colors"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={executeGenerateImage}
+                  disabled={!genPrompt.trim() || (!import.meta.env.VITE_OPENAI_API_KEY && !genApiKey.trim())}
+                  className="px-5 py-2 text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 disabled:opacity-50 disabled:hover:bg-blue-600 rounded-lg transition-colors shadow-sm shadow-blue-600/20"
+                >
+                  Generate
+                </button>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </>
   );
 };
