@@ -27,10 +27,6 @@ export const SearchOverlay: React.FC = () => {
     if (isSearchOpen) {
       const timer = setTimeout(() => inputRef.current?.focus(), 400);
       return () => clearTimeout(timer);
-    } else {
-      setQuery('');
-      setResults([]);
-      setSelectedIndex(0);
     }
   }, [isSearchOpen]);
 
@@ -100,20 +96,46 @@ export const SearchOverlay: React.FC = () => {
   };
 
   return (
-    <AnimatePresence>
+    <AnimatePresence
+      onExitComplete={() => {
+        setQuery('');
+        setResults([]);
+        setSelectedIndex(0);
+      }}
+    >
       {isSearchOpen && (
         <motion.div
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
           exit={{ opacity: 0 }}
-          className="fixed inset-0 z-[10000] flex items-start justify-center pt-[15vh] bg-zinc-950/40 backdrop-blur-xl"
+          className="fixed inset-0 z-[10000] flex items-center justify-center bg-zinc-950/40 backdrop-blur-xl"
           onClick={() => setIsSearchOpen(false)}
         >
           <motion.div
-            initial={{ scale: 0.85, scaleY: 0.1, opacity: 0, y: 30, filter: "blur(20px)" }}
-            animate={{ scale: 1, scaleY: 1, opacity: 1, y: 0, filter: "blur(0px)" }}
-            exit={{ scale: 0.85, scaleY: 0.1, opacity: 0, y: 30, filter: "blur(20px)" }}
-            transition={{ type: "spring", damping: 18, stiffness: 250, mass: 0.8 }}
+            initial={{ y: "0vh", opacity: 0, scale: 0.95, filter: "blur(10px)" }}
+            animate={{ 
+              y: query ? "-25vh" : "0vh",
+              opacity: 1,
+              scale: 1,
+              filter: "blur(0px)"
+            }}
+            exit={{ 
+              y: query ? "-25vh" : "0vh", 
+              opacity: 0, 
+              scale: 0.95, 
+              filter: "blur(10px)" 
+            }}
+            transition={{ 
+              y: {
+                type: "spring",
+                damping: 30,
+                stiffness: 150,
+                mass: 1
+              },
+              opacity: { duration: 0.3, ease: "easeOut" },
+              filter: { duration: 0.3 },
+              scale: { duration: 0.3, ease: "easeOut" }
+            }}
             className="relative w-full max-w-2xl px-6"
             onClick={(e) => e.stopPropagation()}
           >
@@ -147,52 +169,87 @@ export const SearchOverlay: React.FC = () => {
                 <AnimatePresence>
                   {results.length > 0 && (
                     <motion.div
-                      initial={{ opacity: 0, y: -10 }}
-                      animate={{ opacity: 1, y: 0 }}
-                      exit={{ opacity: 0, y: -10 }}
-                      className="max-h-80 overflow-y-auto py-2"
+                      initial={{ opacity: 0, height: 0 }}
+                      animate={{ opacity: 1, height: "auto" }}
+                      exit={{ opacity: 0, height: 0 }}
+                      transition={{ 
+                        height: { type: "spring", damping: 30, stiffness: 150, mass: 1 },
+                        opacity: { duration: 0.2 }
+                      }}
+                      className="max-h-80 overflow-y-auto"
                     >
-                      {results.map((result, index) => {
-                        const Icon = blockTypeIcons[result.blockType as keyof typeof blockTypeIcons] || FileText;
-                        return (
-                          <button
-                            type="button"
-                            key={result.id}
-                            onClick={() => selectResult(result)}
-                            className={clsx(
-                              "w-full flex items-center px-4 py-3 transition-colors text-left",
-                              index === selectedIndex ? "bg-zinc-100" : "hover:bg-zinc-50"
-                            )}
-                          >
-                            <div className={clsx(
-                              "w-10 h-10 rounded-xl flex items-center justify-center mr-3",
-                              result.blockType === 'sticky' ? "bg-yellow-100 text-yellow-700" :
-                              result.blockType === 'link' ? "bg-blue-100 text-blue-700" :
-                              "bg-zinc-100 text-zinc-700"
-                            )}>
-                              <Icon className="w-5 h-5" />
-                            </div>
-                            <div className="flex-1 min-w-0">
-                              <div className="text-sm font-medium text-zinc-900 truncate">
-                                {result.blockType === 'link' ? result.title : result.text?.slice(0, 50) || 'Empty'}
-                              </div>
-                              <div className="text-xs text-zinc-500 truncate">
-                                {getBlockPreview(result)}
-                              </div>
-                            </div>
-                            <span className="text-xs text-zinc-400 capitalize">{result.blockType}</span>
-                          </button>
-                        );
-                      })}
+                      <div className="py-2">
+                        {results.map((result, index) => {
+                          const Icon = blockTypeIcons[result.blockType as keyof typeof blockTypeIcons] || FileText;
+                          return (
+                              <button
+                                type="button"
+                                key={result.id}
+                                onClick={() => selectResult(result)}
+                                onPointerMove={() => {
+                                  if (selectedIndex !== index) {
+                                    setSelectedIndex(index);
+                                  }
+                                }}
+                                onFocus={() => setSelectedIndex(index)}
+                                className="w-full flex items-center px-4 py-3 text-left outline-none bg-transparent group"
+                              >
+                                <div className={clsx(
+                                  "w-10 h-10 rounded-xl flex items-center justify-center mr-3 shrink-0 transition-all duration-300 ease-out",
+                                  index === selectedIndex 
+                                    ? "bg-blue-500 text-white shadow-md scale-110" 
+                                    : result.blockType === 'sticky' ? "bg-yellow-100 text-yellow-700" :
+                                      result.blockType === 'link' ? "bg-blue-100 text-blue-700" :
+                                      "bg-zinc-100 text-zinc-700"
+                                )}>
+                                  <Icon className="w-5 h-5" />
+                                </div>
+                                <div className={clsx(
+                                  "flex-1 min-w-0 transition-all duration-300 ease-out",
+                                  index === selectedIndex ? "translate-x-2" : "translate-x-0"
+                                )}>
+                                  <div className={clsx(
+                                    "text-sm font-medium truncate transition-colors duration-300",
+                                    index === selectedIndex ? "text-blue-600" : "text-zinc-900"
+                                  )}>
+                                    {result.blockType === 'link' ? result.title : result.text?.slice(0, 50) || 'Empty'}
+                                  </div>
+                                  <div className={clsx(
+                                    "text-xs truncate transition-colors duration-300",
+                                    index === selectedIndex ? "text-blue-500/80" : "text-zinc-500"
+                                  )}>
+                                    {getBlockPreview(result)}
+                                  </div>
+                                </div>
+                                <span className={clsx(
+                                  "text-xs capitalize shrink-0 ml-3 transition-all duration-300 ease-out",
+                                  index === selectedIndex ? "text-blue-500/80 -translate-x-2" : "text-zinc-400 translate-x-0"
+                                )}>{result.blockType}</span>
+                              </button>
+                          );
+                        })}
+                      </div>
                     </motion.div>
                   )}
                 </AnimatePresence>
 
-                {query && !isSearching && results.length === 0 && (
-                  <div className="px-4 py-8 text-center text-zinc-400">
-                    No results found for "{query}"
-                  </div>
-                )}
+                <AnimatePresence>
+                  {query && !isSearching && results.length === 0 && (
+                    <motion.div 
+                      initial={{ opacity: 0, height: 0 }}
+                      animate={{ opacity: 1, height: "auto" }}
+                      exit={{ opacity: 0, height: 0 }}
+                      transition={{ 
+                        height: { type: "spring", damping: 30, stiffness: 150, mass: 1 },
+                        opacity: { duration: 0.2 }
+                      }}
+                    >
+                      <div className="px-4 py-8 text-center text-zinc-400">
+                        No results found for "{query}"
+                      </div>
+                    </motion.div>
+                  )}
+                </AnimatePresence>
               </div>
             </div>
 

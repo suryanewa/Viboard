@@ -50,6 +50,7 @@ export const Toolbar: React.FC = () => {
 
   const [hopDirection, setHopDirection] = useState<1 | -1>(1);
   const [hoveredTool, setHoveredTool] = useState<string | null>(null);
+  const [lastSelectedTool, setLastSelectedTool] = useState<string | null>(null);
   const [hoveredTopRight, setHoveredTopRight] = useState<string | null>(null);
   const [hoveredTopLeft, setHoveredTopLeft] = useState<string | null>(null);
   const [activeToolbarTool, setActiveToolbarTool] = useState<ToolbarVisualTool>(tool);
@@ -145,6 +146,9 @@ export const Toolbar: React.FC = () => {
       }
     }
     
+    setHoveredTool(null);
+    setHoveredTopRight(null);
+    setHoveredTopLeft(null);
     setAnimationState('hopping');
     if (animationTimeoutRef.current !== null) {
       window.clearTimeout(animationTimeoutRef.current);
@@ -361,7 +365,7 @@ export const Toolbar: React.FC = () => {
           >
             {(hoveredTopRight || (snapping ? 'snap' : gridView !== 'none' ? 'grid' : null)) === 'snap' && (
               <motion.div
-                layoutId="top-right-hover-bg"
+                layoutId={snapping ? undefined : "top-right-hover-bg"}
                 initial={false}
                 animate={{ opacity: hoveredTopRight === 'snap' && !snapping ? 1 : 0 }}
                 transition={{
@@ -403,7 +407,7 @@ export const Toolbar: React.FC = () => {
           >
             {(hoveredTopRight || (snapping ? 'snap' : gridView !== 'none' ? 'grid' : null)) === 'grid' && (
               <motion.div
-                layoutId="top-right-hover-bg"
+                layoutId={gridView !== 'none' ? undefined : "top-right-hover-bg"}
                 initial={false}
                 animate={{ opacity: hoveredTopRight === 'grid' && gridView === 'none' ? 1 : 0 }}
                 transition={{
@@ -537,7 +541,7 @@ export const Toolbar: React.FC = () => {
           >
             {(hoveredTopRight || (snapping ? 'snap' : gridView !== 'none' ? 'grid' : null)) === 'zoom-out' && (
               <motion.div
-                layoutId="top-right-hover-bg"
+                layoutId="top-right-hover-bg-zoom-out"
                 initial={false}
                 animate={{ opacity: hoveredTopRight === 'zoom-out' ? 1 : 0 }}
                 transition={{
@@ -565,7 +569,7 @@ export const Toolbar: React.FC = () => {
           >
             {(hoveredTopRight || (snapping ? 'snap' : gridView !== 'none' ? 'grid' : null)) === 'zoom-text' && (
               <motion.div
-                layoutId="top-right-hover-bg"
+                layoutId="top-right-hover-bg-zoom-text"
                 initial={false}
                 animate={{ opacity: hoveredTopRight === 'zoom-text' ? 1 : 0 }}
                 transition={{
@@ -601,7 +605,7 @@ export const Toolbar: React.FC = () => {
           >
             {(hoveredTopRight || (snapping ? 'snap' : gridView !== 'none' ? 'grid' : null)) === 'zoom-in' && (
               <motion.div
-                layoutId="top-right-hover-bg"
+                layoutId="top-right-hover-bg-zoom-in"
                 initial={false}
                 animate={{ opacity: hoveredTopRight === 'zoom-in' ? 1 : 0 }}
                 transition={{
@@ -708,7 +712,7 @@ export const Toolbar: React.FC = () => {
                       type="button"
                       initial="rest"
                       animate={isSelected ? "selected" : "rest"}
-                      whileHover={!isSelected ? "hover" : undefined}
+                      whileHover="hover"
                       onPointerEnter={() => setHoveredTool(t.id)}
                       onPointerDown={(e) => {
                         e.stopPropagation();
@@ -718,11 +722,11 @@ export const Toolbar: React.FC = () => {
                       }}
                       className="relative p-2 flex items-center justify-center w-10 h-10 rounded-lg transition-colors"
                     >
-                    {(hoveredTool || activeToolbarTool) === t.id && (
+                    {(hoveredTool || (isPlusMenuOpen ? 'plus' : activeToolbarTool)) === t.id && (
                       <motion.div
-                        layoutId="toolbar-hover-bg"
+                        layoutId={isSelected ? "active-tool-bg-shim" : "toolbar-hover-bg"}
                         initial={false}
-                        animate={{ opacity: hoveredTool === t.id && !isSelected ? 1 : 0 }}
+                        animate={{ opacity: hoveredTool === t.id && !isSelected && !isPlusMenuOpen ? 1 : 0 }}
                         transition={{
                           layout: { type: "spring", stiffness: 350, damping: 30, mass: 0.8 },
                           opacity: { duration: 0.2 }
@@ -795,7 +799,7 @@ export const Toolbar: React.FC = () => {
                                       transition: { type: "spring", stiffness: 300, damping: 25 } 
                                     }
                                   }}
-                                  whileHover={!isAnySelected ? { scale: 1.15, rotate: i % 2 === 0 ? 5 : -5 } : undefined}
+                                  whileHover={isAnySelected ? {} : { scale: 1.15, rotate: i % 2 === 0 ? 5 : -5 }}
                                   className={clsx(
                                     "absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 flex items-center justify-center border border-solid pointer-events-auto transition-colors duration-300",
                                     isSelected ? "text-red-600 border-transparent" : "text-zinc-700 hover:text-zinc-900 border-zinc-200"
@@ -850,7 +854,7 @@ export const Toolbar: React.FC = () => {
                     
                     <motion.div
                       variants={{ 
-                        hover: t.hoverAnim,
+                        hover: isSelected ? {} : t.hoverAnim,
                         rest: { scale: 1, rotate: 0, x: 0, y: 0 },
                         selected: { 
                           scale: [1, 0.8, 1.2, 1],
@@ -938,9 +942,13 @@ export const Toolbar: React.FC = () => {
                 <Tooltip content="Search" shortcut="⌘K" position="top">
                   <motion.button 
                     type="button"
-                    whileHover="hover"
-                    onClick={() => setIsSearchOpen(true)}
+                    onClick={(e) => {
+                      setHoveredTopLeft(null);
+                      setIsSearchOpen(true);
+                      e.currentTarget.blur();
+                    }}
                     onPointerEnter={() => setHoveredTopLeft('search')}
+                    onPointerLeave={() => setHoveredTopLeft(null)}
                     className="relative w-9 h-9 p-2 transition-colors flex items-center justify-center rounded-lg text-zinc-600 hover:text-zinc-900"
                   >
                     {hoveredTopLeft === 'search' && (
@@ -955,7 +963,15 @@ export const Toolbar: React.FC = () => {
                         className="absolute inset-0 rounded-lg bg-zinc-100 -z-10"
                       />
                     )}
-                    <motion.div variants={{ hover: { scale: 1.1, rotate: -15 } }} transition={{ duration: 0.3, type: "spring" }}>
+                    <motion.div
+                      initial={false}
+                      animate={hoveredTopLeft === 'search' ? 'hover' : 'rest'}
+                      variants={{
+                        rest: { scale: 1, rotate: 0 },
+                        hover: { scale: 1.1, rotate: -15 },
+                      }}
+                      transition={{ duration: 0.3, type: 'spring' }}
+                    >
                       <Search className="w-5 h-5 relative z-10" />
                     </motion.div>
                   </motion.button>
