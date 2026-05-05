@@ -803,7 +803,7 @@ export const Toolbar: React.FC = () => {
                                       boxShadow: isSelected ? "0 8px 16px -4px rgba(0,0,0,0), 0 4px 8px -2px rgba(0,0,0,0)" : "0 8px 16px -4px rgba(0,0,0,0.1), 0 4px 8px -2px rgba(0,0,0,0.05)",
                                       width: isSelected ? 40 : 44,
                                       height: isSelected ? 40 : 44,
-                                      transition: { type: "spring", stiffness: 300, damping: 25 } 
+                                      transition: { type: "spring", stiffness: 250, damping: 25, mass: 0.5 } 
                                     }
                                   }}
                                   whileHover={isAnySelected ? {} : { scale: 1.15, rotate: i % 2 === 0 ? 5 : -5 }}
