@@ -50,7 +50,6 @@ export const Toolbar: React.FC = () => {
 
   const [hopDirection, setHopDirection] = useState<1 | -1>(1);
   const [hoveredTool, setHoveredTool] = useState<string | null>(null);
-  const [lastSelectedTool, setLastSelectedTool] = useState<string | null>(null);
   const [hoveredTopRight, setHoveredTopRight] = useState<string | null>(null);
   const [hoveredTopLeft, setHoveredTopLeft] = useState<string | null>(null);
   const [activeToolbarTool, setActiveToolbarTool] = useState<ToolbarVisualTool>(tool);

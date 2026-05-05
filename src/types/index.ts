@@ -1,4 +1,4 @@
-export type BlockType = 'sticky' | 'text' | 'image' | 'link' | 'shape' | 'drawing';
+export type BlockType = 'sticky' | 'text' | 'image' | 'link' | 'shape' | 'drawing' | 'audio' | 'instagram' | 'x' | 'youtube' | 'video' | 'substack' | 'medium' | 'figma' | 'arena' | 'github' | 'wikipedia' | 'codepen' | 'reddit' | 'tiktok' | 'pdf';
 
 export interface Block {
   id: string;

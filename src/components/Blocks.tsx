@@ -18,6 +18,14 @@ export const StickyBlock: React.FC<BlockContentProps> = ({ block }) => {
       hasFocused.current = true;
       requestAnimationFrame(() => {
         el.focus();
+        if (typeof window !== 'undefined') {
+          const selection = window.getSelection();
+          const range = document.createRange();
+          range.selectNodeContents(el);
+          range.collapse(false);
+          selection?.removeAllRanges();
+          selection?.addRange(range);
+        }
       });
     }
   };
@@ -61,24 +69,50 @@ export const StickyBlock: React.FC<BlockContentProps> = ({ block }) => {
 export const TextBlock: React.FC<BlockContentProps> = ({ block }) => {
   const textRef = useRef<HTMLParagraphElement>(null);
   const updateBlock = useBoardStore((state) => state.updateBlock);
+  const hasFocused = useRef(false);
+
+  const setRef = (el: HTMLParagraphElement | null) => {
+    textRef.current = el;
+    if (el && !hasFocused.current) {
+      hasFocused.current = true;
+      requestAnimationFrame(() => {
+        el.focus();
+        if (typeof window !== 'undefined') {
+          const selection = window.getSelection();
+          const range = document.createRange();
+          range.selectNodeContents(el);
+          range.collapse(false);
+          selection?.removeAllRanges();
+          selection?.addRange(range);
+        }
+      });
+    }
+  };
 
   const handleInput = () => {
     const el = textRef.current;
     if (el) {
       el.style.height = 'auto';
       el.style.height = `${el.scrollHeight}px`;
-      updateBlock(block.id, { data: { ...block.data, text: el.innerText } });
     }
+  };
+
+  const handleBlur = () => {
+    if (textRef.current) {
+      updateBlock(block.id, { data: { ...block.data, text: textRef.current.innerText } });
+    }
+    window.getSelection()?.removeAllRanges();
   };
 
   return (
     <div className="w-full min-h-full p-2 bg-transparent flex flex-col">
       <p
-        ref={textRef}
+        ref={setRef}
         className="text-zinc-800 font-sans text-xl outline-none"
         contentEditable
         suppressContentEditableWarning
         onInput={handleInput}
+        onBlur={handleBlur}
         style={{ minHeight: '1.5em' }}
       >
         {block.data.text}
@@ -175,7 +209,7 @@ export const ImageBlock: React.FC<BlockContentProps> = ({ block }) => {
   }, [aspectRatio, block.id, block.width, block.height, updateBlock]);
 
   return (
-    <div className="w-full h-full bg-white flex items-center justify-center overflow-hidden">
+    <div className="w-full h-full flex items-center justify-center overflow-hidden">
       {block.data.url ? (
         <img
           src={block.data.url}
@@ -222,7 +256,7 @@ export const LinkBlock: React.FC<BlockContentProps> = ({ block }) => {
   }, [block.data.url]);
 
   return (
-    <div className="w-full h-full flex flex-col bg-white border border-zinc-200 overflow-hidden pointer-events-none">
+    <div className="w-full h-full flex flex-col border border-zinc-200 overflow-hidden pointer-events-none">
       <div className="h-10 bg-zinc-50 border-b border-zinc-200 flex items-center justify-center px-3 relative flex-shrink-0">
         <div className="absolute left-3 flex gap-1.5">
           <div className="w-2.5 h-2.5 rounded-full bg-[#ff5f56] border border-[#e0443e]/50" />
@@ -267,6 +301,421 @@ export const LinkBlock: React.FC<BlockContentProps> = ({ block }) => {
   );
 };
 
+export const AudioBlock: React.FC<BlockContentProps> = ({ block }) => {
+  const [isPlaying, setIsPlaying] = useState(false);
+  const [metadata, setMetadata] = useState<{ title?: string; image?: string } | null>(null);
+  const { url, platform, coverUrl } = block.data;
+
+  useEffect(() => {
+    let isMounted = true;
+    if (coverUrl) return;
+
+    const fetchMetadata = async () => {
+      try {
+        const res = await fetch(`https://api.microlink.io?url=${encodeURIComponent(url)}`);
+        const json = await res.json();
+        if (isMounted && json.status === 'success') {
+          setMetadata({
+            title: json.data?.title,
+            image: json.data?.image?.url || json.data?.logo?.url
+          });
+        }
+      } catch (err) {
+        console.error(err);
+      }
+    };
+
+    fetchMetadata();
+    return () => { isMounted = false; };
+  }, [url, coverUrl]);
+
+  const displayImage = coverUrl || metadata?.image;
+
+  return (
+    <div className="relative w-full h-full flex items-center bg-transparent">
+      {/* Spinning Vinyl Record */}
+      <div 
+        className={clsx(
+          "absolute right-0 top-1/2 -translate-y-1/2 w-[95%] h-[95%] rounded-full bg-zinc-900 border-[6px] border-zinc-800 flex items-center justify-center shadow-xl transition-transform duration-700 ease-in-out",
+          isPlaying ? "translate-x-[50%] animate-[spin_3s_linear_infinite]" : "translate-x-[50%]"
+        )}
+      >
+        {/* Grooves */}
+        <div className="absolute inset-2 rounded-full border border-zinc-700/30" />
+        <div className="absolute inset-4 rounded-full border border-zinc-700/30" />
+        <div className="absolute inset-6 rounded-full border border-zinc-700/30" />
+        <div className="absolute inset-8 rounded-full border border-zinc-700/30" />
+        <div className="absolute inset-10 rounded-full border border-zinc-700/30" />
+        
+        {/* Center Label */}
+        <div className={clsx(
+          "w-1/3 h-1/3 rounded-full flex items-center justify-center overflow-hidden",
+          platform === 'Spotify' ? 'bg-[#1DB954]' :
+          platform === 'SoundCloud' ? 'bg-[#FF5500]' :
+          platform === 'Apple Music' ? 'bg-[#FA243C]' :
+          'bg-red-500'
+        )}>
+          {displayImage && (
+            <img src={displayImage} alt="Center Label" className="absolute inset-0 w-full h-full object-cover opacity-50 mix-blend-overlay" />
+          )}
+          <div className="w-3 h-3 rounded-full bg-zinc-900 relative z-10" />
+        </div>
+      </div>
+
+      {/* Album Cover (Square) */}
+      <div 
+        className="relative z-10 w-full h-full bg-zinc-800 rounded-md shadow-2xl overflow-hidden cursor-pointer group"
+        onClick={() => setIsPlaying(!isPlaying)}
+      >
+        {displayImage ? (
+          <img src={displayImage} alt="Album Cover" className="w-full h-full object-cover" />
+        ) : (
+          <div className={clsx(
+            "w-full h-full flex flex-col items-center justify-center p-4",
+            platform === 'Spotify' ? 'bg-gradient-to-br from-zinc-800 to-[#1DB954]/20' :
+            platform === 'SoundCloud' ? 'bg-gradient-to-br from-zinc-800 to-[#FF5500]/20' :
+            platform === 'Apple Music' ? 'bg-gradient-to-br from-zinc-800 to-[#FA243C]/20' :
+            'bg-gradient-to-br from-purple-500 to-indigo-600'
+          )}>
+            <span className="text-white font-bold text-xl mb-2 text-center">{metadata?.title || platform || 'Audio'}</span>
+            <span className="text-zinc-400 text-xs text-center truncate w-full">{url}</span>
+          </div>
+        )}
+        
+        {/* Play/Pause Overlay */}
+        <div className={clsx(
+          "absolute inset-0 bg-black/40 transition-opacity flex items-center justify-center",
+          isPlaying ? "opacity-0 group-hover:opacity-100" : "opacity-100 group-hover:opacity-100"
+        )}>
+           <div className="w-14 h-14 rounded-full bg-white/20 backdrop-blur-sm flex items-center justify-center shadow-lg border border-white/10 transition-transform group-hover:scale-110">
+             {isPlaying ? (
+               <div className="flex gap-1.5">
+                 <div className="w-1.5 h-5 bg-white rounded-sm" />
+                 <div className="w-1.5 h-5 bg-white rounded-sm" />
+               </div>
+             ) : (
+               <div className="w-0 h-0 border-t-[10px] border-t-transparent border-l-[16px] border-l-white border-b-[10px] border-b-transparent ml-1" />
+             )}
+           </div>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+import { Tweet } from 'react-tweet';
+
+export const XBlock: React.FC<BlockContentProps> = ({ block }) => {
+  const match = block.data.url?.match(/\/(?:status|statuses)\/(\d+)/);
+  const tweetId = match ? match[1] : null;
+
+  return (
+    <div 
+      className="w-full h-full bg-[#0a0a0a] rounded-[16px] overflow-hidden shadow-2xl"
+      data-theme="dark"
+    >
+      {tweetId ? (
+        <div className="w-full h-full overflow-y-auto pointer-events-auto flex justify-center items-start [&>div]:my-0 [&>div]:w-full [&>div]:max-w-full">
+          <Tweet id={tweetId} />
+        </div>
+      ) : (
+        <div className="w-full h-full flex items-center justify-center text-zinc-500">
+          Invalid Tweet URL
+        </div>
+      )}
+    </div>
+  );
+};
+
+export const YoutubeBlock: React.FC<BlockContentProps> = ({ block }) => {
+  const videoId = block.data.videoId;
+
+  return (
+    <div className="w-full h-full bg-black rounded-md overflow-hidden shadow-sm pointer-events-auto border border-zinc-800">
+      {videoId ? (
+        <iframe
+          width="100%"
+          height="100%"
+          src={`https://www.youtube.com/embed/${videoId}`}
+          title="YouTube video player"
+          frameBorder="0"
+          allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+          allowFullScreen
+        ></iframe>
+      ) : (
+        <div className="w-full h-full flex items-center justify-center text-zinc-500">
+          Invalid YouTube URL
+        </div>
+      )}
+    </div>
+  );
+};
+
+export const VideoBlock: React.FC<BlockContentProps> = ({ block }) => {
+  return (
+    <div className="w-full h-full bg-black rounded-md overflow-hidden shadow-sm pointer-events-auto border border-zinc-800 flex items-center justify-center">
+      {block.data.url ? (
+        <video
+          src={block.data.url}
+          controls
+          className="w-full h-full object-contain"
+          controlsList="nodownload"
+        />
+      ) : (
+        <div className="text-zinc-500">No Video</div>
+      )}
+    </div>
+  );
+};
+
+export const SubstackBlock: React.FC<BlockContentProps> = ({ block }) => {
+  const embedUrl = React.useMemo(() => {
+    try {
+      const url = new URL(block.data.url);
+      url.search = '';
+      if (url.pathname.includes('/p/')) {
+        return `${url.origin}${url.pathname}/embed`;
+      }
+      return `${url.origin}/embed`;
+    } catch (e) {
+      return block.data.url;
+    }
+  }, [block.data.url]);
+
+  return (
+    <div className="w-full h-full bg-white rounded-md overflow-hidden shadow-sm pointer-events-auto border border-zinc-200">
+      <iframe
+        src={embedUrl}
+        width="100%"
+        height="100%"
+        frameBorder="0"
+        scrolling="no"
+        style={{ background: 'white' }}
+      />
+    </div>
+  );
+};
+
+export const MediumBlock: React.FC<BlockContentProps> = ({ block }) => {
+  const [metadata, setMetadata] = useState<any>(null);
+  const [isLoading, setIsLoading] = useState(!block.data.fetched);
+  const updateBlock = useBoardStore((state) => state.updateBlock);
+
+  useEffect(() => {
+    if (block.data.fetched) {
+      setMetadata(block.data.metadata);
+      setIsLoading(false);
+      return;
+    }
+
+    let isMounted = true;
+    const fetchMeta = async () => {
+      try {
+        const res = await fetch(`https://api.microlink.io?url=${encodeURIComponent(block.data.url)}`);
+        const json = await res.json();
+        if (isMounted && json.status === 'success') {
+          const meta = {
+            title: json.data.title,
+            description: json.data.description,
+            image: json.data.image?.url,
+            author: json.data.author,
+            publisher: json.data.publisher,
+            date: json.data.date
+          };
+          setMetadata(meta);
+          updateBlock(block.id, { data: { ...block.data, fetched: true, metadata: meta } });
+        }
+      } catch (e) {
+      } finally {
+        if (isMounted) setIsLoading(false);
+      }
+    };
+    fetchMeta();
+    return () => { isMounted = false; };
+  }, [block.data.url, block.data.fetched, block.id, updateBlock]);
+
+  return (
+    <div className="w-full h-full bg-white border border-zinc-200 rounded-[12px] overflow-hidden font-sans flex flex-col shadow-sm">
+      {isLoading ? (
+        <div className="flex-1 flex items-center justify-center bg-zinc-50">
+          <div className="w-6 h-6 border-2 border-zinc-200 border-t-zinc-800 rounded-full animate-spin" />
+        </div>
+      ) : (
+        <>
+          {metadata?.image && (
+            <div className="w-full h-40 bg-zinc-100 flex-shrink-0 border-b border-zinc-100">
+              <img src={metadata.image} alt="" className="w-full h-full object-cover" />
+            </div>
+          )}
+          <div className="p-4 flex flex-col flex-1 bg-white">
+            <div className="flex items-center gap-2 mb-2">
+              <div className="w-5 h-5 rounded-full bg-black flex items-center justify-center overflow-hidden">
+                <span className="text-[10px] font-serif font-bold text-white">M</span>
+              </div>
+              <span className="text-xs text-zinc-600 font-medium">{metadata?.author || 'Medium'}</span>
+            </div>
+            <h3 className="font-bold text-zinc-900 text-[17px] leading-tight mb-1.5 line-clamp-2">{metadata?.title || 'Medium Article'}</h3>
+            <p className="text-[13px] leading-snug text-zinc-500 line-clamp-3 mb-3">{metadata?.description}</p>
+            <div className="mt-auto flex items-center justify-between text-[11px] text-zinc-400 font-medium uppercase tracking-wider">
+              <span>{metadata?.date ? new Date(metadata.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : 'Read on Medium'}</span>
+              <ArrowUpRight className="w-3.5 h-3.5" />
+            </div>
+          </div>
+        </>
+      )}
+    </div>
+  );
+};
+
+export const FigmaBlock: React.FC<BlockContentProps> = ({ block }) => {
+  return (
+    <div className="w-full h-full bg-zinc-900 rounded-md overflow-hidden shadow-sm pointer-events-auto border border-zinc-800">
+      <iframe
+        width="100%"
+        height="100%"
+        src={`https://www.figma.com/embed?embed_host=share&url=${encodeURIComponent(block.data.url)}`}
+        allowFullScreen
+      />
+    </div>
+  );
+};
+
+export const CodepenBlock: React.FC<BlockContentProps> = ({ block }) => {
+  const embedUrl = block.data.url.replace('/pen/', '/embed/');
+  return (
+    <div className="w-full h-full bg-zinc-900 rounded-md overflow-hidden shadow-sm pointer-events-auto border border-zinc-800">
+      <iframe
+        width="100%"
+        height="100%"
+        src={`${embedUrl}?default-tab=result&theme-id=dark`}
+        frameBorder="no"
+        allowTransparency={true}
+        allowFullScreen
+      />
+    </div>
+  );
+};
+
+export const SmartCardBlock: React.FC<BlockContentProps & { platform: string }> = ({ block, platform }) => {
+  const [metadata, setMetadata] = useState<any>(null);
+  const [isLoading, setIsLoading] = useState(!block.data.fetched);
+  const updateBlock = useBoardStore((state) => state.updateBlock);
+
+  useEffect(() => {
+    if (block.data.fetched) {
+      setMetadata(block.data.metadata);
+      setIsLoading(false);
+      return;
+    }
+
+    let isMounted = true;
+    const fetchMeta = async () => {
+      try {
+        const res = await fetch(`https://api.microlink.io?url=${encodeURIComponent(block.data.url)}`);
+        const json = await res.json();
+        if (isMounted && json.status === 'success') {
+          const meta = {
+            title: json.data.title,
+            description: json.data.description,
+            image: json.data.image?.url,
+            logo: json.data.logo?.url,
+            publisher: json.data.publisher,
+          };
+          setMetadata(meta);
+          updateBlock(block.id, { data: { ...block.data, fetched: true, metadata: meta } });
+        }
+      } catch (e) {
+      } finally {
+        if (isMounted) setIsLoading(false);
+      }
+    };
+    fetchMeta();
+    return () => { isMounted = false; };
+  }, [block.data.url, block.data.fetched, block.id, updateBlock]);
+
+  const isDark = platform === 'github' || platform === 'codepen' || platform === 'reddit';
+  
+  return (
+    <div className={clsx(
+      "w-full h-full border rounded-[12px] overflow-hidden font-sans flex flex-col shadow-sm",
+      isDark ? "bg-zinc-900 border-zinc-800 text-zinc-100" : "bg-white border-zinc-200 text-zinc-900"
+    )}>
+      {isLoading ? (
+        <div className="flex-1 flex items-center justify-center">
+          <div className={clsx("w-6 h-6 border-2 rounded-full animate-spin", isDark ? "border-zinc-800 border-t-zinc-400" : "border-zinc-200 border-t-zinc-800")} />
+        </div>
+      ) : (
+        <>
+          {metadata?.image && platform !== 'github' && (
+            <div className={clsx("w-full h-32 flex-shrink-0 border-b", isDark ? "bg-zinc-800 border-zinc-800" : "bg-zinc-100 border-zinc-100")}>
+              <img src={metadata.image} alt="" className="w-full h-full object-cover" />
+            </div>
+          )}
+          <div className="p-4 flex flex-col flex-1">
+            <div className="flex items-center gap-2 mb-2">
+              {metadata?.logo && (
+                <img src={metadata.logo} alt="" className="w-4 h-4 rounded-sm" />
+              )}
+              <span className={clsx("text-xs font-medium", isDark ? "text-zinc-400" : "text-zinc-600")}>{metadata?.publisher || platform}</span>
+            </div>
+            <h3 className="font-bold text-[15px] leading-tight mb-1.5 line-clamp-2">{metadata?.title || 'Link'}</h3>
+            <p className={clsx("text-[13px] leading-snug line-clamp-3 mb-3", isDark ? "text-zinc-400" : "text-zinc-500")}>{metadata?.description}</p>
+            <div className={clsx("mt-auto flex items-center justify-between text-[11px] font-medium uppercase tracking-wider", isDark ? "text-zinc-500" : "text-zinc-400")}>
+              <span className="truncate max-w-[80%]">{block.data.url.replace(/^https?:\/\//, '')}</span>
+              <ArrowUpRight className="w-3.5 h-3.5 flex-shrink-0" />
+            </div>
+          </div>
+        </>
+      )}
+    </div>
+  );
+};
+
+export const TiktokBlock: React.FC<BlockContentProps> = ({ block }) => {
+  const match = block.data.url.match(/video\/(\d+)/);
+  const videoId = match ? match[1] : null;
+
+  return (
+    <div className="w-full h-full bg-black rounded-md overflow-hidden shadow-sm pointer-events-auto border border-zinc-800">
+      {videoId ? (
+        <iframe
+          src={`https://www.tiktok.com/embed/v2/${videoId}`}
+          className="w-full h-full"
+          frameBorder="0"
+          allow="encrypted-media;"
+          allowFullScreen
+        ></iframe>
+      ) : (
+        <div className="w-full h-full flex items-center justify-center text-zinc-500">
+          Invalid TikTok URL
+        </div>
+      )}
+    </div>
+  );
+};
+
+export const PdfBlock: React.FC<BlockContentProps> = ({ block }) => {
+  return (
+    <div className="w-full h-full bg-zinc-100 rounded-md overflow-hidden shadow-sm pointer-events-auto border border-zinc-200 flex flex-col">
+      <div className="h-8 bg-zinc-800 border-b border-zinc-900 flex items-center px-3 flex-shrink-0">
+        <div className="flex gap-1.5">
+          <div className="w-2.5 h-2.5 rounded-full bg-[#ff5f56] border border-[#e0443e]/50" />
+          <div className="w-2.5 h-2.5 rounded-full bg-[#ffbd2e] border border-[#dea123]/50" />
+          <div className="w-2.5 h-2.5 rounded-full bg-[#27c93f] border border-[#1aab29]/50" />
+        </div>
+        <div className="ml-3 text-xs font-medium text-zinc-400 truncate">
+          PDF Document
+        </div>
+      </div>
+      <iframe
+        src={`${block.data.url}#toolbar=0&navpanes=0`}
+        className="w-full flex-1"
+        frameBorder="0"
+      />
+    </div>
+  );
+};
+
 export const BlockRenderer: React.FC<BlockContentProps> = ({ block }) => {
   switch (block.type) {
     case 'sticky': return <StickyBlock block={block} />;
@@ -275,6 +724,20 @@ export const BlockRenderer: React.FC<BlockContentProps> = ({ block }) => {
     case 'drawing': return <DrawingBlock block={block} />;
     case 'image': return <ImageBlock block={block} />;
     case 'link': return <LinkBlock block={block} />;
+    case 'audio': return <AudioBlock block={block} />;
+    case 'x': return <XBlock block={block} />;
+    case 'youtube': return <YoutubeBlock block={block} />;
+    case 'video': return <VideoBlock block={block} />;
+    case 'substack': return <SubstackBlock block={block} />;
+    case 'medium': return <MediumBlock block={block} />;
+    case 'figma': return <FigmaBlock block={block} />;
+    case 'codepen': return <CodepenBlock block={block} />;
+    case 'github': return <SmartCardBlock block={block} platform="github" />;
+    case 'wikipedia': return <SmartCardBlock block={block} platform="wikipedia" />;
+    case 'reddit': return <SmartCardBlock block={block} platform="reddit" />;
+    case 'arena': return <SmartCardBlock block={block} platform="are.na" />;
+    case 'tiktok': return <TiktokBlock block={block} />;
+    case 'pdf': return <PdfBlock block={block} />;
     default: return <div className="p-4 bg-red-50 text-red-500">Unknown block type</div>;
   }
 };

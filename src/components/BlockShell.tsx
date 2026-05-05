@@ -706,7 +706,7 @@ export const BlockShell: React.FC<BlockShellProps> = ({ block, children }) => {
         x,
         y,
         scale,
-        boxShadow: (block.type === 'shape' || block.type === 'drawing' || block.type === 'text' || block.type === 'link' || block.type === 'sticky') ? 'none' : boxShadow,
+        boxShadow: (block.type === 'shape' || block.type === 'drawing' || block.type === 'text' || block.type === 'link' || block.type === 'sticky' || block.type === 'audio' || block.type === 'x' || block.type === 'youtube' || block.type === 'video' || block.type === 'substack' || block.type === 'medium' || block.type === 'figma' || block.type === 'arena' || block.type === 'github' || block.type === 'wikipedia' || block.type === 'codepen' || block.type === 'reddit' || block.type === 'tiktok' || block.type === 'pdf') ? 'none' : boxShadow,
         width,
         height,
         zIndex: block.zIndex,
@@ -715,10 +715,11 @@ export const BlockShell: React.FC<BlockShellProps> = ({ block, children }) => {
       className={clsx(
         'group absolute outline-none select-none touch-none',
         'transition-colors duration-300 ease-[cubic-bezier(0.22,1,0.36,1)]',
-        block.type !== 'shape' && block.type !== 'drawing' && block.type !== 'text' && block.type !== 'link' && [
-          'border shadow-none',
+        block.type !== 'shape' && block.type !== 'drawing' && block.type !== 'text' && block.type !== 'link' && block.type !== 'audio' && block.type !== 'x' && block.type !== 'youtube' && block.type !== 'video' && block.type !== 'substack' && block.type !== 'medium' && block.type !== 'figma' && block.type !== 'arena' && block.type !== 'github' && block.type !== 'wikipedia' && block.type !== 'codepen' && block.type !== 'reddit' && block.type !== 'tiktok' && block.type !== 'pdf' && [
+          'border shadow-none bg-white',
           isSelected ? 'border-transparent ring-2 ring-blue-500/20' : 'border-zinc-200 ring-2 ring-transparent hover:border-zinc-300'
         ],
+        block.type === 'audio' && (isSelected ? 'ring-2 ring-blue-500/20 rounded-md' : 'ring-2 ring-transparent rounded-md'),
         block.type === 'shape' && (isSelected ? 'ring-2 ring-blue-500/20' : 'ring-2 ring-transparent')
       )}
     >
@@ -750,8 +751,8 @@ export const BlockShell: React.FC<BlockShellProps> = ({ block, children }) => {
                 aria-hidden="true"
                 className="absolute pointer-events-none"
                 style={{ 
-                  top: (block.type === 'shape' || block.type === 'drawing' || block.type === 'text' || block.type === 'link') ? 0 : -1,
-                  left: (block.type === 'shape' || block.type === 'drawing' || block.type === 'text' || block.type === 'link') ? 0 : -1,
+                  top: (block.type === 'shape' || block.type === 'drawing' || block.type === 'text' || block.type === 'link' || block.type === 'audio' || block.type === 'x' || block.type === 'youtube' || block.type === 'video' || block.type === 'substack' || block.type === 'medium' || block.type === 'figma' || block.type === 'arena' || block.type === 'github' || block.type === 'wikipedia' || block.type === 'codepen' || block.type === 'reddit' || block.type === 'tiktok' || block.type === 'pdf') ? 0 : -1,
+                  left: (block.type === 'shape' || block.type === 'drawing' || block.type === 'text' || block.type === 'link' || block.type === 'audio' || block.type === 'x' || block.type === 'youtube' || block.type === 'video' || block.type === 'substack' || block.type === 'medium' || block.type === 'figma' || block.type === 'arena' || block.type === 'github' || block.type === 'wikipedia' || block.type === 'codepen' || block.type === 'reddit' || block.type === 'tiktok' || block.type === 'pdf') ? 0 : -1,
                   width,
                   height,
                   overflow: 'visible', 
@@ -794,7 +795,7 @@ export const BlockShell: React.FC<BlockShellProps> = ({ block, children }) => {
         </AnimatePresence>,
         overlayElement
       )}
-      <div className={clsx("w-full h-full", block.type !== 'shape' && block.type !== 'drawing' && "overflow-hidden")}>
+      <div className={clsx("w-full h-full", block.type !== 'shape' && block.type !== 'drawing' && block.type !== 'audio' && "overflow-hidden")}>
         {children}
       </div>
     </motion.div>
