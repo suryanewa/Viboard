@@ -826,6 +826,8 @@ export const BlockShell: React.FC<BlockShellProps> = ({ block, children }) => {
         delay: Math.min(block.zIndex * 0.04, 0.8)
       }}
       ref={shellRef}
+      data-block-id={block.id}
+      data-block-type={block.type}
       onPointerDown={handlePointerDown}
       onPointerMove={handlePointerMove}
       onPointerUp={handlePointerUp}

@@ -1,10 +1,14 @@
 import React, { useEffect, useState } from 'react';
 import { useBoardStore } from '../store';
+import type { Block } from '../types';
 
 import { Copy, Scissors, Clipboard, Trash2, CopyPlus, RotateCcw, RotateCw, ChevronsUp, ChevronUp, ChevronDown, ChevronsDown, Image as ImageIcon, Sparkles, X } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import type { Variants } from 'framer-motion';
 import { v4 as uuidv4 } from 'uuid';
+
+type LoadedImage = { img: HTMLImageElement | null; block: Block };
+type ValidLoadedImage = { img: HTMLImageElement; block: Block };
 
 const menuVariants: Variants = {
   hidden: { 
@@ -67,6 +71,95 @@ const itemVariants: Variants = {
   }
 };
 
+const containsBlockCenter = (frame: Block, block: Block) => {
+  const centerX = block.x + block.width / 2;
+  const centerY = block.y + block.height / 2;
+
+  return centerX >= frame.x &&
+    centerX <= frame.x + frame.width &&
+    centerY >= frame.y &&
+    centerY <= frame.y + frame.height;
+};
+
+const getImageBlocksInFrame = (blocks: Record<string, Block>, frameId: string | null) => {
+  if (!frameId) return [];
+
+  const frame = blocks[frameId];
+  if (!frame || frame.type !== 'frame') return [];
+
+  return Object.values(blocks).filter((block) =>
+    block.type === 'image' &&
+    block.data?.url &&
+    containsBlockCenter(frame, block)
+  );
+};
+
+const loadImageBlocks = (imageBlocks: Block[]) => Promise.all(
+  imageBlocks.map((block) => {
+    return new Promise<LoadedImage>((resolve) => {
+      const img = new Image();
+      img.crossOrigin = "anonymous";
+      img.onload = () => resolve({ img, block });
+      img.onerror = () => resolve({ img: null, block });
+      img.src = block.data.url;
+    });
+  })
+);
+
+const isValidLoadedImage = (item: LoadedImage): item is ValidLoadedImage => item.img !== null;
+
+const drawMoodboardCanvas = (validImages: ValidLoadedImage[]) => {
+  const cols = Math.ceil(Math.sqrt(validImages.length));
+  const rows = Math.ceil(validImages.length / cols);
+  const cellWidth = 400;
+  const cellHeight = 400;
+  const gap = 20;
+  const padding = 40;
+
+  const canvasWidth = cols * cellWidth + (cols - 1) * gap + padding * 2;
+  const canvasHeight = rows * cellHeight + (rows - 1) * gap + padding * 2;
+
+  const canvas = document.createElement('canvas');
+  canvas.width = canvasWidth;
+  canvas.height = canvasHeight;
+  const ctx = canvas.getContext('2d');
+  if (!ctx) return null;
+
+  ctx.fillStyle = '#ffffff';
+  ctx.fillRect(0, 0, canvasWidth, canvasHeight);
+
+  validImages.forEach((item, index) => {
+    const col = index % cols;
+    const row = Math.floor(index / cols);
+    const x = padding + col * (cellWidth + gap);
+    const y = padding + row * (cellHeight + gap);
+
+    const imgAspect = item.img.width / item.img.height;
+    const cellAspect = cellWidth / cellHeight;
+    let drawWidth = cellWidth;
+    let drawHeight = cellHeight;
+    let offsetX = 0;
+    let offsetY = 0;
+
+    if (imgAspect > cellAspect) {
+      drawWidth = cellHeight * imgAspect;
+      offsetX = (cellWidth - drawWidth) / 2;
+    } else {
+      drawHeight = cellWidth / imgAspect;
+      offsetY = (cellHeight - drawHeight) / 2;
+    }
+
+    ctx.save();
+    ctx.beginPath();
+    ctx.rect(x, y, cellWidth, cellHeight);
+    ctx.clip();
+    ctx.drawImage(item.img, x + offsetX, y + offsetY, drawWidth, drawHeight);
+    ctx.restore();
+  });
+
+  return canvas;
+};
+
 export const ContextMenu: React.FC = () => {
   const [visible, setVisible] = useState(false);
   const [showGenerateModal, setShowGenerateModal] = useState(false);
@@ -95,27 +188,35 @@ export const ContextMenu: React.FC = () => {
       e.preventDefault();
       
       const { selection, setSelection, drawingSelection, setDrawingSelection, blocks, drawings, viewport } = useBoardStore.getState();
+      const targetBlockElement = (e.target as HTMLElement | null)?.closest<HTMLElement>('[data-block-id]');
+      let clickedBlock = targetBlockElement?.dataset.blockId
+        ? blocks[targetBlockElement.dataset.blockId]
+        : undefined;
       
-      if (selection.length === 0 && drawingSelection.length === 0) {
-        const rect = document.querySelector('main')?.getBoundingClientRect();
-        if (rect) {
-          const canvasX = (e.clientX - rect.left - viewport.x) / viewport.zoom;
-          const canvasY = (e.clientY - rect.top - viewport.y) / viewport.zoom;
-          
-          const clickedBlock = Object.values(blocks).find(b => 
+      const rect = document.querySelector('main')?.getBoundingClientRect();
+      if (rect) {
+        const canvasX = (e.clientX - rect.left - viewport.x) / viewport.zoom;
+        const canvasY = (e.clientY - rect.top - viewport.y) / viewport.zoom;
+        
+        clickedBlock ??= Object.values(blocks)
+          .sort((a, b) => b.zIndex - a.zIndex)
+          .find(b =>
             canvasX >= b.x && canvasX <= b.x + b.width &&
             canvasY >= b.y && canvasY <= b.y + b.height
           );
-          
-          if (clickedBlock) {
+        
+        if (clickedBlock) {
+          if (!selection.includes(clickedBlock.id)) {
             setSelection([clickedBlock.id]);
-          } else {
-            const clickedDrawing = drawings.find(d => 
-              d.points.some(p => Math.abs(p.x - canvasX) < 10 && Math.abs(p.y - canvasY) < 10)
-            );
-            if (clickedDrawing) {
-              setDrawingSelection([clickedDrawing.id]);
-            }
+            setDrawingSelection([]);
+          }
+        } else {
+          const clickedDrawing = drawings.find(d => 
+            d.points.some(p => Math.abs(p.x - canvasX) < 10 && Math.abs(p.y - canvasY) < 10)
+          );
+          if (clickedDrawing && !drawingSelection.includes(clickedDrawing.id)) {
+            setSelection([]);
+            setDrawingSelection([clickedDrawing.id]);
           }
         }
       }
@@ -160,77 +261,21 @@ export const ContextMenu: React.FC = () => {
     setVisible(false);
     const { blocks, viewport } = useBoardStore.getState();
     
-    // Get all image blocks
-    const imageBlocks = Object.values(blocks).filter(b => b.type === 'image' && b.data?.url);
-    if (imageBlocks.length === 0) return;
+    const imageBlocks = getImageBlocksInFrame(blocks, menuState.frameId);
+    if (imageBlocks.length === 0) {
+      alert("No images found in the frame to create a moodboard.");
+      return;
+    }
 
-    // Load all images
-    const loadedImages = await Promise.all(
-      imageBlocks.map(block => {
-        return new Promise<{ img: HTMLImageElement, block: any }>((resolve) => {
-          const img = new Image();
-          img.crossOrigin = "anonymous";
-          img.onload = () => resolve({ img, block });
-          img.onerror = () => resolve({ img: null as any, block });
-          img.src = block.data.url;
-        });
-      })
-    );
+    const loadedImages = await loadImageBlocks(imageBlocks);
 
-    const validImages = loadedImages.filter(item => item.img);
+    const validImages = loadedImages.filter(isValidLoadedImage);
     if (validImages.length === 0) return;
 
-    // Layout calculation (grid)
-    const cols = Math.ceil(Math.sqrt(validImages.length));
-    const rows = Math.ceil(validImages.length / cols);
-    const cellWidth = 400;
-    const cellHeight = 400;
-    const gap = 20;
-    const padding = 40;
-
-    const canvasWidth = cols * cellWidth + (cols - 1) * gap + padding * 2;
-    const canvasHeight = rows * cellHeight + (rows - 1) * gap + padding * 2;
-
-    const canvas = document.createElement('canvas');
-    canvas.width = canvasWidth;
-    canvas.height = canvasHeight;
-    const ctx = canvas.getContext('2d');
-    if (!ctx) return;
-
-    // Draw background
-    ctx.fillStyle = '#ffffff';
-    ctx.fillRect(0, 0, canvasWidth, canvasHeight);
-
-    // Draw images
-    validImages.forEach((item, index) => {
-      const col = index % cols;
-      const row = Math.floor(index / cols);
-      const x = padding + col * (cellWidth + gap);
-      const y = padding + row * (cellHeight + gap);
-
-      // Cover fit
-      const imgAspect = item.img.width / item.img.height;
-      const cellAspect = cellWidth / cellHeight;
-      let drawWidth = cellWidth;
-      let drawHeight = cellHeight;
-      let offsetX = 0;
-      let offsetY = 0;
-
-      if (imgAspect > cellAspect) {
-        drawWidth = cellHeight * imgAspect;
-        offsetX = (cellWidth - drawWidth) / 2;
-      } else {
-        drawHeight = cellWidth / imgAspect;
-        offsetY = (cellHeight - drawHeight) / 2;
-      }
-
-      ctx.save();
-      ctx.beginPath();
-      ctx.rect(x, y, cellWidth, cellHeight);
-      ctx.clip();
-      ctx.drawImage(item.img, x + offsetX, y + offsetY, drawWidth, drawHeight);
-      ctx.restore();
-    });
+    const canvas = drawMoodboardCanvas(validImages);
+    if (!canvas) return;
+    const canvasWidth = canvas.width;
+    const canvasHeight = canvas.height;
 
     // Export and copy
     canvas.toBlob(async (blob) => {
@@ -279,77 +324,19 @@ export const ContextMenu: React.FC = () => {
       localStorage.setItem('OPENAI_API_KEY', genApiKey);
     }
 
-    // Get all image blocks
-    const imageBlocks = Object.values(blocks).filter(b => b.type === 'image' && b.data?.url);
+    const imageBlocks = getImageBlocksInFrame(blocks, menuState.frameId);
     if (imageBlocks.length === 0) {
       alert("No images found in the frame to create a moodboard.");
       return;
     }
 
-    // Load all images
-    const loadedImages = await Promise.all(
-      imageBlocks.map(block => {
-        return new Promise<{ img: HTMLImageElement, block: any }>((resolve) => {
-          const img = new Image();
-          img.crossOrigin = "anonymous";
-          img.onload = () => resolve({ img, block });
-          img.onerror = () => resolve({ img: null as any, block });
-          img.src = block.data.url;
-        });
-      })
-    );
+    const loadedImages = await loadImageBlocks(imageBlocks);
 
-    const validImages = loadedImages.filter(item => item.img);
+    const validImages = loadedImages.filter(isValidLoadedImage);
     if (validImages.length === 0) return;
 
-    // Layout calculation (grid)
-    const cols = Math.ceil(Math.sqrt(validImages.length));
-    const rows = Math.ceil(validImages.length / cols);
-    const cellWidth = 400;
-    const cellHeight = 400;
-    const gap = 20;
-    const padding = 40;
-
-    const canvasWidth = cols * cellWidth + (cols - 1) * gap + padding * 2;
-    const canvasHeight = rows * cellHeight + (rows - 1) * gap + padding * 2;
-
-    const canvas = document.createElement('canvas');
-    canvas.width = canvasWidth;
-    canvas.height = canvasHeight;
-    const ctx = canvas.getContext('2d');
-    if (!ctx) return;
-
-    ctx.fillStyle = '#ffffff';
-    ctx.fillRect(0, 0, canvasWidth, canvasHeight);
-
-    validImages.forEach((item, index) => {
-      const col = index % cols;
-      const row = Math.floor(index / cols);
-      const x = padding + col * (cellWidth + gap);
-      const y = padding + row * (cellHeight + gap);
-
-      const imgAspect = item.img.width / item.img.height;
-      const cellAspect = cellWidth / cellHeight;
-      let drawWidth = cellWidth;
-      let drawHeight = cellHeight;
-      let offsetX = 0;
-      let offsetY = 0;
-
-      if (imgAspect > cellAspect) {
-        drawWidth = cellHeight * imgAspect;
-        offsetX = (cellWidth - drawWidth) / 2;
-      } else {
-        drawHeight = cellWidth / imgAspect;
-        offsetY = (cellHeight - drawHeight) / 2;
-      }
-
-      ctx.save();
-      ctx.beginPath();
-      ctx.rect(x, y, cellWidth, cellHeight);
-      ctx.clip();
-      ctx.drawImage(item.img, x + offsetX, y + offsetY, drawWidth, drawHeight);
-      ctx.restore();
-    });
+    const canvas = drawMoodboardCanvas(validImages);
+    if (!canvas) return;
 
     const dataUrl = canvas.toDataURL('image/png');
     
@@ -415,9 +402,10 @@ Generate a new standalone image, not a collage, grid, moodboard, or reproduction
       } else {
         throw new Error("No image returned");
       }
-    } catch (err: any) {
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : 'Unknown error';
       console.error(err);
-      alert(`Failed to generate image: ${err.message}`);
+      alert(`Failed to generate image: ${message}`);
       useBoardStore.getState().removeBlocks([newBlockId]);
     }
   };
