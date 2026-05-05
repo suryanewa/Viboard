@@ -1,5 +1,5 @@
 import React, { useRef, useEffect, useState } from 'react';
-import { motion, useMotionValue, AnimatePresence } from 'framer-motion';
+import { motion, useMotionValue, AnimatePresence, animate } from 'framer-motion';
 import type { Block } from '../types';
 import { useBoardStore } from '../store';
 import clsx from 'clsx';
@@ -197,10 +197,16 @@ export const BlockShell: React.FC<BlockShellProps> = ({ block, children }) => {
   // Sync x/y motion values from store — runs on every store update.
   // During active drag, handlePointerMove writes x.set/y.set directly (takes precedence).
   // During group drag, this ensures all selected blocks follow the store position.
+  const lastSnapTime = useBoardStore((state) => state.lastSnapTime);
   useEffect(() => {
-    x.set(block.x);
-    y.set(block.y);
-  }, [block.x, block.y]);
+    if (Date.now() - lastSnapTime < 100) {
+      animate(x, block.x, { type: 'spring', stiffness: 300, damping: 30 });
+      animate(y, block.y, { type: 'spring', stiffness: 300, damping: 30 });
+    } else {
+      x.set(block.x);
+      y.set(block.y);
+    }
+  }, [block.x, block.y, lastSnapTime, x, y]);
 
   const altDupeIds = useRef<string[]>([]);
 

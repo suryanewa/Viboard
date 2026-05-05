@@ -43,6 +43,7 @@ interface BoardState {
   selection: string[];
   viewport: Viewport;
   snapping: boolean;
+  lastSnapTime: number;
   gridView: 'box' | 'dot' | 'none';
   canvasTitle: string;
   mode: 'view' | 'edit';
@@ -122,6 +123,7 @@ export const useBoardStore = create<BoardState>((set, get) => ({
   selection: [],
   viewport: { x: 300, y: 200, zoom: 0.5 },
   snapping: false,
+  lastSnapTime: 0,
   gridView: 'none' as 'box' | 'dot' | 'none',
   canvasTitle: 'Untitled Board',
   mode: 'edit' as 'view' | 'edit',
@@ -259,7 +261,7 @@ export const useBoardStore = create<BoardState>((set, get) => ({
           y: Math.round(newBlocks[id].y / GRID_SIZE) * GRID_SIZE,
         };
       });
-      return { snapping, blocks: newBlocks };
+      return { snapping, blocks: newBlocks, lastSnapTime: Date.now() };
     }
     return { snapping };
   }),
