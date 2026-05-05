@@ -879,10 +879,7 @@ export const Toolbar: React.FC = () => {
                           className="flex items-center justify-center absolute inset-0"
                         >
                           <Icon 
-                            className={clsx(
-                              "w-5 h-5 transition-colors duration-200", 
-                              isSelected && (t.color === 'blue' ? 'fill-blue-600/10' : 'fill-red-600/10')
-                            )} 
+                            className="w-5 h-5 transition-colors duration-200"
                             isSelected={isSelected} 
                           />
                         </motion.div>
