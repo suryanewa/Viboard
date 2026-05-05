@@ -942,9 +942,13 @@ export const Toolbar: React.FC = () => {
                 <Tooltip content="Search" shortcut="⌘K" position="top">
                   <motion.button 
                     type="button"
-                    whileHover="hover"
-                    onClick={() => setIsSearchOpen(true)}
+                    onClick={(e) => {
+                      setHoveredTopLeft(null);
+                      setIsSearchOpen(true);
+                      e.currentTarget.blur();
+                    }}
                     onPointerEnter={() => setHoveredTopLeft('search')}
+                    onPointerLeave={() => setHoveredTopLeft(null)}
                     className="relative w-9 h-9 p-2 transition-colors flex items-center justify-center rounded-lg text-zinc-600 hover:text-zinc-900"
                   >
                     {hoveredTopLeft === 'search' && (
@@ -959,7 +963,15 @@ export const Toolbar: React.FC = () => {
                         className="absolute inset-0 rounded-lg bg-zinc-100 -z-10"
                       />
                     )}
-                    <motion.div variants={{ hover: { scale: 1.1, rotate: -15 } }} transition={{ duration: 0.3, type: "spring" }}>
+                    <motion.div
+                      initial={false}
+                      animate={hoveredTopLeft === 'search' ? 'hover' : 'rest'}
+                      variants={{
+                        rest: { scale: 1, rotate: 0 },
+                        hover: { scale: 1.1, rotate: -15 },
+                      }}
+                      transition={{ duration: 0.3, type: 'spring' }}
+                    >
                       <Search className="w-5 h-5 relative z-10" />
                     </motion.div>
                   </motion.button>
