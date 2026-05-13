@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useBoardStore } from '../store';
-import { Type, Link, Magnet, Pencil, Circle, MousePointer, Hand, ZoomIn, ZoomOut, Search, Send, Eye, Edit3, Plus, Frame } from 'lucide-react';
+import { Type, Link, Magnet, Pencil, Circle, MousePointer, Hand, ZoomIn, ZoomOut, Search, Send, Eye, Edit3, Plus, Frame, Upload } from 'lucide-react';
 import { v4 as uuidv4 } from 'uuid';
 import { motion, AnimatePresence } from 'framer-motion';
 import clsx from 'clsx';
@@ -99,7 +99,7 @@ export const Toolbar: React.FC = () => {
     { id: 'text', icon: Type, shortcut: 'T', color: 'red', hasSecondary: true, hoverAnim: { scale: 1.1, y: -2 } as any },
     { id: 'marker', icon: Pencil, shortcut: 'M', color: 'red', hasSecondary: true, hoverAnim: { scale: 1.1, rotate: -20, x: 2, y: -2 } as any },
     { id: 'shape', icon: Circle, shortcut: 'K', color: 'red', hasSecondary: true, hoverAnim: { scale: 1.15 } as any },
-    { id: 'link', icon: Link, shortcut: 'L', color: 'red', hasSecondary: false, hoverAnim: { scale: 1.1 } as any },
+    { id: 'link', icon: Upload, shortcut: 'L', color: 'red', hasSecondary: false, hoverAnim: { scale: 1.1 } as any },
   ], []);
 
   const handleToolSelect = React.useCallback((nextTool: ToolbarVisualTool, options?: { isSubTool?: boolean }) => {

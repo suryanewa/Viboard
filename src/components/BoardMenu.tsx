@@ -380,7 +380,7 @@ export const BoardMenu: React.FC = () => {
         { id: 'ungroup', label: 'Ungroup selection', shortcut: '⌘⌫', icon: Ungroup, action: ungroupSelection },
         { id: 'front', label: 'Bring to front', shortcut: ']', icon: Layers, action: () => selection.forEach((id) => bringToFront(id)) },
         { id: 'forward', label: 'Bring forward', shortcut: '⌘]', icon: Layers, action: () => selection.forEach((id) => bringForward(id)) },
-        { id: 'backward', label: 'Send to backward', shortcut: '⌘[', icon: SendToBack, action: () => selection.forEach((id) => sendBackward(id)) },
+        { id: 'backward', label: 'Send backward', shortcut: '⌘[', icon: SendToBack, action: () => selection.forEach((id) => sendBackward(id)) },
         { id: 'back', label: 'Send to back', shortcut: '[', icon: SendToBack, action: () => selection.forEach((id) => sendToBack(id)) },
         { id: 'flipH', label: 'Flip horizontal', shortcut: '⇧H', icon: AlignHorizontalJustifyCenter, action: () => flipSelection('horizontal') },
         { id: 'flipV', label: 'Flip vertical', shortcut: '⇧V', icon: AlignVerticalJustifyCenter, action: () => flipSelection('vertical') },
