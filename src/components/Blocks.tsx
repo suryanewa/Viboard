@@ -239,17 +239,29 @@ export const TextBlock: React.FC<BlockContentProps> = ({ block }) => {
 };
 
 export const ShapeBlock: React.FC<BlockContentProps> = ({ block }) => {
-  const isSelected = useBoardStore((state) => state.selection.includes(block.id));
   const shape = block.data.shape || 'square';
+  const fillColor = block.data.color || '#ff6b6b';
+
+  if (shape === 'triangle') {
+    return (
+      <div
+        className="w-full h-full transition-colors duration-200"
+        style={{
+          backgroundColor: fillColor,
+          clipPath: 'polygon(50% 0%, 0% 100%, 100% 100%)',
+        }}
+      />
+    );
+  }
+
   return (
     <div 
       className={clsx(
-        "w-full h-full border-2 transition-colors duration-200",
-        shape === 'circle' ? "rounded-full" : "rounded-sm",
-        isSelected ? "border-blue-500" : "border-[#ff6b6b]"
+        "w-full h-full transition-colors duration-200",
+        shape === 'circle' ? "rounded-full" : "rounded-sm"
       )}
       style={{ 
-        backgroundColor: `${block.data.color || '#ff6b6b'}33` 
+        backgroundColor: fillColor
       }}
     />
   );
