@@ -161,7 +161,7 @@ interface BoardState {
   syncBlocksToTypeSense: () => void;
 }
 
-const MAX_HISTORY = 50;
+const MAX_HISTORY = 25;
 
 export const useBoardStore = create<BoardState>((set, get) => ({
   blocks: createMockBlocks(),
@@ -609,7 +609,7 @@ export const useBoardStore = create<BoardState>((set, get) => ({
       blocks: next.blocks,
       drawings: next.drawings,
       history: {
-        past: [...history.past, { blocks, drawings }],
+        past: [...history.past.slice(-MAX_HISTORY + 1), { blocks, drawings }],
         future: newFuture,
       }
     });

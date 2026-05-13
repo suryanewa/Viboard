@@ -1,12 +1,14 @@
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { supabase } from '../lib/supabase';
+import { getCachedWebBoards } from '../lib/boardCommands';
 
 import type { Session } from '@supabase/supabase-js';
 
 interface Moodboard {
   id: string;
-  created_at: string;
+  created_at?: string;
+  updated_at?: string;
   title: string;
 }
 
@@ -24,10 +26,16 @@ export default function Dashboard({ session }: { session: Session }) {
       .order('created_at', { ascending: false });
 
     if (!error && data) {
-      setMoodboards(data);
+      const cached = getCachedWebBoards();
+      const seen = new Set<string>();
+      setMoodboards([...data, ...cached].filter((board) => {
+        if (seen.has(board.id)) return false;
+        seen.add(board.id);
+        return true;
+      }));
     } else if (error) {
       console.error('Error fetching moodboards:', error);
-      // Fallback: If table doesn't exist or RLS is an issue, just keep it empty
+      setMoodboards(getCachedWebBoards());
     }
     setLoading(false);
   };
@@ -105,7 +113,7 @@ export default function Dashboard({ session }: { session: Session }) {
                 </div>
                 <h3 className="font-semibold text-zinc-900 truncate">{board.title || 'Untitled Board'}</h3>
                 <p className="text-sm text-zinc-500 mt-1">
-                  {new Date(board.created_at).toLocaleDateString()}
+                  {new Date(board.updated_at || board.created_at || Date.now()).toLocaleDateString()}
                 </p>
               </div>
             ))}

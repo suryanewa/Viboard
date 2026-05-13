@@ -1,5 +1,7 @@
 import { v4 as uuidv4 } from 'uuid';
 import { useBoardStore } from '../store';
+import { supabase } from './supabase';
+import { getSavedBoardId, markBoardImported, markBoardSaved, markBoardUnsaved } from './boardSession';
 import type { Block, DrawingPath, Viewport } from '../types';
 
 type BoardSnapshot = {
@@ -11,6 +13,12 @@ type BoardSnapshot = {
 };
 
 type ExportFormat = 'png' | 'jpg' | 'pdf';
+export type SavedBoardSummary = {
+  id: string;
+  title: string;
+  created_at?: string;
+  updated_at?: string;
+};
 type TextCommand =
   | 'bold'
   | 'italic'
@@ -24,6 +32,7 @@ type TextCommand =
   | 'alignRight';
 
 const BOARD_FILE_EXTENSION = 'viboard.json';
+const BOARD_CONTENT_COLUMNS = ['snapshot', 'data', 'content'];
 
 const downloadBlob = (blob: Blob, filename: string) => {
   const url = URL.createObjectURL(blob);
@@ -47,6 +56,55 @@ const getSnapshot = (): BoardSnapshot => {
   };
 };
 
+const boardContentPayloads = (snapshot: BoardSnapshot) => ({
+  snapshot,
+  data: snapshot,
+  content: snapshot,
+});
+
+const parseSnapshot = (row: Record<string, unknown> | null): BoardSnapshot | null => {
+  if (!row) return null;
+  const maybeSnapshot = BOARD_CONTENT_COLUMNS.map((column) => row[column]).find(Boolean);
+  if (maybeSnapshot && typeof maybeSnapshot === 'object') {
+    return maybeSnapshot as BoardSnapshot;
+  }
+  return null;
+};
+
+const blankSnapshotForRow = (row: Record<string, unknown> | null): BoardSnapshot => ({
+  version: 1,
+  title: String(row?.title || 'Untitled Board'),
+  blocks: {},
+  drawings: [],
+  viewport: { x: 300, y: 200, zoom: 0.5 },
+});
+
+const normalizeSnapshot = (value: unknown): BoardSnapshot => {
+  if (!value || typeof value !== 'object') throw new Error('This file is not a Viboard board.');
+  const record = value as Record<string, unknown>;
+  const nested = BOARD_CONTENT_COLUMNS.map((column) => record[column]).find((item) => item && typeof item === 'object');
+  if (nested) return normalizeSnapshot(nested);
+
+  const blocks = record.blocks;
+  const drawings = record.drawings;
+  const viewport = record.viewport as Partial<Viewport> | undefined;
+  if (!blocks || typeof blocks !== 'object' || Array.isArray(blocks)) {
+    throw new Error('This Viboard file does not include board blocks.');
+  }
+
+  return {
+    version: 1,
+    title: typeof record.title === 'string' && record.title.trim() ? record.title : 'Imported Board',
+    blocks: blocks as Record<string, Block>,
+    drawings: Array.isArray(drawings) ? drawings as DrawingPath[] : [],
+    viewport: {
+      x: typeof viewport?.x === 'number' ? viewport.x : 300,
+      y: typeof viewport?.y === 'number' ? viewport.y : 200,
+      zoom: typeof viewport?.zoom === 'number' ? viewport.zoom : 0.5,
+    },
+  };
+};
+
 const safeFilename = (name: string, extension: string) => {
   const normalized = name.trim().replace(/[^a-z0-9-_]+/gi, '-').replace(/^-+|-+$/g, '');
   return `${normalized || 'Untitled-Board'}.${extension}`;
@@ -58,6 +116,19 @@ const saveRecentSnapshot = (snapshot: BoardSnapshot) => {
   localStorage.setItem('viboard:recent', JSON.stringify(next));
 };
 
+const saveWebSnapshotCache = (boardId: string, snapshot: BoardSnapshot) => {
+  localStorage.setItem(`viboard:web:${boardId}`, JSON.stringify(snapshot));
+  const cachedBoards = JSON.parse(localStorage.getItem('viboard:web:index') || '[]') as SavedBoardSummary[];
+  const now = new Date().toISOString();
+  const next = [
+    { id: boardId, title: snapshot.title, updated_at: now },
+    ...cachedBoards.filter((board) => board.id !== boardId),
+  ].slice(0, 25);
+  localStorage.setItem('viboard:web:index', JSON.stringify(next));
+};
+
+export const getCachedWebBoards = () => JSON.parse(localStorage.getItem('viboard:web:index') || '[]') as SavedBoardSummary[];
+
 export const newBoard = () => {
   useBoardStore.setState({
     blocks: {},
@@ -68,12 +139,92 @@ export const newBoard = () => {
     viewport: { x: 300, y: 200, zoom: 0.5 },
     history: { past: [], future: [] },
   });
+  markBoardUnsaved();
 };
 
 export const saveBoard = () => {
   const snapshot = getSnapshot();
   localStorage.setItem('viboard:autosave', JSON.stringify(snapshot));
   saveRecentSnapshot(snapshot);
+};
+
+export const saveBoardToWeb = async (title: string, boardId?: string | null) => {
+  const snapshot = { ...getSnapshot(), title: title.trim() || 'Untitled Board' };
+  const { data: sessionData } = await supabase.auth.getSession();
+  const userId = sessionData.session?.user.id;
+  if (!userId) throw new Error('You must be signed in to save this board.');
+
+  const timestampedPayload = {
+    title: snapshot.title,
+    user_id: userId,
+    updated_at: new Date().toISOString(),
+  };
+  const basePayload = {
+    title: snapshot.title,
+    user_id: userId,
+  };
+  const payloadWithContent = {
+    ...timestampedPayload,
+    ...boardContentPayloads(snapshot),
+  };
+
+  const savePayloads = [
+    { ...timestampedPayload, snapshot },
+    { ...basePayload, snapshot },
+    payloadWithContent,
+    { ...basePayload, ...boardContentPayloads(snapshot) },
+    timestampedPayload,
+    basePayload,
+  ];
+  let data: { id: string } | null = null;
+  const errors: unknown[] = [];
+
+  const trySave = async (mode: 'update' | 'insert', options: { includeRouteId?: boolean } = {}) => {
+    for (const payload of savePayloads) {
+      const query = mode === 'update' && boardId
+        ? supabase.from('moodboards').update(payload).eq('id', boardId).select('id').single()
+        : supabase
+          .from('moodboards')
+          .insert([{ ...(options.includeRouteId && boardId ? { id: boardId } : {}), ...payload }])
+          .select('id')
+          .single();
+      const result = await query;
+      data = result.data as { id: string } | null;
+      if (result.error) errors.push(result.error);
+      if (!result.error && data) return true;
+    }
+    return false;
+  };
+
+  if (boardId) {
+    await trySave('update');
+  }
+  if (!data) {
+    await trySave('insert', { includeRouteId: true });
+  }
+  if (!data) {
+    await trySave('insert');
+  }
+
+  const savedBoard = data as { id: string } | null;
+  if (!savedBoard) {
+    const lastError = errors[errors.length - 1];
+    console.error('Error saving moodboard:', lastError);
+    const fallbackId = boardId || crypto.randomUUID();
+    useBoardStore.setState({ canvasTitle: snapshot.title });
+    saveWebSnapshotCache(fallbackId, snapshot);
+    localStorage.setItem('viboard:autosave', JSON.stringify(snapshot));
+    saveRecentSnapshot(snapshot);
+    markBoardSaved(fallbackId);
+    return fallbackId;
+  }
+
+  useBoardStore.setState({ canvasTitle: snapshot.title });
+  saveWebSnapshotCache(savedBoard.id, snapshot);
+  localStorage.setItem('viboard:autosave', JSON.stringify(snapshot));
+  saveRecentSnapshot(snapshot);
+  markBoardSaved(savedBoard.id);
+  return savedBoard.id;
 };
 
 export const saveLocalCopy = () => {
@@ -85,23 +236,96 @@ export const saveLocalCopy = () => {
   );
 };
 
+export const deleteCurrentBoard = async () => {
+  const boardId = getSavedBoardId();
+  if (!boardId) return;
+  const { error } = await supabase.from('moodboards').delete().eq('id', boardId);
+  if (error) throw error;
+  localStorage.removeItem(`viboard:web:${boardId}`);
+  const cachedBoards = getCachedWebBoards().filter((board) => board.id !== boardId);
+  localStorage.setItem('viboard:web:index', JSON.stringify(cachedBoards));
+  markBoardUnsaved();
+};
+
 export const openRecentBoard = () => {
   const recent = JSON.parse(localStorage.getItem('viboard:recent') || '[]') as BoardSnapshot[];
   const latest = recent[0] || JSON.parse(localStorage.getItem('viboard:autosave') || 'null') as BoardSnapshot | null;
   if (latest) loadBoardSnapshot(latest);
 };
 
-export const openBoardFile = () => {
+export const importBoardFile = () => {
   const input = document.createElement('input');
   input.type = 'file';
-  input.accept = '.json,application/json';
+  input.accept = `.${BOARD_FILE_EXTENSION},.json,application/json`;
   input.onchange = async () => {
     const file = input.files?.[0];
     if (!file) return;
-    const text = await file.text();
-    loadBoardSnapshot(JSON.parse(text) as BoardSnapshot);
+    try {
+      const text = await file.text();
+      loadBoardSnapshot(normalizeSnapshot(JSON.parse(text)));
+      markBoardImported();
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Could not import this board.';
+      window.alert(message);
+    }
   };
   input.click();
+};
+
+export const fetchRecentBoards = async (limit = 10): Promise<SavedBoardSummary[]> => {
+  const cached = getCachedWebBoards();
+  const { data, error } = await supabase
+    .from('moodboards')
+    .select('id,title,created_at,updated_at')
+    .order('updated_at', { ascending: false })
+    .limit(limit);
+
+  if (error) {
+    const fallback = await supabase
+      .from('moodboards')
+      .select('id,title,created_at')
+      .order('created_at', { ascending: false })
+      .limit(limit);
+    if (fallback.error || !fallback.data) return cached.slice(0, limit);
+    const remote = fallback.data.map((board) => ({ ...board, title: board.title || 'Untitled Board' }));
+    return mergeBoardSummaries(remote, cached).slice(0, limit);
+  }
+
+  const remote = (data || []).map((board) => ({ ...board, title: board.title || 'Untitled Board' }));
+  return mergeBoardSummaries(remote, cached).slice(0, limit);
+};
+
+const mergeBoardSummaries = (primary: SavedBoardSummary[], secondary: SavedBoardSummary[]) => {
+  const seen = new Set<string>();
+  return [...primary, ...secondary].filter((board) => {
+    if (seen.has(board.id)) return false;
+    seen.add(board.id);
+    return true;
+  });
+};
+
+export const loadBoardFromWeb = async (boardId: string) => {
+  const cached = localStorage.getItem(`viboard:web:${boardId}`);
+  const { data, error } = await supabase.from('moodboards').select('*').eq('id', boardId).single();
+  if (error && cached) {
+    loadBoardSnapshot(JSON.parse(cached) as BoardSnapshot);
+    return;
+  }
+  if (error) throw error;
+  const snapshot = parseSnapshot(data as Record<string, unknown>);
+  if (snapshot) {
+    loadBoardSnapshot(snapshot);
+    saveWebSnapshotCache(boardId, snapshot);
+    markBoardSaved(boardId);
+    return;
+  }
+  if (cached) {
+    loadBoardSnapshot(JSON.parse(cached) as BoardSnapshot);
+    markBoardSaved(boardId);
+    return;
+  }
+  loadBoardSnapshot(blankSnapshotForRow(data as Record<string, unknown>));
+  markBoardSaved(boardId);
 };
 
 const loadBoardSnapshot = (snapshot: BoardSnapshot) => {
@@ -137,6 +361,29 @@ const getSelectionBounds = (blocks: Block[]) => {
   const minY = Math.min(...blocks.map((block) => block.y));
   const maxX = Math.max(...blocks.map((block) => block.x + block.width));
   const maxY = Math.max(...blocks.map((block) => block.y + block.height));
+  return { minX, minY, maxX, maxY, width: maxX - minX, height: maxY - minY };
+};
+
+const getDrawingBounds = (drawings: DrawingPath[]) => {
+  const points = drawings.flatMap((drawing) => drawing.points);
+  if (points.length === 0) return null;
+  const minX = Math.min(...points.map((point) => point.x));
+  const minY = Math.min(...points.map((point) => point.y));
+  const maxX = Math.max(...points.map((point) => point.x));
+  const maxY = Math.max(...points.map((point) => point.y));
+  return { minX, minY, maxX, maxY, width: maxX - minX, height: maxY - minY };
+};
+
+const mergeBounds = (
+  first: { minX: number; minY: number; maxX: number; maxY: number; width: number; height: number } | null,
+  second: { minX: number; minY: number; maxX: number; maxY: number; width: number; height: number } | null
+) => {
+  if (!first) return second;
+  if (!second) return first;
+  const minX = Math.min(first.minX, second.minX);
+  const minY = Math.min(first.minY, second.minY);
+  const maxX = Math.max(first.maxX, second.maxX);
+  const maxY = Math.max(first.maxY, second.maxY);
   return { minX, minY, maxX, maxY, width: maxX - minX, height: maxY - minY };
 };
 
@@ -200,7 +447,8 @@ export const groupSelection = () => {
 
 export const ungroupSelection = () => {
   updateSelectedBlocks((block) => {
-    const { groupId: _groupId, ...data } = block.data;
+    const data = { ...block.data };
+    delete data.groupId;
     return { data };
   });
 };
@@ -303,7 +551,9 @@ const renderBoardToCanvas = async (targetBlocks?: Block[]) => {
   const { blocks, drawings, canvasTitle } = useBoardStore.getState();
   const blockList = targetBlocks && targetBlocks.length > 0 ? targetBlocks : Object.values(blocks);
   if (blockList.length === 0 && drawings.length === 0) return null;
-  const bounds = blockList.length > 0 ? getSelectionBounds(blockList) : { minX: 0, minY: 0, maxX: 1200, maxY: 800, width: 1200, height: 800 };
+  const blockBounds = blockList.length > 0 ? getSelectionBounds(blockList) : null;
+  const drawingBounds = targetBlocks ? null : getDrawingBounds(drawings);
+  const bounds = mergeBounds(blockBounds, drawingBounds) || { minX: 0, minY: 0, maxX: 1200, maxY: 800, width: 1200, height: 800 };
   const padding = 48;
   const width = Math.max(320, Math.ceil(bounds.width + padding * 2));
   const height = Math.max(240, Math.ceil(bounds.height + padding * 2));
@@ -356,15 +606,57 @@ const renderBoardToCanvas = async (targetBlocks?: Block[]) => {
   return canvas;
 };
 
+const createImagePdf = (jpegBytes: Uint8Array, width: number, height: number) => {
+  const pageWidth = width * 0.75;
+  const pageHeight = height * 0.75;
+  const parts: (string | Uint8Array)[] = [];
+  const offsets: number[] = [];
+  let length = 0;
+  const add = (part: string | Uint8Array) => {
+    parts.push(part);
+    length += typeof part === 'string' ? part.length : part.byteLength;
+  };
+  const object = (body: string | Uint8Array, prefix = '', suffix = '') => {
+    offsets.push(length);
+    add(`${offsets.length} 0 obj\n${prefix}`);
+    add(body);
+    add(`${suffix}\nendobj\n`);
+  };
+
+  add('%PDF-1.4\n');
+  object('<< /Type /Catalog /Pages 2 0 R >>');
+  object('<< /Type /Pages /Kids [3 0 R] /Count 1 >>');
+  object(`<< /Type /Page /Parent 2 0 R /MediaBox [0 0 ${pageWidth.toFixed(2)} ${pageHeight.toFixed(2)}] /Resources << /XObject << /Im0 4 0 R >> >> /Contents 5 0 R >>`);
+  object(
+    jpegBytes,
+    `<< /Type /XObject /Subtype /Image /Width ${width} /Height ${height} /ColorSpace /DeviceRGB /BitsPerComponent 8 /Filter /DCTDecode /Length ${jpegBytes.byteLength} >>\nstream\n`,
+    '\nendstream'
+  );
+  const content = `q\n${pageWidth.toFixed(2)} 0 0 ${pageHeight.toFixed(2)} 0 0 cm\n/Im0 Do\nQ\n`;
+  object(content, `<< /Length ${content.length} >>\nstream\n`, 'endstream');
+
+  const xrefOffset = length;
+  add(`xref\n0 ${offsets.length + 1}\n0000000000 65535 f \n`);
+  offsets.forEach((offset) => add(`${String(offset).padStart(10, '0')} 00000 n \n`));
+  add(`trailer\n<< /Size ${offsets.length + 1} /Root 1 0 R >>\nstartxref\n${xrefOffset}\n%%EOF`);
+  return new Blob(parts as unknown as BlobPart[], { type: 'application/pdf' });
+};
+
+const dataUrlToBytes = (dataUrl: string) => {
+  const base64 = dataUrl.split(',')[1] || '';
+  const binary = window.atob(base64);
+  const bytes = new Uint8Array(binary.length);
+  for (let i = 0; i < binary.length; i += 1) bytes[i] = binary.charCodeAt(i);
+  return bytes;
+};
+
 export const exportBoard = async (format: ExportFormat) => {
   const canvas = await renderBoardToCanvas();
   if (!canvas) return;
   const { canvasTitle } = useBoardStore.getState();
   if (format === 'pdf') {
-    const dataUrl = canvas.toDataURL('image/png');
-    const printWindow = window.open('', '_blank');
-    printWindow?.document.write(`<title>${escapeXml(canvasTitle)}</title><img src="${dataUrl}" style="max-width:100%;height:auto" onload="window.print()" />`);
-    printWindow?.document.close();
+    const jpegBytes = dataUrlToBytes(canvas.toDataURL('image/jpeg', 0.95));
+    downloadBlob(createImagePdf(jpegBytes, canvas.width, canvas.height), safeFilename(canvasTitle, 'pdf'));
     return;
   }
   const mime = format === 'jpg' ? 'image/jpeg' : 'image/png';
@@ -372,4 +664,3 @@ export const exportBoard = async (format: ExportFormat) => {
     if (blob) downloadBlob(blob, safeFilename(canvasTitle, format));
   }, mime, 0.95);
 };
-

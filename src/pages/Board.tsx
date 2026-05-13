@@ -1,4 +1,5 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
+import { useParams } from 'react-router-dom';
 import { Canvas } from '../components/Canvas';
 import { BlockShell } from '../components/BlockShell';
 import { BlockRenderer } from '../components/Blocks';
@@ -7,14 +8,103 @@ import { KeyboardShortcuts } from '../components/KeyboardShortcuts';
 import { ContextMenu } from '../components/ContextMenu';
 import { PropertyToolbar } from '../components/PropertyToolbar';
 import { useBoardStore } from '../store';
+import { loadBoardFromWeb, saveBoardToWeb } from '../lib/boardCommands';
+import {
+  consumeImportedLocalSnapshotFlag,
+  getSavedBoardId,
+  markBoardClean,
+  markBoardDirty,
+  markBoardUnsaved,
+  shouldPromptToSaveBoard,
+} from '../lib/boardSession';
 import { initializeCollection, syncAllBlocks } from '../lib/typesense';
 import { AnimatePresence, motion } from 'framer-motion';
 import { UploadCloud } from 'lucide-react';
 
+const boardSignature = () => {
+  const { blocks, drawings, canvasTitle } = useBoardStore.getState();
+  return JSON.stringify({ blocks, drawings, canvasTitle });
+};
+
 function Board() {
+  const params = useParams();
   const blocks = useBoardStore((state) => state.blocks);
+  const drawings = useBoardStore((state) => state.drawings);
+  const canvasTitle = useBoardStore((state) => state.canvasTitle);
   const mode = useBoardStore((state) => state.mode);
   const [isDraggingOver, setIsDraggingOver] = useState(false);
+  const autosaveReadyRef = useRef(false);
+  const lastSavedSignatureRef = useRef('');
+  const autosaveTimerRef = useRef<number | null>(null);
+
+  useEffect(() => {
+    if (!params.id) return;
+    if (consumeImportedLocalSnapshotFlag()) {
+      autosaveReadyRef.current = true;
+      lastSavedSignatureRef.current = boardSignature();
+      return;
+    }
+    autosaveReadyRef.current = false;
+    void loadBoardFromWeb(params.id)
+      .then(() => {
+        lastSavedSignatureRef.current = boardSignature();
+        autosaveReadyRef.current = true;
+        markBoardClean();
+      })
+      .catch((error) => {
+        autosaveReadyRef.current = true;
+        markBoardUnsaved();
+        console.error('Error loading moodboard:', error);
+      });
+  }, [params.id]);
+
+  useEffect(() => {
+    if (!autosaveReadyRef.current) return;
+    const signature = boardSignature();
+    if (signature === lastSavedSignatureRef.current) return;
+
+    markBoardDirty();
+    const savedBoardId = getSavedBoardId();
+    if (!savedBoardId || savedBoardId !== params.id) return;
+
+    if (autosaveTimerRef.current !== null) {
+      window.clearTimeout(autosaveTimerRef.current);
+    }
+
+    autosaveTimerRef.current = window.setTimeout(() => {
+      const signatureAtSave = boardSignature();
+      void saveBoardToWeb(useBoardStore.getState().canvasTitle, savedBoardId)
+        .then(() => {
+          if (boardSignature() === signatureAtSave) {
+            lastSavedSignatureRef.current = signatureAtSave;
+            markBoardClean();
+          }
+        })
+        .catch((error) => {
+          markBoardDirty();
+          console.error('Error autosaving moodboard:', error);
+        });
+      autosaveTimerRef.current = null;
+    }, 750);
+
+    return () => {
+      if (autosaveTimerRef.current !== null) {
+        window.clearTimeout(autosaveTimerRef.current);
+        autosaveTimerRef.current = null;
+      }
+    };
+  }, [blocks, drawings, canvasTitle, params.id]);
+
+  useEffect(() => {
+    const handleBeforeUnload = (event: BeforeUnloadEvent) => {
+      if (!shouldPromptToSaveBoard()) return;
+      event.preventDefault();
+      event.returnValue = '';
+    };
+
+    window.addEventListener('beforeunload', handleBeforeUnload);
+    return () => window.removeEventListener('beforeunload', handleBeforeUnload);
+  }, []);
 
   useEffect(() => {
     const syncInitialBlocks = async () => {

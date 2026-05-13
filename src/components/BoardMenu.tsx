@@ -1,4 +1,5 @@
 import React from 'react';
+import { createPortal } from 'react-dom';
 import { AnimatePresence, motion, type Variants } from 'framer-motion';
 import {
   AlignCenter,
@@ -18,6 +19,7 @@ import {
   FileDown,
   FileImage,
   FilePlus,
+  FileUp,
   FolderOpen,
   Grid2X2,
   Group,
@@ -43,21 +45,24 @@ import {
   ZoomOut,
 } from 'lucide-react';
 import clsx from 'clsx';
+import { useNavigate, useParams } from 'react-router-dom';
 import { useBoardStore } from '../store';
 import {
   alignSelection,
   applyTextCommand,
   copySelectionAsPng,
   deleteSelection,
+  deleteCurrentBoard,
   distributeSelection,
   exportBoard,
+  fetchRecentBoards,
   flipSelection,
   groupSelection,
+  importBoardFile,
+  type SavedBoardSummary,
   newBoard,
-  openBoardFile,
-  openRecentBoard,
   rotateSelection,
-  saveBoard,
+  saveBoardToWeb,
   saveLocalCopy,
   selectInverse,
   setZoomCentered,
@@ -65,6 +70,7 @@ import {
   ungroupSelection,
   zoomToFit,
 } from '../lib/boardCommands';
+import { shouldPromptToSaveBoard, getSavedBoardId } from '../lib/boardSession';
 
 type MenuItem = {
   id: string;
@@ -75,6 +81,8 @@ type MenuItem = {
   children?: MenuItem[];
   danger?: boolean;
 };
+
+type PendingAction = () => void | Promise<void>;
 
 const menuVariants: Variants = {
   hidden: {
@@ -262,12 +270,26 @@ export const BoardMenu: React.FC = () => {
   const [open, setOpen] = React.useState(false);
   const [hoveredTop, setHoveredTop] = React.useState<string | null>(null);
   const [hoveredNested, setHoveredNested] = React.useState<string | null>(null);
+  const [recentBoards, setRecentBoards] = React.useState<SavedBoardSummary[]>([]);
+  const [isSaveDialogOpen, setIsSaveDialogOpen] = React.useState(false);
+  const [isUnsavedDialogOpen, setIsUnsavedDialogOpen] = React.useState(false);
+  const [isDeleteDialogOpen, setIsDeleteDialogOpen] = React.useState(false);
+  const [saveTitle, setSaveTitle] = React.useState('');
+  const [saveError, setSaveError] = React.useState<string | null>(null);
+  const [deleteError, setDeleteError] = React.useState<string | null>(null);
+  const [isSaving, setIsSaving] = React.useState(false);
+  const [isDeleting, setIsDeleting] = React.useState(false);
   const rootRef = React.useRef<HTMLDivElement>(null);
+  const pendingActionRef = React.useRef<PendingAction | null>(null);
+  const afterSaveActionRef = React.useRef<PendingAction | null>(null);
+  const navigate = useNavigate();
+  const params = useParams();
 
   const selection = useBoardStore((state) => state.selection);
   const blocks = useBoardStore((state) => state.blocks);
   const viewport = useBoardStore((state) => state.viewport);
   const gridView = useBoardStore((state) => state.gridView);
+  const canvasTitle = useBoardStore((state) => state.canvasTitle);
   const setGridView = useBoardStore((state) => state.setGridView);
   const setMode = useBoardStore((state) => state.setMode);
   const setIsSearchOpen = useBoardStore((state) => state.setIsSearchOpen);
@@ -292,6 +314,11 @@ export const BoardMenu: React.FC = () => {
   }, [open]);
 
   React.useEffect(() => {
+    if (!open) return;
+    void fetchRecentBoards(10).then(setRecentBoards);
+  }, [open]);
+
+  React.useEffect(() => {
     const closeOnOutside = (event: PointerEvent) => {
       if (rootRef.current && !rootRef.current.contains(event.target as Node)) setOpen(false);
     };
@@ -312,17 +339,112 @@ export const BoardMenu: React.FC = () => {
     setOpen(false);
   };
 
+  const runAfterUnsavedCheck = (action: () => void | Promise<void>) => {
+    if (shouldPromptToSaveBoard()) {
+      pendingActionRef.current = action;
+      setIsUnsavedDialogOpen(true);
+      setOpen(false);
+      return;
+    }
+    run(action);
+  };
+
+  const openSaveDialog = () => {
+    setSaveTitle(canvasTitle || 'Untitled Board');
+    setSaveError(null);
+    setIsSaveDialogOpen(true);
+  };
+
+  const confirmSave = async (event: React.FormEvent) => {
+    event.preventDefault();
+    setIsSaving(true);
+    setSaveError(null);
+    try {
+      const savedId = await saveBoardToWeb(saveTitle, getSavedBoardId() === params.id ? params.id : null);
+      setIsSaveDialogOpen(false);
+      const afterSaveAction = afterSaveActionRef.current;
+      afterSaveActionRef.current = null;
+      if (afterSaveAction) {
+        void afterSaveAction();
+      } else if (params.id !== savedId) {
+        navigate(`/board/${savedId}`);
+      }
+    } catch (error) {
+      const message =
+        error instanceof Error
+          ? error.message
+          : typeof error === 'object' && error && 'message' in error && typeof error.message === 'string'
+            ? error.message
+            : 'Could not save board.';
+      setSaveError(message);
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const deleteBoard = async () => {
+    setDeleteError(getSavedBoardId() ? null : 'Save this board before deleting it.');
+    setIsDeleteDialogOpen(true);
+    setOpen(false);
+  };
+
+  const confirmDeleteBoard = async () => {
+    if (!getSavedBoardId()) return;
+    setIsDeleting(true);
+    setDeleteError(null);
+    try {
+      await deleteCurrentBoard();
+      setIsDeleteDialogOpen(false);
+      navigate('/');
+    } catch (error) {
+      const message =
+        error instanceof Error
+          ? error.message
+            : typeof error === 'object' && error && 'message' in error && typeof error.message === 'string'
+              ? error.message
+              : 'Could not delete board.';
+      setDeleteError(message);
+    } finally {
+      setIsDeleting(false);
+    }
+  };
+
+  const leaveWithoutSaving = () => {
+    const action = pendingActionRef.current;
+    pendingActionRef.current = null;
+    setIsUnsavedDialogOpen(false);
+    if (action) void action();
+  };
+
+  const saveBeforeLeaving = () => {
+    afterSaveActionRef.current = pendingActionRef.current;
+    pendingActionRef.current = null;
+    setIsUnsavedDialogOpen(false);
+    openSaveDialog();
+  };
+
+  const recentBoardItems: MenuItem[] = recentBoards.length > 0
+    ? recentBoards.map((board) => ({
+      id: `recent-${board.id}`,
+      label: board.title || 'Untitled Board',
+      icon: FolderOpen,
+      action: () => runAfterUnsavedCheck(() => navigate(`/board/${board.id}`)),
+    }))
+    : [{ id: 'recent-empty', label: 'No recent boards', icon: RotateCcw }];
+
   const menus: MenuItem[] = [
     {
       id: 'file',
       label: 'File',
       icon: FileDown,
       children: [
-        { id: 'new', label: 'New', icon: FilePlus, action: newBoard },
-        { id: 'open', label: 'Open', icon: FolderOpen, action: openBoardFile },
-        { id: 'openRecent', label: 'Open recent', icon: RotateCcw, action: openRecentBoard },
-        { id: 'save', label: 'Save', icon: Save, action: saveBoard },
+        { id: 'new', label: 'New', icon: FilePlus, action: () => runAfterUnsavedCheck(newBoard) },
+        { id: 'open', label: 'Open', icon: FolderOpen, action: () => runAfterUnsavedCheck(() => navigate('/')) },
+        { id: 'openRecent', label: 'Open recent', icon: RotateCcw, children: recentBoardItems },
+        { id: 'save', label: 'Save', icon: Save, action: openSaveDialog },
         { id: 'saveLocal', label: 'Save local copy', icon: Download, action: saveLocalCopy },
+        { id: 'import', label: 'Import', icon: FileUp, action: () => runAfterUnsavedCheck(importBoardFile) },
+        { id: 'deleteBoard', label: 'Delete board', icon: Trash2, action: deleteBoard, danger: true },
         {
           id: 'export',
           label: 'Export as...',
@@ -431,6 +553,156 @@ export const BoardMenu: React.FC = () => {
 
   const activeMenu = menus.find((menu) => menu.id === hoveredTop);
   const nestedMenu = activeMenu?.children?.find((item) => item.id === hoveredNested && item.children);
+  const saveDialog = (
+    <AnimatePresence>
+      {isSaveDialogOpen && (
+        <motion.div
+          className="fixed inset-0 z-[10050] flex min-h-dvh items-center justify-center bg-zinc-50/70 p-4"
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          exit={{ opacity: 0 }}
+          onPointerDown={() => setIsSaveDialogOpen(false)}
+        >
+          <motion.form
+            onSubmit={confirmSave}
+            onPointerDown={(event) => event.stopPropagation()}
+            initial={{ opacity: 0, y: 10, scale: 0.98 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            exit={{ opacity: 0, y: 6, scale: 0.98 }}
+            transition={{ type: 'spring', bounce: 0.18, duration: 0.35 }}
+            className="w-full max-w-[360px] rounded-xl border border-zinc-200 bg-white p-5 shadow-xl"
+          >
+            <label className="block text-[13px] font-semibold leading-none text-zinc-800" htmlFor="board-save-title">
+              Board Name
+            </label>
+            <input
+              id="board-save-title"
+              value={saveTitle}
+              onChange={(event) => setSaveTitle(event.target.value)}
+              autoFocus
+              className="mt-2 h-11 w-full rounded-lg border border-zinc-200 bg-white px-3 text-[15px] leading-none text-zinc-950 outline-none transition placeholder:text-zinc-400 focus:border-zinc-400 focus:ring-2 focus:ring-zinc-200"
+            />
+            {saveError && <p className="mt-2 text-xs text-red-600">{saveError}</p>}
+            <div className="mt-5 flex justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => setIsSaveDialogOpen(false)}
+                className="rounded-lg px-3 py-2 text-sm text-zinc-600 transition hover:bg-zinc-100 hover:text-zinc-950"
+              >
+                Cancel
+              </button>
+              <button
+                type="submit"
+                disabled={isSaving}
+                className="rounded-lg bg-zinc-950 px-3 py-2 text-sm font-medium text-white transition hover:bg-zinc-800 disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                {isSaving ? 'Saving...' : 'Save'}
+              </button>
+            </div>
+          </motion.form>
+        </motion.div>
+      )}
+    </AnimatePresence>
+  );
+  const unsavedDialog = (
+    <AnimatePresence>
+      {isUnsavedDialogOpen && (
+        <motion.div
+          className="fixed inset-0 z-[10050] flex min-h-dvh items-center justify-center bg-zinc-50/70 p-4"
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          exit={{ opacity: 0 }}
+          onPointerDown={() => setIsUnsavedDialogOpen(false)}
+        >
+          <motion.div
+            role="dialog"
+            aria-modal="true"
+            onPointerDown={(event) => event.stopPropagation()}
+            initial={{ opacity: 0, y: 10, scale: 0.98 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            exit={{ opacity: 0, y: 6, scale: 0.98 }}
+            transition={{ type: 'spring', bounce: 0.18, duration: 0.35 }}
+            className="w-full max-w-[360px] rounded-xl border border-zinc-200 bg-white p-5 shadow-xl"
+          >
+            <h2 className="text-[15px] font-semibold leading-none text-zinc-950">Save this board?</h2>
+            <p className="mt-2 text-sm leading-5 text-zinc-500">
+              This board is not saved yet. Save it before opening another board?
+            </p>
+            <div className="mt-5 flex justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => setIsUnsavedDialogOpen(false)}
+                className="rounded-lg px-3 py-2 text-sm text-zinc-600 transition hover:bg-zinc-100 hover:text-zinc-950"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={leaveWithoutSaving}
+                className="rounded-lg px-3 py-2 text-sm text-zinc-600 transition hover:bg-zinc-100 hover:text-zinc-950"
+              >
+                Don't Save
+              </button>
+              <button
+                type="button"
+                onClick={saveBeforeLeaving}
+                className="rounded-lg bg-zinc-950 px-3 py-2 text-sm font-medium text-white transition hover:bg-zinc-800"
+              >
+                Save
+              </button>
+            </div>
+          </motion.div>
+        </motion.div>
+      )}
+    </AnimatePresence>
+  );
+  const deleteDialog = (
+    <AnimatePresence>
+      {isDeleteDialogOpen && (
+        <motion.div
+          className="fixed inset-0 z-[10050] flex min-h-dvh items-center justify-center bg-zinc-50/70 p-4"
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          exit={{ opacity: 0 }}
+          onPointerDown={() => setIsDeleteDialogOpen(false)}
+        >
+          <motion.div
+            role="dialog"
+            aria-modal="true"
+            onPointerDown={(event) => event.stopPropagation()}
+            initial={{ opacity: 0, y: 10, scale: 0.98 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            exit={{ opacity: 0, y: 6, scale: 0.98 }}
+            transition={{ type: 'spring', bounce: 0.18, duration: 0.35 }}
+            className="w-full max-w-[360px] rounded-xl border border-zinc-200 bg-white p-5 shadow-xl"
+          >
+            <h2 className="text-[15px] font-semibold leading-none text-zinc-950">Delete board?</h2>
+            <p className="mt-2 text-sm leading-5 text-zinc-500">
+              This will permanently delete the board from your workspace.
+            </p>
+            {deleteError && <p className="mt-3 text-xs text-red-600">{deleteError}</p>}
+            <div className="mt-5 flex justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => setIsDeleteDialogOpen(false)}
+                className="rounded-lg px-3 py-2 text-sm text-zinc-600 transition hover:bg-zinc-100 hover:text-zinc-950"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={confirmDeleteBoard}
+                disabled={isDeleting || !getSavedBoardId()}
+                className="rounded-lg bg-red-600 px-3 py-2 text-sm font-medium text-white transition hover:bg-red-700 disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                {isDeleting ? 'Deleting...' : 'Delete'}
+              </button>
+            </div>
+          </motion.div>
+        </motion.div>
+      )}
+    </AnimatePresence>
+  );
 
   return (
     <div ref={rootRef}>
@@ -537,6 +809,9 @@ export const BoardMenu: React.FC = () => {
           </motion.div>
         )}
       </AnimatePresence>
+      {createPortal(saveDialog, document.body)}
+      {createPortal(unsavedDialog, document.body)}
+      {createPortal(deleteDialog, document.body)}
     </div>
   );
 };
