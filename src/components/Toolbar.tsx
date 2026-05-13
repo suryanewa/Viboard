@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useBoardStore } from '../store';
-import { Type, Link, Magnet, Pencil, Circle, MousePointer, Hand, ZoomIn, ZoomOut, Search, Send, Eye, Edit3, Plus, Frame } from 'lucide-react';
+import { Type, Link, Magnet, Pencil, Circle, MousePointer, Hand, ZoomIn, ZoomOut, Search, Send, Eye, Edit3, Plus, Frame, Upload } from 'lucide-react';
 import { v4 as uuidv4 } from 'uuid';
 import { motion, AnimatePresence } from 'framer-motion';
 import clsx from 'clsx';
@@ -57,12 +57,25 @@ export const Toolbar: React.FC = () => {
   const [isEditingTitle, setIsEditingTitle] = useState(false);
   const [draftCanvasTitle, setDraftCanvasTitle] = useState(canvasTitle);
   const [activeToolbarTool, setActiveToolbarTool] = useState<ToolbarVisualTool>(tool);
-  const [activePlusTool, setActivePlusTool] = useState<ToolbarVisualTool>('plus');
   const animationTimeoutRef = React.useRef<number | null>(null);
-  const plusMenuCloseTimeoutRef = React.useRef<number | null>(null);
   const titleInputRef = React.useRef<HTMLInputElement>(null);
 
   const [plusRotation, setPlusRotation] = useState(0);
+  const topLeftToolbarRef = React.useRef<HTMLDivElement>(null);
+  const [topLeftWidth, setTopLeftWidth] = useState(0);
+
+  useEffect(() => {
+    if (!topLeftToolbarRef.current) return;
+    const updateWidth = () => {
+      if (topLeftToolbarRef.current) {
+        setTopLeftWidth(topLeftToolbarRef.current.getBoundingClientRect().width);
+      }
+    };
+    const observer = new ResizeObserver(updateWidth);
+    observer.observe(topLeftToolbarRef.current);
+    updateWidth();
+    return () => observer.disconnect();
+  }, []);
 
   const ZOOM_LEVELS = [0.25, 0.5, 0.75, 1, 2];
   const cycleZoom = () => {
@@ -86,20 +99,15 @@ export const Toolbar: React.FC = () => {
     { id: 'text', icon: Type, shortcut: 'T', color: 'red', hasSecondary: true, hoverAnim: { scale: 1.1, y: -2 } as any },
     { id: 'marker', icon: Pencil, shortcut: 'M', color: 'red', hasSecondary: true, hoverAnim: { scale: 1.1, rotate: -20, x: 2, y: -2 } as any },
     { id: 'shape', icon: Circle, shortcut: 'K', color: 'red', hasSecondary: true, hoverAnim: { scale: 1.15 } as any },
-    { id: 'plus', icon: Plus, shortcut: 'L', color: 'red', hasSecondary: false, hoverAnim: { scale: 1.1, rotate: 90 } as any },
-    { id: 'link', icon: Link, shortcut: 'L', color: 'red', hasSecondary: false, hoverAnim: { scale: 1.1 } as any },
-    { id: 'palette', icon: VennDiagramIcon, shortcut: 'C', color: 'red', hasSecondary: false, hoverAnim: { scale: 1.1 } as any },
-    { id: 'font', icon: SerifAIcon, shortcut: 'F', color: 'red', hasSecondary: false, hoverAnim: { scale: 1.1 } as any },
+    { id: 'link', icon: Upload, shortcut: 'L', color: 'red', hasSecondary: false, hoverAnim: { scale: 1.1 } as any },
   ], []);
 
-  const handleToolSelect = React.useCallback((nextTool: ToolbarVisualTool, options?: { deferPlusMenuClose?: boolean, isSubTool?: boolean }) => {
+  const handleToolSelect = React.useCallback((nextTool: ToolbarVisualTool, options?: { isSubTool?: boolean }) => {
     const currentState = useBoardStore.getState();
-    const currentVisualTool = options?.isSubTool ? 'plus' : activeToolbarTool;
+    const currentVisualTool = activeToolbarTool;
     
-    if (currentVisualTool === nextTool && !options?.isSubTool) {
-      if (nextTool !== 'plus' && !currentState.isPlusMenuOpen) {
-        return;
-      }
+    if (currentVisualTool === nextTool) {
+      return;
     }
     
     const currentIndex = TOOLS.findIndex(t => t.id === currentVisualTool);
@@ -108,87 +116,41 @@ export const Toolbar: React.FC = () => {
       setHopDirection(nextIndex > currentIndex ? 1 : -1);
     }
     
-    const nextToolHasSecondary = TOOLS.find(t => t.id === (options?.isSubTool ? 'plus' : nextTool))?.hasSecondary;
+    const nextToolHasSecondary = TOOLS.find(t => t.id === nextTool)?.hasSecondary;
     
-    if (options?.isSubTool) {
-      setActivePlusTool(nextTool);
-      setActiveToolbarTool('plus');
-    } else {
-      setActiveToolbarTool(nextTool);
-    }
+    setActiveToolbarTool(nextTool);
 
-    if (plusMenuCloseTimeoutRef.current !== null) {
-      window.clearTimeout(plusMenuCloseTimeoutRef.current);
-      plusMenuCloseTimeoutRef.current = null;
-    }
-    
-    if (nextTool !== 'plus' && !options?.isSubTool) {
-      setTool(nextTool === 'palette' || nextTool === 'font' ? 'text' : nextTool as any);
-      if (nextTool === 'sticky' || nextTool === 'text' || nextTool === 'shape' || nextTool === 'marker' || nextTool === 'link' || nextTool === 'palette' || nextTool === 'font') {
-        currentState.setSelection([]);
-        currentState.setDrawingSelection([]);
-      }
-      if (currentState.isPlusMenuOpen && options?.deferPlusMenuClose) {
-        plusMenuCloseTimeoutRef.current = window.setTimeout(() => {
-          setIsPlusMenuOpen(false);
-          plusMenuCloseTimeoutRef.current = null;
-        }, 250);
-      } else {
-        setIsPlusMenuOpen(false);
-      }
-    } else if (nextTool === 'plus') {
-      setIsPlusMenuOpen(true);
-    } else if (options?.isSubTool) {
-      setTool(nextTool === 'palette' || nextTool === 'font' ? 'text' : nextTool as any);
-      if (nextTool === 'sticky' || nextTool === 'text' || nextTool === 'shape' || nextTool === 'marker' || nextTool === 'link' || nextTool === 'palette' || nextTool === 'font') {
-        currentState.setSelection([]);
-        currentState.setDrawingSelection([]);
-      }
-      if (currentState.isPlusMenuOpen) {
-        setIsPlusMenuOpen(false);
-      }
+    setTool(nextTool === 'palette' || nextTool === 'font' ? 'text' : nextTool as any);
+    if (nextTool === 'sticky' || nextTool === 'text' || nextTool === 'shape' || nextTool === 'marker' || nextTool === 'link') {
+      currentState.setSelection([]);
+      currentState.setDrawingSelection([]);
     }
     
     setHoveredTool(null);
     setHoveredTopRight(null);
     setHoveredTopLeft(null);
-    setAnimationState(options?.isSubTool ? 'idle' : 'hopping');
+    setAnimationState('hopping');
     if (animationTimeoutRef.current !== null) {
       window.clearTimeout(animationTimeoutRef.current);
     }
     
     animationTimeoutRef.current = window.setTimeout(() => {
-      setAnimationState(nextToolHasSecondary && (nextTool !== 'plus' || options?.isSubTool) ? 'animating-in' : 'idle');
+      setAnimationState(nextToolHasSecondary ? 'animating-in' : 'idle');
       animationTimeoutRef.current = null;
     }, 450);
-  }, [activeToolbarTool, setAnimationState, setTool, TOOLS, setIsPlusMenuOpen]);
+  }, [activeToolbarTool, setAnimationState, setTool, TOOLS]);
 
   const activeToolbarToolRef = React.useRef(activeToolbarTool);
   activeToolbarToolRef.current = activeToolbarTool;
-  const activePlusToolRef = React.useRef(activePlusTool);
-  activePlusToolRef.current = activePlusTool;
 
   useEffect(() => {
-    if (!isPlusMenuOpen) {
-      if (tool === 'link') {
-        setActiveToolbarTool('plus');
-        setActivePlusTool('link');
-      } else if (tool === 'text' && activeToolbarToolRef.current === 'plus' && (activePlusToolRef.current === 'font' || activePlusToolRef.current === 'palette')) {
-        return;
-      } else {
-        setActiveToolbarTool(tool);
-        setActivePlusTool('plus');
-      }
-    }
-  }, [isPlusMenuOpen, tool]);
+    setActiveToolbarTool(tool);
+  }, [tool]);
 
   useEffect(() => {
     return () => {
       if (animationTimeoutRef.current !== null) {
         window.clearTimeout(animationTimeoutRef.current);
-      }
-      if (plusMenuCloseTimeoutRef.current !== null) {
-        window.clearTimeout(plusMenuCloseTimeoutRef.current);
       }
     };
   }, []);
@@ -251,11 +213,6 @@ export const Toolbar: React.FC = () => {
 
   useEffect(() => {
     const handleClickOutside = (e: Event) => {
-      if (plusMenuRef.current && !plusMenuRef.current.contains(e.target as Node)) {
-        if (useBoardStore.getState().isPlusMenuOpen) {
-          handleToolSelect(useBoardStore.getState().tool);
-        }
-      }
     };
     window.addEventListener('pointerdown', handleClickOutside);
     return () => {
@@ -714,9 +671,9 @@ export const Toolbar: React.FC = () => {
                 }
               }}
             >
-              {TOOLS.filter(t => !['link', 'palette', 'font'].includes(t.id)).map((t) => {
-                const isSelected = activeToolbarTool === t.id && !(t.id === 'plus' && isPlusMenuOpen);
-                const Icon = t.id === 'plus' && activePlusTool !== 'plus' && !isPlusMenuOpen ? TOOLS.find(tool => tool.id === activePlusTool)?.icon || t.icon : t.icon;
+              {TOOLS.map((t) => {
+                const isSelected = activeToolbarTool === t.id;
+                const Icon = t.icon;
                 
                 const ButtonContent = (
                     <motion.button
@@ -726,23 +683,20 @@ export const Toolbar: React.FC = () => {
                       whileHover="hover"
                       onPointerEnter={() => {
                         setHoveredTool(t.id);
-                        if (t.id === 'plus' && (activePlusTool === 'plus' || isPlusMenuOpen)) {
-                          setPlusRotation(r => r + 90);
-                        }
                       }}
                       onPointerDown={(e) => {
                         e.stopPropagation();
-                        if (t.id === 'plus' || activeToolbarTool !== t.id) {
+                        if (activeToolbarTool !== t.id) {
                           handleToolSelect(t.id as ToolbarVisualTool);
                         }
                       }}
                       className="relative p-2 flex items-center justify-center w-10 h-10 rounded-lg transition-colors"
                     >
-                    {(hoveredTool || (isPlusMenuOpen ? 'plus' : activeToolbarTool)) === t.id && (
+                    {(hoveredTool || activeToolbarTool) === t.id && (
                       <motion.div
                         layoutId={isSelected ? "active-tool-bg-shim" : "toolbar-hover-bg"}
                         initial={false}
-                        animate={{ opacity: hoveredTool === t.id && !isSelected && !isPlusMenuOpen ? 1 : 0 }}
+                        animate={{ opacity: hoveredTool === t.id && !isSelected ? 1 : 0 }}
                         transition={{
                           layout: { type: "spring", stiffness: 350, damping: 30, mass: 0.8 },
                           opacity: { duration: 0.2 }
@@ -752,85 +706,6 @@ export const Toolbar: React.FC = () => {
                     )}
 
                     <AnimatePresence>
-                      
-                    {t.id === 'plus' && (
-                      <AnimatePresence>
-                        {isPlusMenuOpen && (
-                            <motion.div
-                              initial="hidden"
-                              animate="visible"
-                              exit="hidden"
-                              className="absolute bottom-1/2 left-1/2 -translate-x-1/2 translate-y-1/2 z-50 pointer-events-none"
-                              variants={{
-                                hidden: { opacity: 0 },
-                                visible: { 
-                                  opacity: 1,
-                                  transition: { staggerChildren: 0.02, delayChildren: 0.02 } 
-                                }
-                              }}
-                            >
-                              {[
-                                { id: 'link', icon: Link, title: 'Link', x: 0, y: -56 },
-                                { id: 'palette', icon: VennDiagramIcon, title: 'Palette', x: 56, y: -56 },
-                                { id: 'font', icon: SerifAIcon, title: 'Font', x: 56, y: 0 }
-                              ].map((sub, i) => {
-                                const isSelected = activePlusTool === sub.id;
-                                
-                                return (
-                                <motion.button
-                                  key={sub.id}
-                                  type="button"
-                                  onPointerEnter={(e) => {
-                                    e.stopPropagation();
-                                  }}
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    handleToolSelect(sub.id as ToolbarVisualTool, { isSubTool: true });
-                                  }}
-                                  variants={{
-                                    hidden: { 
-                                      opacity: 0, 
-                                      x: 0, 
-                                      y: 0, 
-                                      scale: 0.5,
-                                      borderRadius: 22,
-                                      boxShadow: "0 8px 16px -4px rgba(0,0,0,0), 0 4px 8px -2px rgba(0,0,0,0)",
-                                      width: 44,
-                                      height: 44,
-                                      backgroundColor: "#ffffff",
-                                      color: "#3f3f46",
-                                      borderColor: "#e4e4e7",
-                                      transition: { type: "spring", stiffness: 300, damping: 25 }
-                                    },
-                                    visible: { 
-                                      opacity: 1, 
-                                      x: sub.x, 
-                                      y: sub.y, 
-                                      scale: 1, 
-                                      zIndex: isSelected ? 10 : 1,
-                                      borderRadius: 22,
-                                      boxShadow: "0 8px 16px -4px rgba(0,0,0,0.1), 0 4px 8px -2px rgba(0,0,0,0.05)",
-                                      width: 44,
-                                      height: 44,
-                                      backgroundColor: isSelected ? "#fee2e2" : "#ffffff",
-                                      color: isSelected ? "#dc2626" : "#3f3f46",
-                                      borderColor: isSelected ? "transparent" : "#e4e4e7",
-                                      transition: { type: "spring", stiffness: 250, damping: 25, mass: 0.5 } 
-                                    }
-                                  }}
-                                  whileHover={{ scale: 1.15, rotate: i % 2 === 0 ? 5 : -5 }}
-                                  className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 flex items-center justify-center border border-solid pointer-events-auto"
-                                >
-                                  <Tooltip content={sub.title} position="top" className="w-full h-full">
-                                    <sub.icon className="w-5 h-5" />
-                                  </Tooltip>
-                                </motion.button>
-                              )})}
-                            </motion.div>
-                        )}
-                      </AnimatePresence>
-                    )}
-
                     {isSelected && animationState === 'animating-out' && (
                         <motion.div
                           initial={{ opacity: 1, scale: 1 }}
@@ -876,11 +751,11 @@ export const Toolbar: React.FC = () => {
                     
                     <motion.div
                       variants={{ 
-                        hover: isSelected ? {} : (t.id === 'plus' ? { scale: 1.1 } : t.hoverAnim),
-                        rest: { scale: 1, ...(t.id !== 'plus' && { rotate: 0 }), x: 0, y: 0 },
+                        hover: isSelected ? {} : t.hoverAnim,
+                        rest: { scale: 1, rotate: 0, x: 0, y: 0 },
                         selected: { 
                           scale: [1, 0.8, 1.2, 1],
-                          ...(t.id !== 'plus' && { rotate: 0 }),
+                          rotate: 0,
                           x: 0,
                           y: 0
                         }
@@ -895,7 +770,7 @@ export const Toolbar: React.FC = () => {
                     >
                       <AnimatePresence mode="wait">
                         <motion.div
-                          key={t.id === 'plus' && activePlusTool !== 'plus' && !isPlusMenuOpen ? activePlusTool : t.id}
+                          key={t.id}
                           initial={{ opacity: 0, scale: 0.5, rotate: -45 }}
                           animate={{ opacity: 1, scale: 1, rotate: 0 }}
                           exit={{ opacity: 0, scale: 0.5, rotate: 45 }}
@@ -905,8 +780,6 @@ export const Toolbar: React.FC = () => {
                           className="flex items-center justify-center absolute inset-0"
                         >
                           <motion.div
-                            animate={{ rotate: t.id === 'plus' && (activePlusTool === 'plus' || isPlusMenuOpen) ? plusRotation : 0 }}
-                            transition={{ type: "spring", stiffness: 200, damping: 15 }}
                             className="flex items-center justify-center w-full h-full"
                           >
                             {t.id === 'sticky' ? (
@@ -927,16 +800,11 @@ export const Toolbar: React.FC = () => {
                 return (
                   <motion.div 
                     key={t.id} 
-                    ref={t.id === 'plus' ? plusMenuRef : undefined}
                     variants={{ hidden: { opacity: 0, scale: 0.5 }, visible: { opacity: 1, scale: 1, transition: { type: "spring", bounce: 0.4 } } }}
                   >
-                    {t.id === 'plus' ? (
-                      ButtonContent
-                    ) : (
-                      <Tooltip content={t.id.charAt(0).toUpperCase() + t.id.slice(1)} shortcut={t.shortcut} position="top">
-                        {ButtonContent}
-                      </Tooltip>
-                    )}
+                    <Tooltip content={t.id.charAt(0).toUpperCase() + t.id.slice(1)} shortcut={t.shortcut} position="top">
+                      {ButtonContent}
+                    </Tooltip>
                   </motion.div>
                 );
               })}
@@ -1016,6 +884,8 @@ export const Toolbar: React.FC = () => {
       <AnimatePresence>
         {mode === 'edit' && (
           <motion.div 
+            ref={topLeftToolbarRef}
+            style={{ '--toolbar-width': `${topLeftWidth}px` } as any}
             className="fixed top-8 left-8 flex items-center gap-1 px-2 py-1.5 bg-white/90 backdrop-blur-md shadow-none border border-zinc-200 pointer-events-auto rounded-xl"
             onPointerLeave={() => setHoveredTopLeft(null)}
             initial="hidden"

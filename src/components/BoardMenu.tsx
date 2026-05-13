@@ -79,46 +79,117 @@ type MenuItem = {
 const menuVariants: Variants = {
   hidden: {
     opacity: 0,
-    y: -8,
-    scale: 0.98,
-    filter: 'blur(6px)',
-    transformOrigin: 'top left',
-    transition: { duration: 0.14 },
+    height: 0,
+    filter: 'blur(10px)',
   },
   visible: {
     opacity: 1,
-    y: 0,
-    scale: 1,
+    height: 'auto',
     filter: 'blur(0px)',
-    transition: { type: 'spring', bounce: 0, duration: 0.28, staggerChildren: 0.018 },
+    transition: {
+      type: 'spring',
+      bounce: 0,
+      duration: 0.5,
+    },
   },
   exit: {
     opacity: 0,
-    y: -6,
-    scale: 0.98,
-    filter: 'blur(6px)',
-    transition: { duration: 0.12 },
+    height: 0,
+    filter: 'blur(8px)',
+    transition: {
+      type: 'spring',
+      bounce: 0,
+      duration: 0.4,
+    },
+  },
+};
+
+const submenuVariants: Variants = {
+  hidden: {
+    opacity: 0,
+    x: -8,
+    filter: 'blur(8px)',
+  },
+  visible: {
+    opacity: 1,
+    x: 0,
+    filter: 'blur(0px)',
+    transition: {
+      type: 'spring',
+      bounce: 0,
+      duration: 0.4,
+    },
+  },
+  exit: {
+    opacity: 0,
+    x: -4,
+    filter: 'blur(4px)',
+    transition: {
+      duration: 0.2,
+    },
   },
 };
 
 const itemVariants: Variants = {
-  hidden: { opacity: 0, x: -6 },
-  visible: { opacity: 1, x: 0, transition: { type: 'spring', bounce: 0.35, duration: 0.28 } },
+  hidden: {
+    opacity: 0,
+    y: -15,
+    rotateX: -65,
+    transformPerspective: 600,
+    filter: 'blur(5px)',
+  },
+  visible: (i: number) => ({
+    opacity: 1,
+    y: 0,
+    rotateX: 0,
+    filter: 'blur(0px)',
+    transition: {
+      type: 'spring',
+      bounce: 0.3,
+      duration: 0.45,
+      delay: i * 0.04,
+    },
+  }),
+  exit: (custom: { i: number; total: number }) => ({
+    opacity: 0,
+    y: 15,
+    rotateX: 65,
+    filter: 'blur(5px)',
+    transition: {
+      type: 'spring',
+      bounce: 0.3,
+      duration: 0.4,
+      delay: Math.max(0, custom.total - 1 - custom.i) * 0.03,
+    },
+  }),
 };
 
 const Shortcut = ({ value }: { value?: string }) => {
   if (!value) return null;
-  return <span className="ml-4 text-[11px] leading-none font-mono text-zinc-400 tabular-nums">{value}</span>;
+  return (
+    <motion.span
+      variants={{
+        hover: { x: -4, opacity: 0.6, transition: { type: 'spring', bounce: 0.4, duration: 0.4 } },
+      }}
+      className="ml-4 text-[11px] leading-none font-mono text-zinc-400 tabular-nums z-10"
+    >
+      {value}
+    </motion.span>
+  );
 };
 
 const MenuButton = ({
   item,
   active,
+  index,
+  total,
   onEnter,
   onClick,
 }: {
   item: MenuItem;
   active?: boolean;
+  index: number;
+  total: number;
   onEnter?: () => void;
   onClick?: () => void;
 }) => {
@@ -126,31 +197,55 @@ const MenuButton = ({
   return (
     <motion.button
       type="button"
+      custom={index}
       variants={itemVariants}
       onPointerEnter={onEnter}
       onClick={onClick}
       whileHover="hover"
-      whileTap={{ scale: 0.98 }}
+      whileTap="tap"
       className={clsx(
-        'relative z-10 flex w-full min-w-[220px] items-center justify-between rounded-lg px-2.5 py-1.5 text-left text-sm outline-none cursor-default',
+        'relative z-10 flex w-full items-center justify-between rounded-lg px-2.5 py-1.5 text-left text-sm outline-none cursor-default group',
         item.danger ? 'text-red-600' : 'text-zinc-700',
         active && 'text-zinc-950'
       )}
     >
       <motion.div
-        className={clsx('absolute inset-0 -z-10 rounded-lg', item.danger ? 'bg-red-50' : 'bg-zinc-100')}
+        className={clsx('absolute inset-0 -z-10 rounded-lg mx-1', item.danger ? 'bg-red-50' : 'bg-zinc-100')}
         initial={false}
-        animate={{ opacity: active ? 1 : 0 }}
-        variants={{ hover: { opacity: 1, scale: 1 } }}
-        transition={{ type: 'spring', bounce: 0.25, duration: 0.32 }}
+        animate={{ opacity: active ? 1 : 0, scale: active ? 1 : 0.95 }}
+        variants={{
+          hover: { opacity: 1, scale: 1, transition: { type: 'spring', bounce: 0.25, duration: 0.4 } },
+          tap: { scale: 0.95, opacity: 1 },
+        }}
       />
-      <span className="flex min-w-0 items-center gap-2.5">
-        {Icon && <Icon className="h-4 w-4 shrink-0" />}
+      <motion.span
+        className="flex min-w-0 items-center gap-2.5 z-10"
+        variants={{
+          hover: { x: 4, transition: { type: 'spring', bounce: 0.4, duration: 0.4 } },
+        }}
+      >
+        {Icon && (
+          <motion.div
+            variants={{
+              hover: { rotate: -15, scale: 1.15, transition: { type: 'spring', bounce: 0.6 } },
+            }}
+          >
+            <Icon className="h-4 w-4 shrink-0" />
+          </motion.div>
+        )}
         <span className="truncate">{item.label}</span>
-      </span>
-      <span className="flex items-center">
+      </motion.span>
+      <span className="flex items-center z-10">
         <Shortcut value={item.shortcut} />
-        {item.children && <ChevronRight className="ml-2 h-4 w-4 text-zinc-400" />}
+        {item.children && (
+          <motion.div
+            variants={{
+              hover: { x: 2, transition: { type: 'spring', bounce: 0.4, duration: 0.4 } },
+            }}
+          >
+            <ChevronRight className="ml-2 h-4 w-4 text-zinc-400" />
+          </motion.div>
+        )}
       </span>
     </motion.button>
   );
@@ -167,7 +262,7 @@ const DotGridIcon = ({ className }: { className?: string }) => (
 
 export const BoardMenu: React.FC = () => {
   const [open, setOpen] = React.useState(false);
-  const [hoveredTop, setHoveredTop] = React.useState('file');
+  const [hoveredTop, setHoveredTop] = React.useState<string | null>(null);
   const [hoveredNested, setHoveredNested] = React.useState<string | null>(null);
   const rootRef = React.useRef<HTMLDivElement>(null);
 
@@ -190,6 +285,13 @@ export const BoardMenu: React.FC = () => {
     sendToBack,
     setSelection,
   } = useBoardStore.getState();
+
+  React.useEffect(() => {
+    if (!open) {
+      setHoveredTop(null);
+      setHoveredNested(null);
+    }
+  }, [open]);
 
   React.useEffect(() => {
     const closeOnOutside = (event: PointerEvent) => {
@@ -278,7 +380,7 @@ export const BoardMenu: React.FC = () => {
         { id: 'ungroup', label: 'Ungroup selection', shortcut: '⌘⌫', icon: Ungroup, action: ungroupSelection },
         { id: 'front', label: 'Bring to front', shortcut: ']', icon: Layers, action: () => selection.forEach((id) => bringToFront(id)) },
         { id: 'forward', label: 'Bring forward', shortcut: '⌘]', icon: Layers, action: () => selection.forEach((id) => bringForward(id)) },
-        { id: 'backward', label: 'Send to backward', shortcut: '⌘[', icon: SendToBack, action: () => selection.forEach((id) => sendBackward(id)) },
+        { id: 'backward', label: 'Send backward', shortcut: '⌘[', icon: SendToBack, action: () => selection.forEach((id) => sendBackward(id)) },
         { id: 'back', label: 'Send to back', shortcut: '[', icon: SendToBack, action: () => selection.forEach((id) => sendToBack(id)) },
         { id: 'flipH', label: 'Flip horizontal', shortcut: '⇧H', icon: AlignHorizontalJustifyCenter, action: () => flipSelection('horizontal') },
         { id: 'flipV', label: 'Flip vertical', shortcut: '⇧V', icon: AlignVerticalJustifyCenter, action: () => flipSelection('vertical') },
@@ -329,11 +431,11 @@ export const BoardMenu: React.FC = () => {
     },
   ];
 
-  const activeMenu = menus.find((menu) => menu.id === hoveredTop) || menus[0];
-  const nestedMenu = activeMenu.children?.find((item) => item.id === hoveredNested && item.children);
+  const activeMenu = menus.find((menu) => menu.id === hoveredTop);
+  const nestedMenu = activeMenu?.children?.find((item) => item.id === hoveredNested && item.children);
 
   return (
-    <div ref={rootRef} className="relative">
+    <div ref={rootRef}>
       <motion.button
         type="button"
         aria-label="Menu"
@@ -368,13 +470,16 @@ export const BoardMenu: React.FC = () => {
             animate="visible"
             exit="exit"
             onPointerDown={(event) => event.stopPropagation()}
+            style={{ originX: 0, originY: 0 }}
           >
-            <div className="flex flex-col">
-              {menus.map((item) => (
+            <div className="flex flex-col" style={{ width: 'calc(var(--toolbar-width) - 12px)', minWidth: '160px' }}>
+              {menus.map((item, i) => (
                 <MenuButton
                   key={item.id}
                   item={item}
-                  active={activeMenu.id === item.id}
+                  index={i}
+                  total={menus.length}
+                  active={hoveredTop === item.id}
                   onEnter={() => {
                     setHoveredTop(item.id);
                     setHoveredNested(null);
@@ -382,28 +487,56 @@ export const BoardMenu: React.FC = () => {
                 />
               ))}
             </div>
-            <div className="h-[calc(100%-8px)] w-px self-stretch bg-zinc-100" />
-            <div className="flex flex-col">
-              {activeMenu.children?.map((item) => (
-                <MenuButton
-                  key={item.id}
-                  item={item}
-                  active={hoveredNested === item.id}
-                  onEnter={() => setHoveredNested(item.children ? item.id : null)}
-                  onClick={() => run(item.action)}
-                />
-              ))}
-            </div>
-            <AnimatePresence>
-              {nestedMenu?.children && (
-                <>
+            <AnimatePresence mode="popLayout">
+              {activeMenu && (
+                <motion.div
+                  key={activeMenu.id}
+                  variants={submenuVariants}
+                  initial="hidden"
+                  animate="visible"
+                  exit="exit"
+                  className="flex items-start gap-1"
+                >
                   <div className="h-[calc(100%-8px)] w-px self-stretch bg-zinc-100" />
-                  <motion.div className="flex flex-col" variants={menuVariants} initial="hidden" animate="visible" exit="exit">
-                    {nestedMenu.children.map((item) => (
-                      <MenuButton key={item.id} item={item} onClick={() => run(item.action)} />
+                  <div className="flex flex-col min-w-[220px]">
+                    {activeMenu.children?.map((item, i) => (
+                      <MenuButton
+                        key={item.id}
+                        item={item}
+                        index={i}
+                        total={activeMenu.children?.length || 0}
+                        active={hoveredNested === item.id}
+                        onEnter={() => setHoveredNested(item.children ? item.id : null)}
+                        onClick={() => run(item.action)}
+                      />
                     ))}
-                  </motion.div>
-                </>
+                  </div>
+                </motion.div>
+              )}
+            </AnimatePresence>
+            <AnimatePresence mode="popLayout">
+              {nestedMenu?.children && (
+                <motion.div
+                  key={nestedMenu.id}
+                  className="flex items-start gap-1"
+                  variants={submenuVariants}
+                  initial="hidden"
+                  animate="visible"
+                  exit="exit"
+                >
+                  <div className="h-[calc(100%-8px)] w-px self-stretch bg-zinc-100" />
+                  <div className="flex flex-col min-w-[220px]">
+                    {nestedMenu.children.map((item, i) => (
+                      <MenuButton
+                        key={item.id}
+                        item={item}
+                        index={i}
+                        total={nestedMenu.children?.length || 0}
+                        onClick={() => run(item.action)}
+                      />
+                    ))}
+                  </div>
+                </motion.div>
               )}
             </AnimatePresence>
           </motion.div>
