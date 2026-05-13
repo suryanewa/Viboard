@@ -115,8 +115,30 @@ export const BlockShell: React.FC<BlockShellProps> = ({ block, children }) => {
   
   const clickPoint = useRef({ x: 0, y: 0, edge: 'top' });
   const wasSelected = useRef(isSelected);
+  const shouldDelayInitialSelectionRef = useRef(isSelected);
   const shellRef = useRef<HTMLDivElement>(null);
   const [overlayElement, setOverlayElement] = useState<HTMLElement | null>(null);
+  const [showSelectionOverlay, setShowSelectionOverlay] = useState(!isSelected);
+
+  useEffect(() => {
+    if (!shouldDelayInitialSelectionRef.current) {
+      setShowSelectionOverlay(true);
+      return;
+    }
+    if (!isSelected) {
+      shouldDelayInitialSelectionRef.current = false;
+      setShowSelectionOverlay(true);
+      return;
+    }
+
+    const introDelay = Math.min(block.zIndex * 0.04, 0.8) * 1000;
+    const timeout = window.setTimeout(() => {
+      shouldDelayInitialSelectionRef.current = false;
+      setShowSelectionOverlay(true);
+    }, introDelay + 260);
+
+    return () => window.clearTimeout(timeout);
+  }, [isSelected, block.zIndex]);
 
   useEffect(() => {
     setOverlayElement(document.getElementById('viboard-overlay-layer'));
@@ -873,8 +895,8 @@ export const BlockShell: React.FC<BlockShellProps> = ({ block, children }) => {
       )}
     >
       {block.type === 'frame'
-        ? selectionOverlay
-        : overlayElement && createPortal(selectionOverlay, overlayElement)}
+        ? showSelectionOverlay && selectionOverlay
+        : showSelectionOverlay && overlayElement && createPortal(selectionOverlay, overlayElement)}
       <div
         className={clsx("w-full h-full", block.type !== 'shape' && block.type !== 'drawing' && block.type !== 'audio' && block.type !== 'frame' && "overflow-hidden")}
         style={{
