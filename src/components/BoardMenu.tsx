@@ -518,7 +518,6 @@ export const BoardMenu: React.FC = () => {
         { id: 'italic', label: 'Italic', shortcut: '⌘I', icon: Italic, action: () => applyTextCommand('italic') },
         { id: 'underline', label: 'Underline', shortcut: '⌘U', icon: Underline, action: () => applyTextCommand('underline') },
         { id: 'strike', label: 'Strikethrough', shortcut: '⇧⌘X', icon: Strikethrough, action: () => applyTextCommand('strikethrough') },
-        { id: 'link', label: 'Create link', shortcut: '⇧⌘U', icon: FilePlus, action: () => applyTextCommand('link') },
         { id: 'bullet', label: 'Bulleted list', shortcut: '⇧⌘8', icon: List, action: () => applyTextCommand('bulletedList') },
         { id: 'number', label: 'Numbered list', shortcut: '⇧⌘7', icon: ListOrdered, action: () => applyTextCommand('numberedList') },
         {

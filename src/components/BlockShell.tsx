@@ -101,6 +101,16 @@ const syncToolToSelectedBlock = (block: Block) => {
   state.setAnimationState('idle');
 };
 
+const getGroupedIds = (block: Block, blocks: Record<string, Block>) => {
+  const groupId = block.data.groupId;
+  if (typeof groupId !== 'string' || groupId.length === 0) {
+    return [block.id];
+  }
+  return Object.values(blocks)
+    .filter((candidate) => candidate.data.groupId === groupId)
+    .map((candidate) => candidate.id);
+};
+
 interface ResizeHandleProps {
   direction: string;
   cursor: string;
@@ -317,13 +327,17 @@ export const BlockShell: React.FC<BlockShellProps> = ({ block, children }) => {
     if (isResizeHandle) return;
 
     if (isContentEditable) {
-      const { selection, setSelection } = useBoardStore.getState();
-      const isCurrentlySelected = selection.includes(block.id);
+      const { selection, setSelection, blocks } = useBoardStore.getState();
+      const groupedIds = getGroupedIds(block, blocks);
+      const isCurrentlySelected = groupedIds.every((id) => selection.includes(id));
       if (e.shiftKey || e.metaKey) {
-        if (isCurrentlySelected) setSelection(selection.filter(id => id !== block.id));
-        else setSelection([...selection, block.id]);
+        if (isCurrentlySelected) {
+          setSelection(selection.filter((id) => !groupedIds.includes(id)));
+        } else {
+          setSelection([...new Set([...selection, ...groupedIds])]);
+        }
       } else if (!isCurrentlySelected) {
-        setSelection([block.id]);
+        setSelection(groupedIds);
       }
       syncToolToSelectedBlock(block);
       return;
@@ -332,8 +346,9 @@ export const BlockShell: React.FC<BlockShellProps> = ({ block, children }) => {
     e.stopPropagation();
     e.currentTarget.setPointerCapture(e.pointerId);
     
-    const { selection, setSelection } = useBoardStore.getState();
-    const isCurrentlySelected = selection.includes(block.id);
+    const { selection, setSelection, blocks: storeBlocks } = useBoardStore.getState();
+    const groupedIds = getGroupedIds(block, storeBlocks);
+    const isCurrentlySelected = groupedIds.every((id) => selection.includes(id));
 
     // Frames should keep their stacking position when selected/dragged.
     // They only move in z-order via explicit arrange actions.
@@ -343,11 +358,11 @@ export const BlockShell: React.FC<BlockShellProps> = ({ block, children }) => {
     let nextSelection = selection;
     if (e.shiftKey || e.metaKey) {
       nextSelection = isCurrentlySelected
-        ? selection.filter(id => id !== block.id)
-        : [...selection, block.id];
+        ? selection.filter((id) => !groupedIds.includes(id))
+        : [...new Set([...selection, ...groupedIds])];
       setSelection(nextSelection);
     } else if (!isCurrentlySelected) {
-      nextSelection = [block.id];
+      nextSelection = groupedIds;
       setSelection(nextSelection);
     }
     if (nextSelection.includes(block.id)) {
@@ -855,6 +870,10 @@ export const BlockShell: React.FC<BlockShellProps> = ({ block, children }) => {
             width,
             height,
             scale: block.type === 'frame' ? 1 : scale,
+            transform: block.type === 'frame'
+              ? undefined
+              : `rotate(${block.data.rotation || 0}deg) scaleX(${block.data.flipX ? -1 : 1}) scaleY(${block.data.flipY ? -1 : 1})`,
+            transformOrigin: 'center',
             pointerEvents: 'none',
             zIndex: block.type === 'frame' ? block.zIndex : 9999,
             isolation: 'isolate'

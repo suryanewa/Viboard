@@ -100,7 +100,7 @@ export const StickyBlock: React.FC<BlockContentProps> = ({ block }) => {
     >
       <p
         ref={setRef}
-        className="text-zinc-800 font-medium text-lg leading-relaxed outline-none"
+        className="text-zinc-800 font-medium text-lg leading-relaxed outline-none whitespace-pre-wrap break-words"
         contentEditable
         suppressContentEditableWarning
         onFocus={handleFocus}

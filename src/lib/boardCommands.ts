@@ -110,6 +110,29 @@ const safeFilename = (name: string, extension: string) => {
   return `${normalized || 'Untitled-Board'}.${extension}`;
 };
 
+const stripListPrefix = (line: string) =>
+  line.replace(/^\s*(?:[-*•]\s+|\d+[\.\)]\s+)/, '');
+
+const applyListStyleToText = (text: string, style?: 'bullet' | 'number') => {
+  const lines = text.split('\n');
+  const normalized = lines.map((line) => stripListPrefix(line));
+
+  if (!style) {
+    return normalized.join('\n');
+  }
+
+  let number = 1;
+  return normalized
+    .map((line) => {
+      if (!line.trim()) return '';
+      if (style === 'bullet') return `• ${line}`;
+      const next = `${number}. ${line}`;
+      number += 1;
+      return next;
+    })
+    .join('\n');
+};
+
 const saveRecentSnapshot = (snapshot: BoardSnapshot) => {
   const recent = JSON.parse(localStorage.getItem('viboard:recent') || '[]') as BoardSnapshot[];
   const next = [snapshot, ...recent.filter((item) => item.title !== snapshot.title)].slice(0, 5);
@@ -498,16 +521,33 @@ export const zoomToFit = (ids?: string[]) => {
 };
 
 export const groupSelection = () => {
+  const { selection } = useBoardStore.getState();
+  if (selection.length < 2) return;
   const groupId = uuidv4();
   updateSelectedBlocks((block) => ({ data: { ...block.data, groupId } }));
 };
 
 export const ungroupSelection = () => {
-  updateSelectedBlocks((block) => {
-    const data = { ...block.data };
-    delete data.groupId;
-    return { data };
-  });
+  const { blocks, selection, updateBlocks } = useBoardStore.getState();
+  const selectedGroupIds = new Set(
+    selection
+      .map((id) => blocks[id]?.data?.groupId)
+      .filter((groupId): groupId is string => typeof groupId === 'string' && groupId.length > 0)
+  );
+
+  if (selectedGroupIds.size === 0) return;
+
+  const updates = Object.values(blocks)
+    .filter((block) => selectedGroupIds.has(block.data.groupId))
+    .map((block) => {
+      const data = { ...block.data };
+      delete data.groupId;
+      return { id: block.id, updates: { data } };
+    });
+
+  if (updates.length > 0) {
+    updateBlocks(updates);
+  }
 };
 
 export const flipSelection = (axis: 'horizontal' | 'vertical') => {
@@ -539,8 +579,14 @@ export const applyTextCommand = (command: TextCommand) => {
     if (command === 'italic') data.italic = !data.italic;
     if (command === 'underline') data.underline = !data.underline;
     if (command === 'strikethrough') data.strikethrough = !data.strikethrough;
-    if (command === 'bulletedList') data.listStyle = data.listStyle === 'bullet' ? undefined : 'bullet';
-    if (command === 'numberedList') data.listStyle = data.listStyle === 'number' ? undefined : 'number';
+    if (command === 'bulletedList') {
+      data.listStyle = data.listStyle === 'bullet' ? undefined : 'bullet';
+      data.text = applyListStyleToText(data.text || '', data.listStyle);
+    }
+    if (command === 'numberedList') {
+      data.listStyle = data.listStyle === 'number' ? undefined : 'number';
+      data.text = applyListStyleToText(data.text || '', data.listStyle);
+    }
     if (command === 'alignLeft') data.textAlign = 'left';
     if (command === 'alignCenter') data.textAlign = 'center';
     if (command === 'alignRight') data.textAlign = 'right';
