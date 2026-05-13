@@ -346,6 +346,55 @@ const getSelectedBlocks = () => {
   return selection.map((id) => blocks[id]).filter(Boolean);
 };
 
+const containsBlockCenter = (frame: Block, block: Block) => {
+  const centerX = block.x + block.width / 2;
+  const centerY = block.y + block.height / 2;
+  return centerX >= frame.x &&
+    centerX <= frame.x + frame.width &&
+    centerY >= frame.y &&
+    centerY <= frame.y + frame.height;
+};
+
+const drawingIntersectsFrame = (frame: Block, drawing: DrawingPath) =>
+  drawing.points.some((point) =>
+    point.x >= frame.x &&
+    point.x <= frame.x + frame.width &&
+    point.y >= frame.y &&
+    point.y <= frame.y + frame.height
+  );
+
+const getCopyPngTargets = () => {
+  const { blocks, drawings, selection, drawingSelection } = useBoardStore.getState();
+  if (selection.length === 0 && drawingSelection.length === 0) {
+    return { blocks: undefined, drawings: undefined };
+  }
+
+  const selectedBlocks = selection.map((id) => blocks[id]).filter(Boolean);
+  const selectedFrames = selectedBlocks.filter((block) => block.type === 'frame');
+  const targetBlocks = new Map<string, Block>();
+  const targetDrawings = new Map<string, DrawingPath>();
+
+  selectedBlocks.forEach((block) => targetBlocks.set(block.id, block));
+  drawingSelection
+    .map((id) => drawings.find((drawing) => drawing.id === id))
+    .filter((drawing): drawing is DrawingPath => Boolean(drawing))
+    .forEach((drawing) => targetDrawings.set(drawing.id, drawing));
+
+  selectedFrames.forEach((frame) => {
+    Object.values(blocks)
+      .filter((block) => block.id !== frame.id && containsBlockCenter(frame, block))
+      .forEach((block) => targetBlocks.set(block.id, block));
+    drawings
+      .filter((drawing) => drawingIntersectsFrame(frame, drawing))
+      .forEach((drawing) => targetDrawings.set(drawing.id, drawing));
+  });
+
+  return {
+    blocks: Array.from(targetBlocks.values()),
+    drawings: Array.from(targetDrawings.values()),
+  };
+};
+
 const updateSelectedBlocks = (mapBlock: (block: Block, index: number, selected: Block[]) => Partial<Block>) => {
   const selected = getSelectedBlocks();
   if (selected.length === 0) return;
@@ -400,14 +449,22 @@ export const deleteSelection = () => {
 };
 
 export const copySelectionAsPng = async () => {
-  const canvas = await renderBoardToCanvas(getSelectedBlocks());
-  if (!canvas) return;
-  canvas.toBlob(async (blob) => {
-    if (!blob) return;
-    if ('clipboard' in navigator && 'ClipboardItem' in window) {
-      await navigator.clipboard.write([new ClipboardItem({ 'image/png': blob })]);
+  try {
+    const targets = getCopyPngTargets();
+    const canvas = await renderBoardToCanvas(targets.blocks, {
+      transparentBackground: true,
+      targetDrawings: targets.drawings,
+    });
+    if (!canvas) return;
+    if (!('clipboard' in navigator) || !('ClipboardItem' in window)) {
+      throw new Error('Clipboard image copy is not supported in this browser.');
     }
-  }, 'image/png');
+    const blob = await canvasToBlob(canvas, 'image/png');
+    await navigator.clipboard.write([new ClipboardItem({ 'image/png': blob })]);
+  } catch (error) {
+    console.error('Error copying board as PNG:', error);
+    window.alert('Could not copy this board as PNG.');
+  }
 };
 
 export const setZoomCentered = (zoom: number) => {
@@ -770,12 +827,17 @@ const drawBlockToCanvas = async (ctx: CanvasRenderingContext2D, block: Block) =>
   ctx.restore();
 };
 
-const renderBoardToCanvas = async (targetBlocks?: Block[], options: { transparentBackground?: boolean } = {}) => {
+const renderBoardToCanvas = async (
+  targetBlocks?: Block[],
+  options: { transparentBackground?: boolean; targetDrawings?: DrawingPath[] } = {}
+) => {
   const { blocks, drawings } = useBoardStore.getState();
-  const blockList = targetBlocks && targetBlocks.length > 0 ? targetBlocks : Object.values(blocks);
-  if (blockList.length === 0 && drawings.length === 0) return null;
+  const blockList = targetBlocks !== undefined ? targetBlocks : Object.values(blocks);
+  const drawingList = options.targetDrawings ?? drawings;
+  const isTargetedRender = Boolean(targetBlocks || options.targetDrawings);
+  if (blockList.length === 0 && drawingList.length === 0) return null;
   const blockBounds = blockList.length > 0 ? getSelectionBounds(blockList) : null;
-  const drawingBounds = targetBlocks ? null : getDrawingBounds(drawings);
+  const drawingBounds = drawingList.length > 0 ? getDrawingBounds(drawingList) : null;
   const bounds = mergeBounds(blockBounds, drawingBounds) || { minX: 0, minY: 0, maxX: 1200, maxY: 800, width: 1200, height: 800 };
   const padding = 48;
   const width = Math.max(320, Math.ceil(bounds.width + padding * 2));
@@ -798,8 +860,8 @@ const renderBoardToCanvas = async (targetBlocks?: Block[], options: { transparen
     await drawBlockToCanvas(ctx, block);
   }
 
-  if (!targetBlocks) {
-    drawings.forEach((path) => drawDrawingPath(ctx, path));
+  if (!isTargetedRender || drawingList.length > 0) {
+    drawingList.forEach((path) => drawDrawingPath(ctx, path));
   }
 
   return canvas;
