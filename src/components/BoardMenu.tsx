@@ -43,7 +43,6 @@ import {
   ZoomOut,
 } from 'lucide-react';
 import clsx from 'clsx';
-import { Tooltip } from './Tooltip';
 import { useBoardStore } from '../store';
 import {
   alignSelection,
@@ -335,31 +334,29 @@ export const BoardMenu: React.FC = () => {
 
   return (
     <div ref={rootRef} className="relative">
-      <Tooltip content="Menu" position="bottom">
-        <motion.button
-          type="button"
-          aria-label="Menu"
-          aria-haspopup="menu"
-          aria-expanded={open}
-          whileHover="hover"
-          onClick={(event) => {
-            event.stopPropagation();
-            setOpen((value) => !value);
-          }}
-          className="relative flex h-9 w-9 items-center justify-center rounded-lg p-2 text-zinc-600 transition-colors hover:text-zinc-900"
-        >
-          <motion.div
-            className="absolute inset-0 -z-10 rounded-lg bg-zinc-100"
-            initial={false}
-            animate={{ opacity: open ? 1 : 0 }}
-            variants={{ hover: { opacity: 1 } }}
-            transition={{ duration: 0.18 }}
-          />
-          <motion.div variants={{ hover: { scale: 1.1, rotate: 90 } }} transition={{ type: 'spring', duration: 0.3 }}>
-            <MoreVertical className="relative z-10 h-5 w-5" />
-          </motion.div>
-        </motion.button>
-      </Tooltip>
+      <motion.button
+        type="button"
+        aria-label="Menu"
+        aria-haspopup="menu"
+        aria-expanded={open}
+        whileHover="hover"
+        onClick={(event) => {
+          event.stopPropagation();
+          setOpen((value) => !value);
+        }}
+        className="relative flex h-9 w-9 items-center justify-center rounded-lg p-2 text-zinc-600 transition-colors hover:text-zinc-900"
+      >
+        <motion.div
+          className="absolute inset-0 -z-10 rounded-lg bg-zinc-100"
+          initial={false}
+          animate={{ opacity: open ? 1 : 0 }}
+          variants={{ hover: { opacity: 1 } }}
+          transition={{ duration: 0.18 }}
+        />
+        <motion.div variants={{ hover: { scale: 1.1, rotate: 90 } }} transition={{ type: 'spring', duration: 0.3 }}>
+          <MoreVertical className="relative z-10 h-5 w-5" />
+        </motion.div>
+      </motion.button>
 
       <AnimatePresence>
         {open && (
