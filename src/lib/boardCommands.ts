@@ -544,11 +544,234 @@ export const tidySelection = () => {
   useBoardStore.getState().updateBlocks(updates);
 };
 
-const escapeXml = (value: string) =>
-  value.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+const roundedRect = (ctx: CanvasRenderingContext2D, x: number, y: number, width: number, height: number, radius: number) => {
+  const r = Math.min(radius, width / 2, height / 2);
+  ctx.beginPath();
+  ctx.moveTo(x + r, y);
+  ctx.arcTo(x + width, y, x + width, y + height, r);
+  ctx.arcTo(x + width, y + height, x, y + height, r);
+  ctx.arcTo(x, y + height, x, y, r);
+  ctx.arcTo(x, y, x + width, y, r);
+  ctx.closePath();
+};
 
-const renderBoardToCanvas = async (targetBlocks?: Block[]) => {
-  const { blocks, drawings, canvasTitle } = useBoardStore.getState();
+const wrapCanvasText = (
+  ctx: CanvasRenderingContext2D,
+  text: string,
+  x: number,
+  y: number,
+  maxWidth: number,
+  lineHeight: number,
+  maxHeight = Infinity
+) => {
+  const paragraphs = text.split(/\n/);
+  let cursorY = y;
+  for (const paragraph of paragraphs) {
+    const words = paragraph.split(/\s+/).filter(Boolean);
+    let line = '';
+    for (const word of words.length ? words : ['']) {
+      const next = line ? `${line} ${word}` : word;
+      if (line && ctx.measureText(next).width > maxWidth) {
+        if (cursorY + lineHeight > y + maxHeight) return;
+        ctx.fillText(line, x, cursorY);
+        cursorY += lineHeight;
+        line = word;
+      } else {
+        line = next;
+      }
+    }
+    if (cursorY + lineHeight > y + maxHeight) return;
+    ctx.fillText(line, x, cursorY);
+    cursorY += lineHeight;
+  }
+};
+
+const proxiedImageUrl = (url: string) => {
+  if (!/^https?:\/\//i.test(url)) return url;
+  return `https://images.weserv.nl/?url=${encodeURIComponent(url.replace(/^https?:\/\//i, ''))}`;
+};
+
+const isCanvasSafeImage = (image: HTMLImageElement) => {
+  const testCanvas = document.createElement('canvas');
+  testCanvas.width = 1;
+  testCanvas.height = 1;
+  const ctx = testCanvas.getContext('2d');
+  if (!ctx) return false;
+  try {
+    ctx.drawImage(image, 0, 0, 1, 1);
+    ctx.getImageData(0, 0, 1, 1);
+    return true;
+  } catch {
+    return false;
+  }
+};
+
+const loadCanvasImage = async (url?: string) => {
+  if (!url) return null;
+  const candidates = /^https?:\/\//i.test(url) ? [proxiedImageUrl(url), url] : [url];
+  for (const candidate of candidates) {
+    const image = new Image();
+    image.crossOrigin = 'anonymous';
+    const loaded = await new Promise<HTMLImageElement | null>((resolve) => {
+      image.onload = () => resolve(image);
+      image.onerror = () => resolve(null);
+      image.src = candidate;
+    });
+    if (loaded && isCanvasSafeImage(loaded)) return loaded;
+  }
+  return null;
+};
+
+const drawImageCover = (
+  ctx: CanvasRenderingContext2D,
+  image: HTMLImageElement,
+  x: number,
+  y: number,
+  width: number,
+  height: number
+) => {
+  const scale = Math.max(width / image.naturalWidth, height / image.naturalHeight);
+  const sourceWidth = width / scale;
+  const sourceHeight = height / scale;
+  const sourceX = (image.naturalWidth - sourceWidth) / 2;
+  const sourceY = (image.naturalHeight - sourceHeight) / 2;
+  ctx.drawImage(image, sourceX, sourceY, sourceWidth, sourceHeight, x, y, width, height);
+};
+
+const drawPlaceholderCard = (
+  ctx: CanvasRenderingContext2D,
+  width: number,
+  height: number,
+  title: string,
+  subtitle?: string,
+  dark = false
+) => {
+  ctx.fillStyle = dark ? '#18181b' : '#ffffff';
+  ctx.strokeStyle = dark ? '#27272a' : '#d4d4d8';
+  ctx.lineWidth = 1;
+  roundedRect(ctx, 0, 0, width, height, 10);
+  ctx.fill();
+  ctx.stroke();
+  ctx.fillStyle = dark ? '#f4f4f5' : '#18181b';
+  ctx.font = '700 16px system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif';
+  wrapCanvasText(ctx, title, 16, 30, Math.max(20, width - 32), 20, Math.max(20, height - 56));
+  if (subtitle) {
+    ctx.fillStyle = dark ? '#a1a1aa' : '#71717a';
+    ctx.font = '500 12px system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif';
+    wrapCanvasText(ctx, subtitle, 16, Math.max(54, height - 28), Math.max(20, width - 32), 15, 18);
+  }
+};
+
+const drawBlockImage = async (
+  ctx: CanvasRenderingContext2D,
+  block: Block,
+  imageUrl?: string,
+  fallbackTitle = 'Image unavailable'
+) => {
+  const image = await loadCanvasImage(imageUrl);
+  if (image) {
+    drawImageCover(ctx, image, 0, 0, block.width, block.height);
+    return;
+  }
+  drawPlaceholderCard(ctx, block.width, block.height, fallbackTitle, imageUrl);
+};
+
+const drawDrawingPath = (
+  ctx: CanvasRenderingContext2D,
+  path: DrawingPath,
+  offsetX = 0,
+  offsetY = 0
+) => {
+  if (path.points.length === 0) return;
+  ctx.save();
+  ctx.globalAlpha = path.toolType === 'highlighter' ? 0.4 : 1;
+  ctx.strokeStyle = path.color;
+  ctx.lineWidth = path.strokeWidth;
+  ctx.lineCap = 'round';
+  ctx.lineJoin = 'round';
+  ctx.beginPath();
+  ctx.moveTo(path.points[0].x + offsetX, path.points[0].y + offsetY);
+  path.points.slice(1).forEach((point) => ctx.lineTo(point.x + offsetX, point.y + offsetY));
+  ctx.stroke();
+  ctx.restore();
+};
+
+const drawBlockToCanvas = async (ctx: CanvasRenderingContext2D, block: Block) => {
+  const rotation = ((block.data.rotation || 0) * Math.PI) / 180;
+  ctx.save();
+  ctx.translate(block.x + block.width / 2, block.y + block.height / 2);
+  ctx.rotate(rotation);
+  ctx.scale(block.data.flipX ? -1 : 1, block.data.flipY ? -1 : 1);
+  ctx.translate(-block.width / 2, -block.height / 2);
+
+  if (block.type === 'frame') {
+    ctx.strokeStyle = '#d4d4d8';
+    ctx.lineWidth = 2;
+    ctx.setLineDash([8, 8]);
+    ctx.strokeRect(0, 0, block.width, block.height);
+    ctx.setLineDash([]);
+    ctx.fillStyle = '#52525b';
+    ctx.font = '600 12px system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif';
+    ctx.fillText(block.data.title || 'Frame', 0, -8);
+  } else if (block.type === 'sticky') {
+    const hue = block.data.hue !== undefined ? block.data.hue : 55;
+    ctx.fillStyle = `hsl(${hue}, 90%, 85%)`;
+    ctx.fillRect(0, 0, block.width, block.height);
+    ctx.fillStyle = '#27272a';
+    ctx.font = `${block.data.italic ? 'italic ' : ''}${block.data.bold ? 700 : 500} 18px system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif`;
+    wrapCanvasText(ctx, block.data.text || '', 24, 48, Math.max(20, block.width - 48), 25, Math.max(20, block.height - 48));
+  } else if (block.type === 'text') {
+    const fontSize = block.data.fontSize ?? 20;
+    ctx.fillStyle = block.data.color ?? (block.data.hue !== undefined ? `hsl(${block.data.hue}, 75%, 28%)` : '#27272a');
+    ctx.font = `${block.data.italic ? 'italic ' : ''}${block.data.bold ? 700 : 400} ${fontSize}px system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif`;
+    wrapCanvasText(ctx, block.data.text || '', 8, fontSize + 8, Math.max(20, block.width - 16), fontSize * 1.3, block.height);
+  } else if (block.type === 'shape') {
+    const color = block.data.color || '#ff6b6b';
+    ctx.fillStyle = `${color}33`;
+    ctx.strokeStyle = color;
+    ctx.lineWidth = 2;
+    if (block.data.shape === 'circle') {
+      ctx.beginPath();
+      ctx.ellipse(block.width / 2, block.height / 2, block.width / 2, block.height / 2, 0, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.stroke();
+    } else {
+      roundedRect(ctx, 0, 0, block.width, block.height, 3);
+      ctx.fill();
+      ctx.stroke();
+    }
+  } else if (block.type === 'drawing') {
+    drawDrawingPath(ctx, block.data.path);
+  } else if (block.type === 'image') {
+    await drawBlockImage(ctx, block, block.data.url, block.data.alt || 'Image unavailable');
+  } else if (block.type === 'youtube') {
+    await drawBlockImage(ctx, block, `https://img.youtube.com/vi/${block.data.videoId}/hqdefault.jpg`, 'YouTube video');
+  } else if (block.type === 'medium' || block.type === 'github' || block.type === 'wikipedia' || block.type === 'reddit' || block.type === 'arena') {
+    const metadata = block.data.metadata || {};
+    const imageUrl = metadata.image || metadata.logo;
+    if (imageUrl) {
+      await drawBlockImage(ctx, block, imageUrl, metadata.title || block.type);
+    } else {
+      drawPlaceholderCard(ctx, block.width, block.height, metadata.title || block.type, block.data.url, block.type === 'github' || block.type === 'reddit');
+    }
+  } else if (block.type === 'audio') {
+    await drawBlockImage(ctx, block, block.data.coverUrl, block.data.platform || 'Audio');
+  } else if (block.type === 'link') {
+    await drawBlockImage(
+      ctx,
+      block,
+      `https://api.microlink.io?url=${encodeURIComponent(block.data.url || '')}&screenshot=true&embed=screenshot.url`,
+      block.data.url || 'Link'
+    );
+  } else {
+    drawPlaceholderCard(ctx, block.width, block.height, block.type === 'pdf' ? 'PDF document' : block.type, block.data.url);
+  }
+
+  ctx.restore();
+};
+
+const renderBoardToCanvas = async (targetBlocks?: Block[], options: { transparentBackground?: boolean } = {}) => {
+  const { blocks, drawings } = useBoardStore.getState();
   const blockList = targetBlocks && targetBlocks.length > 0 ? targetBlocks : Object.values(blocks);
   if (blockList.length === 0 && drawings.length === 0) return null;
   const blockBounds = blockList.length > 0 ? getSelectionBounds(blockList) : null;
@@ -560,51 +783,39 @@ const renderBoardToCanvas = async (targetBlocks?: Block[]) => {
   const offsetX = padding - bounds.minX;
   const offsetY = padding - bounds.minY;
 
-  const blockMarkup = blockList
-    .sort((a, b) => a.zIndex - b.zIndex)
-    .map((block) => {
-      const x = block.x + offsetX;
-      const y = block.y + offsetY;
-      const transform = `translate(${x + block.width / 2} ${y + block.height / 2}) rotate(${block.data.rotation || 0}) scale(${block.data.flipX ? -1 : 1} ${block.data.flipY ? -1 : 1}) translate(${-block.width / 2} ${-block.height / 2})`;
-      if (block.type === 'shape') {
-        const fill = `${block.data.color || '#ff6b6b'}55`;
-        return block.data.shape === 'circle'
-          ? `<ellipse transform="${transform}" cx="${block.width / 2}" cy="${block.height / 2}" rx="${block.width / 2}" ry="${block.height / 2}" fill="${fill}" stroke="${block.data.color || '#ff6b6b'}" stroke-width="2" />`
-          : `<rect transform="${transform}" width="${block.width}" height="${block.height}" rx="3" fill="${fill}" stroke="${block.data.color || '#ff6b6b'}" stroke-width="2" />`;
-      }
-      if (block.type === 'image' && block.data.url) {
-        return `<image transform="${transform}" href="${escapeXml(block.data.url)}" width="${block.width}" height="${block.height}" preserveAspectRatio="xMidYMid slice" />`;
-      }
-      if (block.type === 'frame') {
-        return `<rect transform="${transform}" width="${block.width}" height="${block.height}" fill="none" stroke="#a1a1aa" stroke-width="2" stroke-dasharray="8 8" />`;
-      }
-      const text = escapeXml(block.data.text || block.data.title || '');
-      const bg = block.type === 'sticky' ? `hsl(${block.data.hue ?? 55}, 90%, 85%)` : 'transparent';
-      const decoration = [block.data.underline ? 'underline' : '', block.data.strikethrough ? 'line-through' : ''].filter(Boolean).join(' ');
-      return `<g transform="${transform}"><rect width="${block.width}" height="${block.height}" rx="6" fill="${bg}" /><text x="12" y="28" font-family="system-ui, sans-serif" font-size="${block.data.fontSize || 20}" font-weight="${block.data.bold ? 700 : 500}" font-style="${block.data.italic ? 'italic' : 'normal'}" text-decoration="${decoration}" fill="${block.data.color || '#27272a'}">${text}</text></g>`;
-    })
-    .join('');
-
-  const drawingMarkup = drawings
-    .map((path) => `<path d="M ${path.points.map((point) => `${point.x + offsetX} ${point.y + offsetY}`).join(' L ')}" fill="none" stroke="${path.color}" stroke-width="${path.strokeWidth}" stroke-linecap="round" stroke-linejoin="round" opacity="${path.toolType === 'highlighter' ? 0.4 : 1}" />`)
-    .join('');
-
-  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}" viewBox="0 0 ${width} ${height}"><title>${escapeXml(canvasTitle)}</title><rect width="100%" height="100%" fill="#fafafa" />${drawingMarkup}${blockMarkup}</svg>`;
-  const image = new Image();
-  image.crossOrigin = 'anonymous';
-  const url = URL.createObjectURL(new Blob([svg], { type: 'image/svg+xml' }));
-  await new Promise<void>((resolve, reject) => {
-    image.onload = () => resolve();
-    image.onerror = reject;
-    image.src = url;
-  });
-  URL.revokeObjectURL(url);
   const canvas = document.createElement('canvas');
   canvas.width = width;
   canvas.height = height;
-  canvas.getContext('2d')?.drawImage(image, 0, 0);
+  const ctx = canvas.getContext('2d');
+  if (!ctx) throw new Error('Could not create export canvas.');
+  if (!options.transparentBackground) {
+    ctx.fillStyle = '#fafafa';
+    ctx.fillRect(0, 0, width, height);
+  }
+  ctx.translate(offsetX, offsetY);
+
+  for (const block of [...blockList].sort((a, b) => a.zIndex - b.zIndex)) {
+    await drawBlockToCanvas(ctx, block);
+  }
+
+  if (!targetBlocks) {
+    drawings.forEach((path) => drawDrawingPath(ctx, path));
+  }
+
   return canvas;
 };
+
+const canvasToBlob = (canvas: HTMLCanvasElement, mime: string, quality?: number) =>
+  new Promise<Blob>((resolve, reject) => {
+    try {
+      canvas.toBlob((blob) => {
+        if (blob) resolve(blob);
+        else reject(new Error('Could not create export image.'));
+      }, mime, quality);
+    } catch (error) {
+      reject(error);
+    }
+  });
 
 const createImagePdf = (jpegBytes: Uint8Array, width: number, height: number) => {
   const pageWidth = width * 0.75;
@@ -651,16 +862,19 @@ const dataUrlToBytes = (dataUrl: string) => {
 };
 
 export const exportBoard = async (format: ExportFormat) => {
-  const canvas = await renderBoardToCanvas();
-  if (!canvas) return;
-  const { canvasTitle } = useBoardStore.getState();
-  if (format === 'pdf') {
-    const jpegBytes = dataUrlToBytes(canvas.toDataURL('image/jpeg', 0.95));
-    downloadBlob(createImagePdf(jpegBytes, canvas.width, canvas.height), safeFilename(canvasTitle, 'pdf'));
-    return;
+  try {
+    const canvas = await renderBoardToCanvas(undefined, { transparentBackground: format === 'png' });
+    if (!canvas) return;
+    const { canvasTitle } = useBoardStore.getState();
+    if (format === 'pdf') {
+      const jpegBytes = dataUrlToBytes(canvas.toDataURL('image/jpeg', 0.95));
+      downloadBlob(createImagePdf(jpegBytes, canvas.width, canvas.height), safeFilename(canvasTitle, 'pdf'));
+      return;
+    }
+    const mime = format === 'jpg' ? 'image/jpeg' : 'image/png';
+    downloadBlob(await canvasToBlob(canvas, mime, 0.95), safeFilename(canvasTitle, format));
+  } catch (error) {
+    console.error('Error exporting board:', error);
+    window.alert('Could not export this board. Try removing unavailable embedded content and exporting again.');
   }
-  const mime = format === 'jpg' ? 'image/jpeg' : 'image/png';
-  canvas.toBlob((blob) => {
-    if (blob) downloadBlob(blob, safeFilename(canvasTitle, format));
-  }, mime, 0.95);
 };

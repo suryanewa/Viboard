@@ -3,6 +3,8 @@ import type { Block, Viewport, DrawingPath } from './types';
 import { v4 as uuidv4 } from 'uuid';
 import { indexBlock, removeBlockFromIndex, syncAllBlocks } from './lib/typesense';
 
+type HistoryEntry = { blocks: Record<string, Block>; drawings: DrawingPath[] };
+
 const createDefaultBrutalistImageBlocks = (): Record<string, Block> => {
   const blocks: Record<string, Block> = {};
   const imageWidth = 240;
@@ -110,11 +112,13 @@ interface BoardState {
   drawingSelection: string[];
   snapLines: { x?: number, y?: number }[];
   history: {
-    past: { blocks: Record<string, Block>; drawings: DrawingPath[] }[];
-    future: { blocks: Record<string, Block>; drawings: DrawingPath[] }[];
+    past: HistoryEntry[];
+    future: HistoryEntry[];
   };
+  historyAnimationKey: number;
   
   pushHistory: () => void;
+  commitBlockEdit: (beforeBlock: Block) => void;
   addBlock: (block: Block) => void;
   updateBlock: (id: string, updates: Partial<Block>, noHistory?: boolean) => void;
   updateBlocks: (updates: { id: string; updates: Partial<Block> }[], noHistory?: boolean) => void;
@@ -145,9 +149,9 @@ interface BoardState {
   setActiveShape: (shape: { type: string, x1: number, y1: number, x2: number, y2: number } | null) => void;
   setCurrentPath: (path: DrawingPath | null) => void;
   addDrawing: (path: DrawingPath) => void;
-  removeDrawings: (ids: string[]) => void;
-  updateDrawings: (updates: { id: string; deltaX: number; deltaY: number }[]) => void;
-  bringToFront: (id: string) => void;
+  removeDrawings: (ids: string[], noHistory?: boolean) => void;
+  updateDrawings: (updates: { id: string; deltaX: number; deltaY: number }[], noHistory?: boolean) => void;
+  bringToFront: (id: string, noHistory?: boolean) => void;
   bringForward: (id: string) => void;
   sendBackward: (id: string) => void;
   sendToBack: (id: string) => void;
@@ -162,6 +166,38 @@ interface BoardState {
 }
 
 const MAX_HISTORY = 25;
+let historyAnimationSequence = 0;
+
+const cloneHistoryEntry = (entry: HistoryEntry): HistoryEntry => ({
+  blocks: Object.fromEntries(
+    Object.entries(structuredClone(entry.blocks)).map(([id, block]) => {
+      if (!block.data?.autoFocus) return [id, block];
+      const data = { ...block.data };
+      delete data.autoFocus;
+      return [id, { ...block, data }];
+    })
+  ),
+  drawings: structuredClone(entry.drawings),
+});
+
+const currentHistoryEntry = (state: Pick<BoardState, 'blocks' | 'drawings'>): HistoryEntry =>
+  cloneHistoryEntry({ blocks: state.blocks, drawings: state.drawings });
+
+const recordsEqual = (first: unknown, second: unknown) => JSON.stringify(first) === JSON.stringify(second);
+
+const pushHistoryEntry = (history: BoardState['history'], entry: HistoryEntry) => ({
+  past: [...history.past.slice(-MAX_HISTORY + 1), cloneHistoryEntry(entry)],
+  future: [],
+});
+
+const reindexSearch = (blocks: Record<string, Block>) => {
+  syncAllBlocks(blocks);
+};
+
+const nextHistoryAnimationKey = () => {
+  historyAnimationSequence += 1;
+  return historyAnimationSequence;
+};
 
 export const useBoardStore = create<BoardState>((set, get) => ({
   blocks: createMockBlocks(),
@@ -198,25 +234,35 @@ export const useBoardStore = create<BoardState>((set, get) => ({
     past: [],
     future: [],
   },
+  historyAnimationKey: 0,
 
   pushHistory: () => {
-    const { blocks, drawings, history } = get();
+    const { history } = get();
     set({
-      history: {
-        past: [...history.past.slice(-MAX_HISTORY + 1), { blocks, drawings }],
-        future: [],
-      }
+      history: pushHistoryEntry(history, currentHistoryEntry(get()))
     });
   },
 
-  addBlock: (block) => {
+  commitBlockEdit: (beforeBlock) => {
     const { blocks, drawings, history } = get();
+    const currentBlock = blocks[beforeBlock.id];
+    if (!currentBlock || recordsEqual(currentBlock, beforeBlock)) return;
+    set({
+      history: pushHistoryEntry(history, {
+        blocks: { ...blocks, [beforeBlock.id]: beforeBlock },
+        drawings,
+      }),
+    });
+    if (currentBlock.type === 'sticky' || currentBlock.type === 'text' || currentBlock.type === 'link') {
+      indexBlock(currentBlock);
+    }
+  },
+
+  addBlock: (block) => {
+    const { blocks, history } = get();
     set({
       blocks: { ...blocks, [block.id]: block },
-      history: {
-        past: [...history.past.slice(-MAX_HISTORY + 1), { blocks, drawings }],
-        future: [],
-      }
+      history: pushHistoryEntry(history, currentHistoryEntry(get()))
     });
     if (block.type === 'sticky' || block.type === 'text' || block.type === 'link') {
       indexBlock(block);
@@ -224,11 +270,12 @@ export const useBoardStore = create<BoardState>((set, get) => ({
   },
 
   updateBlock: (id, updates, noHistory = false) => {
-    const { blocks, drawings, history } = get();
+    const { blocks, history } = get();
     const block = blocks[id];
     if (!block) return;
     
     const updatedBlock = { ...block, ...updates };
+    if (recordsEqual(block, updatedBlock)) return;
     if (
       (updates.data?.text !== undefined || updates.data?.url !== undefined ||
        updates.data?.title !== undefined || updates.data?.description !== undefined) &&
@@ -242,38 +289,35 @@ export const useBoardStore = create<BoardState>((set, get) => ({
         ...blocks,
         [id]: updatedBlock
       },
-      history: noHistory ? history : {
-        past: [...history.past.slice(-MAX_HISTORY + 1), { blocks, drawings }],
-        future: [],
-      }
+      history: noHistory ? history : pushHistoryEntry(history, currentHistoryEntry(get()))
     });
   },
 
   updateBlocks: (updates, noHistory = false) => {
-    const { blocks, drawings, history } = get();
+    const { blocks, history } = get();
     const newBlocks = { ...blocks };
     let hasChanges = false;
     
     updates.forEach(({ id, updates }) => {
       if (newBlocks[id]) {
-        newBlocks[id] = { ...newBlocks[id], ...updates };
-        hasChanges = true;
+        const updatedBlock = { ...newBlocks[id], ...updates };
+        if (!recordsEqual(newBlocks[id], updatedBlock)) {
+          newBlocks[id] = updatedBlock;
+          hasChanges = true;
+        }
       }
     });
     
     if (hasChanges) {
       set({
         blocks: newBlocks,
-        history: noHistory ? history : {
-          past: [...history.past.slice(-MAX_HISTORY + 1), { blocks, drawings }],
-          future: [],
-        }
+        history: noHistory ? history : pushHistoryEntry(history, currentHistoryEntry(get()))
       });
     }
   },
 
   removeBlocks: (ids) => {
-    const { blocks, drawings, history, selection } = get();
+    const { blocks, history, selection } = get();
     const newBlocks = { ...blocks };
     ids.forEach((id) => {
       delete newBlocks[id];
@@ -283,10 +327,7 @@ export const useBoardStore = create<BoardState>((set, get) => ({
     set({
       blocks: newBlocks,
       selection: selection.filter((id) => !ids.includes(id)),
-      history: {
-        past: [...history.past.slice(-MAX_HISTORY + 1), { blocks, drawings }],
-        future: [],
-      }
+      history: pushHistoryEntry(history, currentHistoryEntry(get()))
     });
   },
 
@@ -338,32 +379,27 @@ export const useBoardStore = create<BoardState>((set, get) => ({
   setCurrentPath: (currentPath) => set({ currentPath }),
   
   addDrawing: (path) => {
-    const { blocks, drawings, history } = get();
+    const { drawings, history } = get();
     set({
       drawings: [...drawings, path],
-      history: {
-        past: [...history.past.slice(-MAX_HISTORY + 1), { blocks, drawings }],
-        future: [],
-      }
+      history: pushHistoryEntry(history, currentHistoryEntry(get()))
     });
   },
 
-  removeDrawings: (ids) => {
-    const { blocks, drawings, history, drawingSelection } = get();
+  removeDrawings: (ids, noHistory = false) => {
+    const { drawings, history, drawingSelection } = get();
     const newDrawings = drawings.filter(d => !ids.includes(d.id));
+    if (newDrawings.length === drawings.length) return;
     
     set({
       drawings: newDrawings,
       drawingSelection: drawingSelection.filter(id => !ids.includes(id)),
-      history: {
-        past: [...history.past.slice(-MAX_HISTORY + 1), { blocks, drawings }],
-        future: [],
-      }
+      history: noHistory ? history : pushHistoryEntry(history, currentHistoryEntry(get()))
     });
   },
 
-  updateDrawings: (updates) => {
-    const { blocks, drawings, history } = get();
+  updateDrawings: (updates, noHistory = false) => {
+    const { drawings, history } = get();
     const newDrawings = [...drawings];
     let hasChanges = false;
 
@@ -384,15 +420,12 @@ export const useBoardStore = create<BoardState>((set, get) => ({
     if (hasChanges) {
       set({
         drawings: newDrawings,
-        history: {
-          past: [...history.past.slice(-MAX_HISTORY + 1), { blocks, drawings }],
-          future: [],
-        }
+        history: noHistory ? history : pushHistoryEntry(history, currentHistoryEntry(get()))
       });
     }
   },
 
-  bringToFront: (id) => set((state) => {
+  bringToFront: (id, noHistory = false) => set((state) => {
     const block = state.blocks[id];
     if (!block) return state;
     
@@ -404,7 +437,8 @@ export const useBoardStore = create<BoardState>((set, get) => ({
       blocks: {
         ...state.blocks,
         [id]: { ...block, zIndex: highestZ + 1 }
-      }
+      },
+      history: noHistory ? state.history : pushHistoryEntry(state.history, currentHistoryEntry(state)),
     };
   }),
 
@@ -426,7 +460,10 @@ export const useBoardStore = create<BoardState>((set, get) => ({
     newBlocks[id] = { ...block, zIndex: nextBlock.zIndex };
     newBlocks[nextBlock.id] = { ...newBlocks[nextBlock.id], zIndex: tempZ };
     
-    return { blocks: newBlocks };
+    return {
+      blocks: newBlocks,
+      history: pushHistoryEntry(state.history, currentHistoryEntry(state)),
+    };
   }),
 
   sendBackward: (id) => set((state) => {
@@ -447,7 +484,10 @@ export const useBoardStore = create<BoardState>((set, get) => ({
     newBlocks[id] = { ...block, zIndex: prevBlock.zIndex };
     newBlocks[prevBlock.id] = { ...newBlocks[prevBlock.id], zIndex: tempZ };
     
-    return { blocks: newBlocks };
+    return {
+      blocks: newBlocks,
+      history: pushHistoryEntry(state.history, currentHistoryEntry(state)),
+    };
   }),
 
   sendToBack: (id) => set((state) => {
@@ -467,7 +507,10 @@ export const useBoardStore = create<BoardState>((set, get) => ({
     });
     newBlocks[id] = { ...block, zIndex: 0 };
     
-    return { blocks: newBlocks };
+    return {
+      blocks: newBlocks,
+      history: pushHistoryEntry(state.history, currentHistoryEntry(state)),
+    };
   }),
 
   copy: () => {
@@ -479,7 +522,7 @@ export const useBoardStore = create<BoardState>((set, get) => ({
   },
 
   cut: () => {
-    const { blocks, drawings, selection, history } = get();
+    const { blocks, selection, history } = get();
     const selectedBlocks = selection.map(id => blocks[id]).filter(Boolean);
     if (selectedBlocks.length > 0) {
       const newBlocks = { ...blocks };
@@ -490,16 +533,13 @@ export const useBoardStore = create<BoardState>((set, get) => ({
         clipboard: JSON.parse(JSON.stringify(selectedBlocks)),
         blocks: newBlocks,
         selection: [],
-        history: {
-          past: [...history.past.slice(-MAX_HISTORY + 1), { blocks, drawings }],
-          future: [],
-        }
+        history: pushHistoryEntry(history, currentHistoryEntry(get()))
       });
     }
   },
 
   paste: (targetX, targetY) => {
-    const { clipboard, blocks, drawings, history, mousePos } = get();
+    const { clipboard, blocks, history, mousePos } = get();
     if (clipboard.length === 0) return;
 
     const newBlocks = { ...blocks };
@@ -542,15 +582,12 @@ export const useBoardStore = create<BoardState>((set, get) => ({
     set({
       blocks: newBlocks,
       selection: newSelection,
-      history: {
-        past: [...history.past.slice(-MAX_HISTORY + 1), { blocks, drawings }],
-        future: [],
-      }
+      history: pushHistoryEntry(history, currentHistoryEntry(get()))
     });
   },
 
   duplicate: (ids, noOffset = false) => {
-    const { blocks, drawings, history } = get();
+    const { blocks, history } = get();
     const newBlocks = { ...blocks };
     const newSelection: string[] = [];
     
@@ -574,42 +611,49 @@ export const useBoardStore = create<BoardState>((set, get) => ({
     set({
       blocks: newBlocks,
       selection: newSelection,
-      history: {
-        past: [...history.past.slice(-MAX_HISTORY + 1), { blocks, drawings }],
-        future: [],
-      }
+      history: pushHistoryEntry(history, currentHistoryEntry(get()))
     });
   },
 
   undo: () => {
-    const { history, blocks, drawings } = get();
+    const { history, blocks, drawings, selection, drawingSelection } = get();
     if (history.past.length === 0) return;
 
     const previous = history.past[history.past.length - 1];
     const newPast = history.past.slice(0, history.past.length - 1);
+    const restored = cloneHistoryEntry(previous);
+    reindexSearch(restored.blocks);
 
     set({
-      blocks: previous.blocks,
-      drawings: previous.drawings,
+      blocks: restored.blocks,
+      drawings: restored.drawings,
+      selection: selection.filter((id) => restored.blocks[id]),
+      drawingSelection: drawingSelection.filter((id) => restored.drawings.some((drawing) => drawing.id === id)),
+      historyAnimationKey: nextHistoryAnimationKey(),
       history: {
         past: newPast,
-        future: [{ blocks, drawings }, ...history.future],
+        future: [currentHistoryEntry({ blocks, drawings }), ...history.future.slice(0, MAX_HISTORY - 1)],
       }
     });
   },
 
   redo: () => {
-    const { history, blocks, drawings } = get();
+    const { history, blocks, drawings, selection, drawingSelection } = get();
     if (history.future.length === 0) return;
 
     const next = history.future[0];
     const newFuture = history.future.slice(1);
+    const restored = cloneHistoryEntry(next);
+    reindexSearch(restored.blocks);
 
     set({
-      blocks: next.blocks,
-      drawings: next.drawings,
+      blocks: restored.blocks,
+      drawings: restored.drawings,
+      selection: selection.filter((id) => restored.blocks[id]),
+      drawingSelection: drawingSelection.filter((id) => restored.drawings.some((drawing) => drawing.id === id)),
+      historyAnimationKey: nextHistoryAnimationKey(),
       history: {
-        past: [...history.past.slice(-MAX_HISTORY + 1), { blocks, drawings }],
+        past: [...history.past.slice(-MAX_HISTORY + 1), currentHistoryEntry({ blocks, drawings })],
         future: newFuture,
       }
     });

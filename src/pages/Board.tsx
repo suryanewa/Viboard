@@ -189,11 +189,13 @@ function Board() {
       <KeyboardShortcuts />
       <ContextMenu />
       <Canvas>
-        {Object.values(blocks).map((block) => (
-          <BlockShell key={block.id} block={block}>
-            <BlockRenderer block={block} />
-          </BlockShell>
-        ))}
+        <AnimatePresence initial={false}>
+          {Object.values(blocks).map((block) => (
+            <BlockShell key={block.id} block={block}>
+              <BlockRenderer block={block} />
+            </BlockShell>
+          ))}
+        </AnimatePresence>
       </Canvas>
       <Toolbar />
       {mode === 'edit' && <PropertyToolbar />}

@@ -14,6 +14,7 @@ export const Canvas: React.FC<{ children: React.ReactNode }> = ({ children }) =>
   const activeShape = useBoardStore((state) => state.activeShape);
   const drawings = useBoardStore((state) => state.drawings);
   const drawingSelection = useBoardStore((state) => state.drawingSelection);
+  const historyAnimationKey = useBoardStore((state) => state.historyAnimationKey);
   const snapLines = useBoardStore((state) => state.snapLines);
   const setCurrentPath = useBoardStore((state) => state.setCurrentPath);
   const setActiveShape = useBoardStore((state) => state.setActiveShape);
@@ -35,6 +36,7 @@ export const Canvas: React.FC<{ children: React.ReactNode }> = ({ children }) =>
   const [activeFrame, setActiveFrame] = useState<{ x1: number, y1: number, x2: number, y2: number } | null>(null);
   const isDraggingDrawing = useRef(false);
   const isErasing = useRef(false);
+  const hasPushedEraserHistory = useRef(false);
 
   const markerType = useBoardStore((state) => state.markerType);
   const markerColor = useBoardStore((state) => state.markerColor);
@@ -534,7 +536,7 @@ export const Canvas: React.FC<{ children: React.ReactNode }> = ({ children }) =>
         width: 240,
         height: 240,
         zIndex: highestZ + 1,
-        data: { text: '', hue: useBoardStore.getState().stickyHue }
+        data: { text: '', hue: useBoardStore.getState().stickyHue, autoFocus: true }
       });
       setSelection([id]);
       return;
@@ -554,7 +556,9 @@ export const Canvas: React.FC<{ children: React.ReactNode }> = ({ children }) =>
           ))
           .map(d => d.id);
         if (drawingsToRemove.length > 0) {
-          removeDrawings(drawingsToRemove);
+          useBoardStore.getState().pushHistory();
+          hasPushedEraserHistory.current = true;
+          removeDrawings(drawingsToRemove, true);
         }
         return;
       }
@@ -608,7 +612,7 @@ export const Canvas: React.FC<{ children: React.ReactNode }> = ({ children }) =>
         width: 240,
         height: 60,
         zIndex: highestZ + 1,
-        data: { text: '', fontSize: textFontSize, hue: textHue, color }
+        data: { text: '', fontSize: textFontSize, hue: textHue, color, autoFocus: true }
       });
       useBoardStore.getState().setSelection([textId]);
       return;
@@ -630,6 +634,7 @@ export const Canvas: React.FC<{ children: React.ReactNode }> = ({ children }) =>
           setDrawingSelection([clickedDrawing.id]);
           setSelection([]);
         }
+        useBoardStore.getState().pushHistory();
         isDraggingDrawing.current = true;
         lastDragPos.current = { x: canvasX, y: canvasY };
       }
@@ -694,7 +699,7 @@ export const Canvas: React.FC<{ children: React.ReactNode }> = ({ children }) =>
       const deltaX = canvasX - lastDragPos.current.x;
       const deltaY = canvasY - lastDragPos.current.y;
       
-      updateDrawings(drawingSelection.map(id => ({ id, deltaX, deltaY })));
+      updateDrawings(drawingSelection.map(id => ({ id, deltaX, deltaY })), true);
       lastDragPos.current = { x: canvasX, y: canvasY };
     } else if (isDrawing.current && currentPath) {
       setCurrentPath({
@@ -709,7 +714,11 @@ export const Canvas: React.FC<{ children: React.ReactNode }> = ({ children }) =>
         ))
         .map(d => d.id);
       if (drawingsToRemove.length > 0) {
-        removeDraws(drawingsToRemove);
+        if (!hasPushedEraserHistory.current) {
+          useBoardStore.getState().pushHistory();
+          hasPushedEraserHistory.current = true;
+        }
+        removeDraws(drawingsToRemove, true);
       }
     } else if (isMarquee.current && marquee) {
       setMarquee(prev => prev ? { ...prev, x2: canvasX, y2: canvasY } : null);
@@ -751,6 +760,7 @@ export const Canvas: React.FC<{ children: React.ReactNode }> = ({ children }) =>
     }
     if (isErasing.current) {
       isErasing.current = false;
+      hasPushedEraserHistory.current = false;
     }
     if (isDrawing.current && currentPath) {
       isDrawing.current = false;
@@ -923,19 +933,26 @@ export const Canvas: React.FC<{ children: React.ReactNode }> = ({ children }) =>
             style={{ width: 1, height: 1 }}
           >
             <title>Drawing layer</title>
-            {drawings.map((path) => (
-              <path
-                key={path.id}
-                d={`M ${path.points[0].x} ${path.points[0].y} ` + 
-                   path.points.slice(1).map(p => `L ${p.x} ${p.y}`).join(' ')}
-                fill="none"
-                stroke={drawingSelection.includes(path.id) ? '#3b82f6' : path.color}
-                strokeWidth={path.strokeWidth}
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                style={{ opacity: path.toolType === 'highlighter' ? 0.4 : 1 }}
-              />
-            ))}
+            <AnimatePresence initial={false}>
+              {drawings.map((path) => (
+                <motion.path
+                  key={path.id}
+                  initial={historyAnimationKey > 0 ? { opacity: 0 } : false}
+                  animate={{
+                    opacity: path.toolType === 'highlighter' ? 0.4 : 1,
+                    d: `M ${path.points[0].x} ${path.points[0].y} ` +
+                      path.points.slice(1).map(p => `L ${p.x} ${p.y}`).join(' '),
+                  }}
+                  exit={{ opacity: 0 }}
+                  transition={{ duration: historyAnimationKey > 0 ? 0.16 : 0, ease: 'easeOut' }}
+                  fill="none"
+                  stroke={drawingSelection.includes(path.id) ? '#3b82f6' : path.color}
+                  strokeWidth={path.strokeWidth}
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                />
+              ))}
+            </AnimatePresence>
             {currentPath && (
               <path
                 d={`M ${currentPath.points[0].x} ${currentPath.points[0].y} ` + 

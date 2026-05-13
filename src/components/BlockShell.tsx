@@ -105,6 +105,7 @@ export const BlockShell: React.FC<BlockShellProps> = ({ block, children }) => {
   const blocks = useBoardStore((state) => state.blocks);
   const updateBlock = useBoardStore((state) => state.updateBlock);
   const bringToFront = useBoardStore((state) => state.bringToFront);
+  const historyAnimationKey = useBoardStore((state) => state.historyAnimationKey);
 
   const textOnlyResize =
     block.type === 'text' &&
@@ -160,6 +161,8 @@ export const BlockShell: React.FC<BlockShellProps> = ({ block, children }) => {
   const hasPushedHistory = useRef(false);
 
   const isResizing = useRef(false);
+  const lastPositionHistoryAnimationKey = useRef(0);
+  const lastSizeHistoryAnimationKey = useRef(0);
   const resizeHandle = useRef<string | null>(null);
   const resizeStartPos = useRef({ 
     x: 0, y: 0, width: 0, height: 0, blockX: 0, blockY: 0, 
@@ -204,15 +207,27 @@ export const BlockShell: React.FC<BlockShellProps> = ({ block, children }) => {
 
   useEffect(() => {
     if (isResizing.current || isDragging.current) return;
+    if (historyAnimationKey > 0 && lastSizeHistoryAnimationKey.current !== historyAnimationKey) {
+      lastSizeHistoryAnimationKey.current = historyAnimationKey;
+      animate(width, block.width, { type: 'spring', stiffness: 520, damping: 36 });
+      animate(height, block.height, { type: 'spring', stiffness: 520, damping: 36 });
+      return;
+    }
     width.set(block.width);
     height.set(block.height);
-  }, [block.width, block.height, block.id, width, height]);
+  }, [block.width, block.height, block.id, width, height, historyAnimationKey]);
 
   // Sync x/y motion values from store — runs on every store update.
   // During active drag, handlePointerMove writes x.set/y.set directly (takes precedence).
   // During group drag, this ensures all selected blocks follow the store position.
   const lastSnapTime = useBoardStore((state) => state.lastSnapTime);
   useEffect(() => {
+    if (historyAnimationKey > 0 && lastPositionHistoryAnimationKey.current !== historyAnimationKey) {
+      lastPositionHistoryAnimationKey.current = historyAnimationKey;
+      animate(x, block.x, { type: 'spring', stiffness: 520, damping: 36 });
+      animate(y, block.y, { type: 'spring', stiffness: 520, damping: 36 });
+      return;
+    }
     if (Date.now() - lastSnapTime < 100) {
       animate(x, block.x, { type: 'spring', stiffness: 300, damping: 30 });
       animate(y, block.y, { type: 'spring', stiffness: 300, damping: 30 });
@@ -220,7 +235,7 @@ export const BlockShell: React.FC<BlockShellProps> = ({ block, children }) => {
       x.set(block.x);
       y.set(block.y);
     }
-  }, [block.x, block.y, lastSnapTime, x, y]);
+  }, [block.x, block.y, lastSnapTime, x, y, historyAnimationKey]);
 
   const altDupeIds = useRef<string[]>([]);
 
@@ -243,7 +258,7 @@ export const BlockShell: React.FC<BlockShellProps> = ({ block, children }) => {
     // Frames should keep their stacking position when selected/dragged.
     // They only move in z-order via explicit arrange actions.
     if (block.type !== 'frame') {
-      bringToFront(block.id);
+      bringToFront(block.id, true);
     }
     if (e.shiftKey || e.metaKey) {
       if (isCurrentlySelected) setSelection(selection.filter(id => id !== block.id));
@@ -819,11 +834,12 @@ export const BlockShell: React.FC<BlockShellProps> = ({ block, children }) => {
     <motion.div
       initial={{ opacity: 0, marginTop: 30, filter: 'blur(8px)' }}
       animate={{ opacity: 1, marginTop: 0, filter: 'blur(0px)' }}
+      exit={{ opacity: 0, scale: 0.96, filter: 'blur(4px)', transition: { duration: 0.14, ease: 'easeOut' } }}
       transition={{ 
         type: "spring", 
         stiffness: 260, 
         damping: 20, 
-        delay: Math.min(block.zIndex * 0.04, 0.8)
+        delay: historyAnimationKey > 0 ? 0 : Math.min(block.zIndex * 0.04, 0.8)
       }}
       ref={shellRef}
       data-block-id={block.id}

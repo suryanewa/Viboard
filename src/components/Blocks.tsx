@@ -11,11 +11,13 @@ interface BlockContentProps {
 export const StickyBlock: React.FC<BlockContentProps> = ({ block }) => {
   const textRef = useRef<HTMLParagraphElement>(null);
   const updateBlock = useBoardStore((state) => state.updateBlock);
+  const commitBlockEdit = useBoardStore((state) => state.commitBlockEdit);
   const hasFocused = useRef(false);
+  const editStartBlock = useRef<Block | null>(null);
 
   const setRef = (el: HTMLParagraphElement | null) => {
     textRef.current = el;
-    if (el && !hasFocused.current) {
+    if (el && block.data.autoFocus && !hasFocused.current) {
       hasFocused.current = true;
       requestAnimationFrame(() => {
         el.focus();
@@ -27,6 +29,9 @@ export const StickyBlock: React.FC<BlockContentProps> = ({ block }) => {
           selection?.removeAllRanges();
           selection?.addRange(range);
         }
+        const data = { ...block.data };
+        delete data.autoFocus;
+        updateBlock(block.id, { data }, true);
       });
     }
   };
@@ -35,12 +40,22 @@ export const StickyBlock: React.FC<BlockContentProps> = ({ block }) => {
     const el = e.currentTarget;
     el.style.height = 'auto';
     el.style.height = `${el.scrollHeight}px`;
+    updateBlock(block.id, { data: { ...block.data, text: el.innerText } }, true);
+  };
+
+  const handleFocus = () => {
+    editStartBlock.current = structuredClone(block);
   };
 
   const handleBlur = () => {
     if (textRef.current) {
-      updateBlock(block.id, { data: { ...block.data, text: textRef.current.innerText } });
+      const nextText = textRef.current.innerText;
+      updateBlock(block.id, { data: { ...block.data, text: nextText } }, true);
+      if (editStartBlock.current) {
+        commitBlockEdit(editStartBlock.current);
+      }
     }
+    editStartBlock.current = null;
     window.getSelection()?.removeAllRanges();
   };
 
@@ -57,6 +72,7 @@ export const StickyBlock: React.FC<BlockContentProps> = ({ block }) => {
         className="text-zinc-800 font-medium text-lg leading-relaxed outline-none"
         contentEditable
         suppressContentEditableWarning
+        onFocus={handleFocus}
         onInput={handleInput}
         onBlur={handleBlur}
         style={{
@@ -77,8 +93,10 @@ export const TextBlock: React.FC<BlockContentProps> = ({ block }) => {
   const textRef = useRef<HTMLParagraphElement>(null);
   const wrapRef = useRef<HTMLDivElement>(null);
   const updateBlock = useBoardStore((state) => state.updateBlock);
+  const commitBlockEdit = useBoardStore((state) => state.commitBlockEdit);
   const zoom = useBoardStore((state) => state.viewport.zoom);
   const hasFocused = useRef(false);
+  const editStartBlock = useRef<Block | null>(null);
 
   const fontSize = block.data.fontSize ?? 20;
   const color =
@@ -89,7 +107,7 @@ export const TextBlock: React.FC<BlockContentProps> = ({ block }) => {
 
   const setRef = (el: HTMLParagraphElement | null) => {
     textRef.current = el;
-    if (el && !hasFocused.current) {
+    if (el && block.data.autoFocus && !hasFocused.current) {
       hasFocused.current = true;
       requestAnimationFrame(() => {
         el.focus();
@@ -101,6 +119,9 @@ export const TextBlock: React.FC<BlockContentProps> = ({ block }) => {
           selection?.removeAllRanges();
           selection?.addRange(range);
         }
+        const data = { ...block.data };
+        delete data.autoFocus;
+        updateBlock(block.id, { data }, true);
       });
     }
   };
@@ -135,6 +156,14 @@ export const TextBlock: React.FC<BlockContentProps> = ({ block }) => {
 
   const handleInput = () => {
     syncShellHeight();
+    const el = textRef.current;
+    if (el) {
+      updateBlock(block.id, { data: { ...block.data, text: el.innerText } }, true);
+    }
+  };
+
+  const handleFocus = () => {
+    editStartBlock.current = structuredClone(block);
   };
 
   const handleBlur = () => {
@@ -145,11 +174,16 @@ export const TextBlock: React.FC<BlockContentProps> = ({ block }) => {
       el.style.height = `${el.scrollHeight}px`;
       const z = useBoardStore.getState().viewport.zoom;
       const nextH = Math.max(24, Math.ceil(wrap.getBoundingClientRect().height / z));
+      const nextText = el.innerText;
       updateBlock(block.id, {
         height: nextH,
-        data: { ...block.data, text: el.innerText },
-      });
+        data: { ...block.data, text: nextText },
+      }, true);
+      if (editStartBlock.current) {
+        commitBlockEdit(editStartBlock.current);
+      }
     }
+    editStartBlock.current = null;
     window.getSelection()?.removeAllRanges();
   };
 
@@ -163,6 +197,7 @@ export const TextBlock: React.FC<BlockContentProps> = ({ block }) => {
         className="font-sans outline-none whitespace-pre-wrap break-words"
         contentEditable
         suppressContentEditableWarning
+        onFocus={handleFocus}
         onInput={handleInput}
         onBlur={handleBlur}
         style={{
@@ -256,13 +291,13 @@ export const ImageBlock: React.FC<BlockContentProps> = ({ block }) => {
     setAspectRatio(newDims);
     
     if (block.width !== newDims.width || block.height !== newDims.height) {
-      updateBlock(block.id, { width: newDims.width, height: newDims.height });
+      updateBlock(block.id, { width: newDims.width, height: newDims.height }, true);
     }
   }, [block.id, block.width, block.height, updateBlock, calculateAspectRatio]);
 
   useEffect(() => {
     if (aspectRatio && (block.width !== aspectRatio.width || block.height !== aspectRatio.height)) {
-      updateBlock(block.id, { width: aspectRatio.width, height: aspectRatio.height });
+      updateBlock(block.id, { width: aspectRatio.width, height: aspectRatio.height }, true);
     }
   }, [aspectRatio, block.id, block.width, block.height, updateBlock]);
 
@@ -586,7 +621,7 @@ export const MediumBlock: React.FC<BlockContentProps> = ({ block }) => {
             date: json.data.date
           };
           setMetadata(meta);
-          updateBlock(block.id, { data: { ...block.data, fetched: true, metadata: meta } });
+          updateBlock(block.id, { data: { ...block.data, fetched: true, metadata: meta } }, true);
         }
       } catch (e) {
       } finally {
@@ -685,7 +720,7 @@ export const SmartCardBlock: React.FC<BlockContentProps & { platform: string }> 
             publisher: json.data.publisher,
           };
           setMetadata(meta);
-          updateBlock(block.id, { data: { ...block.data, fetched: true, metadata: meta } });
+          updateBlock(block.id, { data: { ...block.data, fetched: true, metadata: meta } }, true);
         }
       } catch (e) {
       } finally {
