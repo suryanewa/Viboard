@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useBoardStore } from '../store';
-import { Type, Link, Magnet, Pencil, Circle, MousePointer, Hand, ZoomIn, ZoomOut, Search, Send, Eye, Edit3, Plus, Frame, Upload } from 'lucide-react';
+import { Type, Magnet, Pencil, Circle, MousePointer, Hand, ZoomIn, ZoomOut, Search, Send, Eye, Edit3, Frame, Upload } from 'lucide-react';
 import { v4 as uuidv4 } from 'uuid';
 import { motion, AnimatePresence } from 'framer-motion';
 import clsx from 'clsx';
@@ -9,24 +9,7 @@ import { Tooltip } from './Tooltip';
 import { SearchOverlay } from './SearchOverlay';
 import { BoardMenu } from './BoardMenu';
 
-
-const VennDiagramIcon = ({ className }: { className?: string }) => (
-  <svg className={className || ''} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-    <circle cx="12" cy="9" r="4.5" />
-    <circle cx="8" cy="15" r="4.5" />
-    <circle cx="16" cy="15" r="4.5" />
-  </svg>
-);
-
-const SerifAIcon = ({ className }: { className?: string }) => (
-  <svg className={className || ''} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-    <path d="M12 4 L4 20 M12 4 L20 20 M8 14 L16 14" />
-    <path d="M3 20 L5 20 M19 20 L21 20 M10 4 L14 4" />
-  </svg>
-);
-
-type ToolbarTool = 'select' | 'marker' | 'shape' | 'text' | 'pan' | 'sticky' | 'link' | 'palette' | 'font' | 'frame';
-type ToolbarVisualTool = ToolbarTool | 'plus';
+type ToolbarVisualTool = 'select' | 'marker' | 'shape' | 'text' | 'pan' | 'sticky' | 'link' | 'frame';
 
 export const Toolbar: React.FC = () => {
   const addBlock = useBoardStore((state) => state.addBlock);
@@ -42,8 +25,6 @@ export const Toolbar: React.FC = () => {
   const mode = useBoardStore((state) => state.mode);
   const setMode = useBoardStore((state) => state.setMode);
   const setIsSearchOpen = useBoardStore((state) => state.setIsSearchOpen);
-  const isPlusMenuOpen = useBoardStore((state) => state.isPlusMenuOpen);
-  const setIsPlusMenuOpen = useBoardStore((state) => state.setIsPlusMenuOpen);
 
   const tool = useBoardStore((state) => state.tool);
   const setTool = useBoardStore((state) => state.setTool);
@@ -60,7 +41,6 @@ export const Toolbar: React.FC = () => {
   const animationTimeoutRef = React.useRef<number | null>(null);
   const titleInputRef = React.useRef<HTMLInputElement>(null);
 
-  const [plusRotation, setPlusRotation] = useState(0);
   const topLeftToolbarRef = React.useRef<HTMLDivElement>(null);
   const [topLeftWidth, setTopLeftWidth] = useState(0);
 
@@ -102,7 +82,7 @@ export const Toolbar: React.FC = () => {
     { id: 'link', icon: Upload, shortcut: 'L', color: 'red', hasSecondary: false, hoverAnim: { scale: 1.1 } as any },
   ], []);
 
-  const handleToolSelect = React.useCallback((nextTool: ToolbarVisualTool, options?: { isSubTool?: boolean }) => {
+  const handleToolSelect = React.useCallback((nextTool: ToolbarVisualTool) => {
     const currentState = useBoardStore.getState();
     const currentVisualTool = activeToolbarTool;
     
@@ -120,7 +100,7 @@ export const Toolbar: React.FC = () => {
     
     setActiveToolbarTool(nextTool);
 
-    setTool(nextTool === 'palette' || nextTool === 'font' ? 'text' : nextTool as any);
+    setTool(nextTool as typeof tool);
     if (nextTool === 'sticky' || nextTool === 'text' || nextTool === 'shape' || nextTool === 'marker' || nextTool === 'link') {
       currentState.setSelection([]);
       currentState.setDrawingSelection([]);
@@ -208,17 +188,6 @@ export const Toolbar: React.FC = () => {
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [snapping, gridView, viewport, handleToolSelect, setSnapping, setGridView, setViewport]);
-
-  const plusMenuRef = React.useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    const handleClickOutside = (e: Event) => {
-    };
-    window.addEventListener('pointerdown', handleClickOutside);
-    return () => {
-      window.removeEventListener('pointerdown', handleClickOutside);
-    };
-  }, [handleToolSelect]);
 
   const handleAddBlock = React.useCallback((type: BlockType, dataOverride: any = {}) => {
     setTool('select');

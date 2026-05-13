@@ -182,14 +182,12 @@ const MenuButton = ({
   item,
   active,
   index,
-  total,
   onEnter,
   onClick,
 }: {
   item: MenuItem;
   active?: boolean;
   index: number;
-  total: number;
   onEnter?: () => void;
   onClick?: () => void;
 }) => {
@@ -478,7 +476,6 @@ export const BoardMenu: React.FC = () => {
                   key={item.id}
                   item={item}
                   index={i}
-                  total={menus.length}
                   active={hoveredTop === item.id}
                   onEnter={() => {
                     setHoveredTop(item.id);
@@ -504,7 +501,6 @@ export const BoardMenu: React.FC = () => {
                         key={item.id}
                         item={item}
                         index={i}
-                        total={activeMenu.children?.length || 0}
                         active={hoveredNested === item.id}
                         onEnter={() => setHoveredNested(item.children ? item.id : null)}
                         onClick={() => run(item.action)}
@@ -531,7 +527,6 @@ export const BoardMenu: React.FC = () => {
                         key={item.id}
                         item={item}
                         index={i}
-                        total={nestedMenu.children?.length || 0}
                         onClick={() => run(item.action)}
                       />
                     ))}
