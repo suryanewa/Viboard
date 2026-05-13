@@ -46,12 +46,19 @@ export const PropertyToolbar: React.FC = () => {
   const hasSelectedStickies = selectedBlocks.length > 0 && selectedBlocks.every(b => b.type === 'sticky');
   const hasSelectedShapes = selectedBlocks.length > 0 && selectedBlocks.every(b => b.type === 'shape');
   const hasSelectedTexts = selectedBlocks.length > 0 && selectedBlocks.every(b => b.type === 'text');
+  const propertyTool = hasSelectedTexts
+    ? 'text'
+    : hasSelectedStickies
+      ? 'sticky'
+      : hasSelectedShapes
+        ? 'shape'
+        : tool;
 
-  const initialHue = tool === 'marker' 
+  const initialHue = propertyTool === 'marker' 
     ? parseInt(markerColor.match(/\d+/)?.[0] || '45', 10)
-    : tool === 'shape'
+    : propertyTool === 'shape'
       ? (hasSelectedShapes && selectedBlocks[0]?.data?.hue !== undefined ? selectedBlocks[0].data.hue : shapeHue)
-      : tool === 'text'
+      : propertyTool === 'text'
         ? (hasSelectedTexts && selectedBlocks[0]?.data?.hue !== undefined ? selectedBlocks[0].data.hue : textDefaultHue)
         : hasSelectedStickies && selectedBlocks[0]?.data?.hue !== undefined 
           ? selectedBlocks[0].data.hue 
@@ -62,39 +69,56 @@ export const PropertyToolbar: React.FC = () => {
   const [linkUrl, setLinkUrl] = useState('');
 
   useEffect(() => {
-    if (tool !== 'text') return;
     const st = useBoardStore.getState();
     const sel = st.selection;
     const bl = st.blocks;
-    const texts = sel.map((id) => bl[id]).filter(Boolean);
-    const allText = texts.length > 0 && texts.every((b) => b.type === 'text');
-    if (allText) {
-      const fs = texts[0]?.data?.fontSize;
-      const h = texts[0]?.data?.hue;
+    const selected = sel.map((id) => bl[id]).filter(Boolean);
+
+    if (propertyTool === 'text') {
+      const allText = selected.length > 0 && selected.every((b) => b.type === 'text');
+      if (!allText) {
+        setCurrentFontSize(st.textFontSize);
+        setCurrentHue(st.textHue);
+        return;
+      }
+      const fs = selected[0]?.data?.fontSize;
+      const h = selected[0]?.data?.hue;
       if (fs != null) setCurrentFontSize(fs);
       if (h !== undefined) setCurrentHue(h);
-    } else {
-      setCurrentFontSize(st.textFontSize);
-      setCurrentHue(st.textHue);
+      return;
     }
-  }, [tool, selection.join(','), textFontSizeDefault, textDefaultHue]);
+
+    if (propertyTool === 'sticky') {
+      const allSticky = selected.length > 0 && selected.every((b) => b.type === 'sticky');
+      const h = allSticky ? selected[0]?.data?.hue : st.stickyHue;
+      if (h !== undefined) setCurrentHue(h);
+      return;
+    }
+
+    if (propertyTool === 'shape') {
+      const allShape = selected.length > 0 && selected.every((b) => b.type === 'shape');
+      const h = allShape ? selected[0]?.data?.hue : st.shapeHue;
+      if (h !== undefined) setCurrentHue(h);
+      return;
+    }
+  }, [propertyTool, selection.join(','), textFontSizeDefault, textDefaultHue, stickyHue, shapeHue]);
 
   const handleHueChangeSlider = (newHue: number) => {
     setCurrentHue(newHue);
-    if (tool === 'sticky' && hasSelectedStickies) {
+    if (propertyTool === 'sticky' && hasSelectedStickies) {
       selection.forEach(id => {
         updateBlock(id, { data: { ...blocks[id].data, hue: newHue } });
       });
-    } else if (tool === 'marker') {
+    } else if (propertyTool === 'marker') {
       setMarkerColor(`hsl(${newHue}, 90%, 65%)`);
-    } else if (tool === 'shape') {
+    } else if (propertyTool === 'shape') {
       setShapeHue(newHue);
       if (hasSelectedShapes) {
         selection.forEach(id => {
           updateBlock(id, { data: { ...blocks[id].data, hue: newHue, color: `hsl(${newHue}, 90%, 65%)` } });
         });
       }
-    } else if (tool === 'text') {
+    } else if (propertyTool === 'text') {
       setTextHue(newHue);
       const color = `hsl(${newHue}, 75%, 28%)`;
       if (hasSelectedTexts) {
@@ -156,7 +180,7 @@ export const PropertyToolbar: React.FC = () => {
 
   return (
     <AnimatePresence mode="wait">
-      {!isPlusMenuOpen && (tool === 'sticky' || tool === 'marker' || tool === 'shape' || tool === 'link' || tool === 'text') && (animationState === 'animating-in' || animationState === 'idle') && (
+      {!isPlusMenuOpen && (propertyTool === 'sticky' || propertyTool === 'marker' || propertyTool === 'shape' || propertyTool === 'link' || propertyTool === 'text') && (animationState === 'animating-in' || animationState === 'idle') && (
         <motion.div
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
@@ -164,7 +188,7 @@ export const PropertyToolbar: React.FC = () => {
           transition={{ type: 'spring', stiffness: 400, damping: 25 }}
           className="fixed bottom-[110px] left-1/2 -translate-x-1/2 flex items-center justify-center px-[10px] bg-white/90 backdrop-blur-md border border-zinc-200 pointer-events-auto rounded-full z-[9998] w-[380px] h-[52px] !overflow-visible"
         >
-          {tool === 'sticky' && (
+          {propertyTool === 'sticky' && (
           <div className="flex items-center justify-center gap-3 w-full h-8">
             {STICKY_COLORS.map(({ hue }) => {
               const isSelected = currentHue === hue;
@@ -202,7 +226,7 @@ export const PropertyToolbar: React.FC = () => {
           </div>
         )}
 
-        {tool === 'marker' && (
+        {propertyTool === 'marker' && (
           <div 
             className="flex items-center gap-4 w-full h-8 !overflow-visible"
             onPointerLeave={() => setHoveredProperty(null)}
@@ -356,7 +380,7 @@ export const PropertyToolbar: React.FC = () => {
             `}</style>
           </div>
         )}
-        {tool === 'shape' && (
+        {propertyTool === 'shape' && (
           <div 
             className="flex items-center gap-4 w-full h-8 !overflow-visible"
             onPointerLeave={() => setHoveredProperty(null)}
@@ -494,7 +518,7 @@ export const PropertyToolbar: React.FC = () => {
           </div>
         )}
 
-        {tool === 'text' && (
+        {propertyTool === 'text' && (
           <div
             className="flex items-center gap-4 w-full h-8 !overflow-visible"
             onPointerLeave={() => setHoveredProperty(null)}
@@ -571,7 +595,7 @@ export const PropertyToolbar: React.FC = () => {
           </div>
         )}
         
-        {tool === 'link' && (
+        {propertyTool === 'link' && (
           <div className="flex items-center gap-2 w-full h-8">
             <form onSubmit={handleLinkSubmit} className="flex flex-1 items-center gap-2">
               <input

@@ -217,9 +217,14 @@ export const Toolbar: React.FC = () => {
     };
 
     if (type === 'shape') {
+      const { shapeHue } = useBoardStore.getState();
       newBlock.width = 120;
       newBlock.height = 120;
-      newBlock.data = { shape: dataOverride.shape || 'square', color: dataOverride.color || '#4ade80' };
+      newBlock.data = {
+        shape: dataOverride.shape || 'square',
+        hue: dataOverride.hue ?? shapeHue,
+        color: dataOverride.color || `hsl(${dataOverride.hue ?? shapeHue}, 90%, 65%)`,
+      };
     } else if (type === 'sticky') {
       newBlock.data = { text: 'New sticky', color: 'yellow', hue: 55, autoFocus: true };
     } else if (type === 'text') {

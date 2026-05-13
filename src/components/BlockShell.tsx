@@ -62,6 +62,45 @@ const getSplitPathsForPoint = (w: number, h: number, p: { x: number, y: number, 
   return [toPath(cwPts), toPath(ccwPts)];
 };
 
+const parseHue = (value: unknown): number | null => {
+  if (typeof value !== 'string') return null;
+  const match = value.match(/hsl\(\s*([\d.]+)/i);
+  if (!match) return null;
+  const hue = Number(match[1]);
+  return Number.isFinite(hue) ? hue : null;
+};
+
+const syncToolToSelectedBlock = (block: Block) => {
+  const state = useBoardStore.getState();
+
+  if (block.type === 'sticky') {
+    if (typeof block.data.hue === 'number') {
+      state.setStickyHue(block.data.hue);
+    }
+  } else if (block.type === 'text') {
+    if (typeof block.data.fontSize === 'number') {
+      state.setTextFontSize(block.data.fontSize);
+    }
+    if (typeof block.data.hue === 'number') {
+      state.setTextHue(block.data.hue);
+    }
+  } else if (block.type === 'shape') {
+    if (block.data.shape === 'circle' || block.data.shape === 'square' || block.data.shape === 'triangle') {
+      state.setShapeType(block.data.shape);
+    }
+    const hue = typeof block.data.hue === 'number' ? block.data.hue : parseHue(block.data.color);
+    if (hue !== null) {
+      state.setShapeHue(hue);
+    }
+  } else {
+    return;
+  }
+
+  state.setTool('select');
+  state.setIsPlusMenuOpen(false);
+  state.setAnimationState('idle');
+};
+
 interface ResizeHandleProps {
   direction: string;
   cursor: string;
@@ -275,7 +314,20 @@ export const BlockShell: React.FC<BlockShellProps> = ({ block, children }) => {
     const isContentEditable = target.closest?.('[contenteditable="true"]');
     const isResizeHandle = target.dataset.handle;
 
-    if (isContentEditable || isResizeHandle) return;
+    if (isResizeHandle) return;
+
+    if (isContentEditable) {
+      const { selection, setSelection } = useBoardStore.getState();
+      const isCurrentlySelected = selection.includes(block.id);
+      if (e.shiftKey || e.metaKey) {
+        if (isCurrentlySelected) setSelection(selection.filter(id => id !== block.id));
+        else setSelection([...selection, block.id]);
+      } else if (!isCurrentlySelected) {
+        setSelection([block.id]);
+      }
+      syncToolToSelectedBlock(block);
+      return;
+    }
 
     e.stopPropagation();
     e.currentTarget.setPointerCapture(e.pointerId);
@@ -288,11 +340,18 @@ export const BlockShell: React.FC<BlockShellProps> = ({ block, children }) => {
     if (block.type !== 'frame') {
       bringToFront(block.id, true);
     }
+    let nextSelection = selection;
     if (e.shiftKey || e.metaKey) {
-      if (isCurrentlySelected) setSelection(selection.filter(id => id !== block.id));
-      else setSelection([...selection, block.id]);
+      nextSelection = isCurrentlySelected
+        ? selection.filter(id => id !== block.id)
+        : [...selection, block.id];
+      setSelection(nextSelection);
     } else if (!isCurrentlySelected) {
-      setSelection([block.id]);
+      nextSelection = [block.id];
+      setSelection(nextSelection);
+    }
+    if (nextSelection.includes(block.id)) {
+      syncToolToSelectedBlock(block);
     }
 
     if (e.button !== 0) return;

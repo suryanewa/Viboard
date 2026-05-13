@@ -9,6 +9,28 @@ interface BlockContentProps {
   block: Block;
 }
 
+const placeCaretAtEnd = (el: HTMLElement) => {
+  el.focus();
+  if (typeof window === 'undefined') return;
+  const selection = window.getSelection();
+  const range = document.createRange();
+  range.selectNodeContents(el);
+  range.collapse(false);
+  selection?.removeAllRanges();
+  selection?.addRange(range);
+};
+
+const ensureEditableLine = (el: HTMLElement) => {
+  if (el.textContent === '' && el.childNodes.length === 0) {
+    el.appendChild(document.createElement('br'));
+  }
+};
+
+const getEditableText = (el: HTMLElement) => {
+  const text = el.innerText;
+  return text === '\n' ? '' : text;
+};
+
 export const StickyBlock: React.FC<BlockContentProps> = ({ block }) => {
   const textRef = useRef<HTMLParagraphElement>(null);
   const updateBlock = useBoardStore((state) => state.updateBlock);
@@ -18,30 +40,37 @@ export const StickyBlock: React.FC<BlockContentProps> = ({ block }) => {
 
   const setRef = (el: HTMLParagraphElement | null) => {
     textRef.current = el;
+    if (el) ensureEditableLine(el);
     if (el && block.data.autoFocus && !hasFocused.current) {
       hasFocused.current = true;
+      const data = { ...block.data };
+      delete data.autoFocus;
+      updateBlock(block.id, { data }, true);
       requestAnimationFrame(() => {
-        el.focus();
-        if (typeof window !== 'undefined') {
-          const selection = window.getSelection();
-          const range = document.createRange();
-          range.selectNodeContents(el);
-          range.collapse(false);
-          selection?.removeAllRanges();
-          selection?.addRange(range);
-        }
-        const data = { ...block.data };
-        delete data.autoFocus;
-        updateBlock(block.id, { data }, true);
+        requestAnimationFrame(() => {
+          if (textRef.current) placeCaretAtEnd(textRef.current);
+        });
       });
     }
   };
+
+  useLayoutEffect(() => {
+    const el = textRef.current;
+    if (!el) return;
+    if (document.activeElement !== el) {
+      const text = block.data.text ?? '';
+      if (el.innerText !== text) {
+        el.textContent = text;
+        ensureEditableLine(el);
+      }
+    }
+  }, [block.data.text, block.id]);
 
   const handleInput = (e: React.FormEvent<HTMLParagraphElement>) => {
     const el = e.currentTarget;
     el.style.height = 'auto';
     el.style.height = `${el.scrollHeight}px`;
-    updateBlock(block.id, { data: { ...block.data, text: el.innerText } }, true);
+    updateBlock(block.id, { data: { ...block.data, text: getEditableText(el) } }, true);
   };
 
   const handleFocus = () => {
@@ -50,11 +79,12 @@ export const StickyBlock: React.FC<BlockContentProps> = ({ block }) => {
 
   const handleBlur = () => {
     if (textRef.current) {
-      const nextText = textRef.current.innerText;
+      const nextText = getEditableText(textRef.current);
       updateBlock(block.id, { data: { ...block.data, text: nextText } }, true);
       if (editStartBlock.current) {
         commitBlockEdit(editStartBlock.current);
       }
+      ensureEditableLine(textRef.current);
     }
     editStartBlock.current = null;
     window.getSelection()?.removeAllRanges();
@@ -83,9 +113,7 @@ export const StickyBlock: React.FC<BlockContentProps> = ({ block }) => {
           textDecoration: [block.data.underline ? 'underline' : '', block.data.strikethrough ? 'line-through' : ''].filter(Boolean).join(' ') || undefined,
           textAlign: block.data.textAlign || undefined,
         }}
-      >
-        {block.data.text}
-      </p>
+      />
     </div>
   );
 };
@@ -113,15 +141,7 @@ export const TextBlock: React.FC<BlockContentProps> = ({ block }) => {
     if (el && block.data.autoFocus && !hasFocused.current) {
       hasFocused.current = true;
       requestAnimationFrame(() => {
-        el.focus();
-        if (typeof window !== 'undefined') {
-          const selection = window.getSelection();
-          const range = document.createRange();
-          range.selectNodeContents(el);
-          range.collapse(false);
-          selection?.removeAllRanges();
-          selection?.addRange(range);
-        }
+        placeCaretAtEnd(el);
         const data = { ...block.data };
         delete data.autoFocus;
         updateBlock(block.id, { data }, true);

@@ -588,9 +588,10 @@ export const Canvas: React.FC<{ children: React.ReactNode }> = ({ children }) =>
     }
 
     if (tool === 'shape') {
+      const { shapeType } = useBoardStore.getState();
       isCreatingShape.current = true;
       setActiveShape({
-        type: 'circle',
+        type: shapeType,
         x1: canvasX,
         y1: canvasY,
         x2: canvasX,
@@ -791,6 +792,7 @@ export const Canvas: React.FC<{ children: React.ReactNode }> = ({ children }) =>
     }
     if (isCreatingShape.current && activeShape) {
       isCreatingShape.current = false;
+      const { shapeHue } = useBoardStore.getState();
       
       const x = Math.min(activeShape.x1, activeShape.x2);
       const y = Math.min(activeShape.y1, activeShape.y2);
@@ -805,7 +807,11 @@ export const Canvas: React.FC<{ children: React.ReactNode }> = ({ children }) =>
         width,
         height,
         zIndex: Math.max(0, ...Object.values(blocks).map(b => b.zIndex)) + 1,
-        data: { shape: 'circle', color: '#ff6b6b' }
+        data: {
+          shape: activeShape.type,
+          hue: shapeHue,
+          color: `hsl(${shapeHue}, 90%, 65%)`,
+        }
       });
 
       setActiveShape(null);
