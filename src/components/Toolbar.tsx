@@ -8,6 +8,7 @@ import type { Block, BlockType } from '../types';
 import { Tooltip } from './Tooltip';
 import { SearchOverlay } from './SearchOverlay';
 import { BoardMenu } from './BoardMenu';
+import { getTextBlockHeight } from '../lib/textBlockMetrics';
 
 type ToolbarVisualTool = 'select' | 'marker' | 'shape' | 'text' | 'pan' | 'sticky' | 'link' | 'frame';
 
@@ -150,7 +151,10 @@ export const Toolbar: React.FC = () => {
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      const isInput = e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement;
+      const isInput =
+        e.target instanceof HTMLInputElement ||
+        e.target instanceof HTMLTextAreaElement ||
+        (e.target instanceof HTMLElement && e.target.isContentEditable);
       if (isInput) return;
 
       const isMac = navigator.platform.toUpperCase().indexOf('MAC') >= 0;
@@ -219,9 +223,9 @@ export const Toolbar: React.FC = () => {
     } else if (type === 'sticky') {
       newBlock.data = { text: 'New sticky', color: 'yellow', hue: 55, autoFocus: true };
     } else if (type === 'text') {
-      newBlock.height = 60;
       const { textFontSize, textHue } = useBoardStore.getState();
       const color = `hsl(${textHue}, 75%, 28%)`;
+      newBlock.height = getTextBlockHeight(textFontSize);
       newBlock.data = { text: '', fontSize: textFontSize, hue: textHue, color, autoFocus: true };
     } else if (type === 'link') {
       newBlock.width = 480;

@@ -3,6 +3,7 @@ import type { Block, DrawingPath } from '../types';
 import { useBoardStore } from '../store';
 import clsx from 'clsx';
 import { ArrowUpRight } from 'lucide-react';
+import { getTextBlockHeight, getTextBlockLineHeight } from '../lib/textBlockMetrics';
 
 interface BlockContentProps {
   block: Block;
@@ -99,6 +100,8 @@ export const TextBlock: React.FC<BlockContentProps> = ({ block }) => {
   const editStartBlock = useRef<Block | null>(null);
 
   const fontSize = block.data.fontSize ?? 20;
+  const lineHeight = getTextBlockLineHeight(fontSize);
+  const minShellHeight = getTextBlockHeight(fontSize);
   const color =
     block.data.color ??
     (block.data.hue !== undefined
@@ -134,10 +137,10 @@ export const TextBlock: React.FC<BlockContentProps> = ({ block }) => {
     el.style.height = `${el.scrollHeight}px`;
     const z = useBoardStore.getState().viewport.zoom;
     const measured = Math.ceil(wrap.getBoundingClientRect().height / z);
-    const nextH = Math.max(24, measured);
+    const nextH = Math.max(minShellHeight, measured);
     if (Math.abs(nextH - block.height) < 0.5) return;
     updateBlock(block.id, { height: nextH }, true);
-  }, [block.id, block.height, updateBlock]);
+  }, [block.id, block.height, minShellHeight, updateBlock]);
 
   useLayoutEffect(() => {
     const el = textRef.current;
@@ -173,7 +176,7 @@ export const TextBlock: React.FC<BlockContentProps> = ({ block }) => {
       el.style.height = 'auto';
       el.style.height = `${el.scrollHeight}px`;
       const z = useBoardStore.getState().viewport.zoom;
-      const nextH = Math.max(24, Math.ceil(wrap.getBoundingClientRect().height / z));
+      const nextH = Math.max(minShellHeight, Math.ceil(wrap.getBoundingClientRect().height / z));
       const nextText = el.innerText;
       updateBlock(block.id, {
         height: nextH,
@@ -201,7 +204,8 @@ export const TextBlock: React.FC<BlockContentProps> = ({ block }) => {
         onInput={handleInput}
         onBlur={handleBlur}
         style={{
-          minHeight: '1.5em',
+          minHeight: `${lineHeight}px`,
+          lineHeight: `${lineHeight}px`,
           fontSize,
           color,
           fontWeight: block.data.bold ? 700 : undefined,

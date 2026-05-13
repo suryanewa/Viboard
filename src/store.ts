@@ -575,6 +575,7 @@ export const useBoardStore = create<BoardState>((set, get) => ({
         x: b.x + offX,
         y: b.y + offY,
         zIndex: highestZ + 1 + i,
+        data: { ...b.data, deferSelectionOverlay: true },
       };
       newSelection.push(newId);
     });
@@ -604,6 +605,7 @@ export const useBoardStore = create<BoardState>((set, get) => ({
         x: b.x + (noOffset ? 0 : 20),
         y: b.y + (noOffset ? 0 : 20),
         zIndex: highestZ + 1 + i,
+        data: { ...b.data, deferSelectionOverlay: true },
       };
       newSelection.push(newId);
     });

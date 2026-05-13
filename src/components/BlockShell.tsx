@@ -112,13 +112,14 @@ export const BlockShell: React.FC<BlockShellProps> = ({ block, children }) => {
     selection.length > 0 &&
     selection.every((id) => blocks[id]?.type === 'text') &&
     selection.includes(block.id);
+  const skipPlacementAnimation = block.type === 'shape';
   
   const clickPoint = useRef({ x: 0, y: 0, edge: 'top' });
   const wasSelected = useRef(isSelected);
-  const shouldDelayInitialSelectionRef = useRef(isSelected);
+  const shouldDelayInitialSelectionRef = useRef(Boolean(isSelected && block.data.deferSelectionOverlay));
   const shellRef = useRef<HTMLDivElement>(null);
   const [overlayElement, setOverlayElement] = useState<HTMLElement | null>(null);
-  const [showSelectionOverlay, setShowSelectionOverlay] = useState(!isSelected);
+  const [showSelectionOverlay, setShowSelectionOverlay] = useState(!(isSelected && block.data.deferSelectionOverlay));
 
   useEffect(() => {
     if (!shouldDelayInitialSelectionRef.current) {
@@ -135,10 +136,15 @@ export const BlockShell: React.FC<BlockShellProps> = ({ block, children }) => {
     const timeout = window.setTimeout(() => {
       shouldDelayInitialSelectionRef.current = false;
       setShowSelectionOverlay(true);
+      if (block.data.deferSelectionOverlay) {
+        const data = { ...block.data };
+        delete data.deferSelectionOverlay;
+        updateBlock(block.id, { data }, true);
+      }
     }, introDelay + 260);
 
     return () => window.clearTimeout(timeout);
-  }, [isSelected, block.zIndex]);
+  }, [isSelected, block.zIndex, block.data, block.id, updateBlock]);
 
   useEffect(() => {
     setOverlayElement(document.getElementById('viboard-overlay-layer'));
@@ -854,15 +860,17 @@ export const BlockShell: React.FC<BlockShellProps> = ({ block, children }) => {
 
   return (
     <motion.div
-      initial={{ opacity: 0, marginTop: 30, filter: 'blur(8px)' }}
-      animate={{ opacity: 1, marginTop: 0, filter: 'blur(0px)' }}
+      initial={skipPlacementAnimation ? false : { opacity: 0, marginTop: 30, filter: 'blur(8px)' }}
+      animate={skipPlacementAnimation ? { opacity: 1, marginTop: 0, filter: 'blur(0px)' } : { opacity: 1, marginTop: 0, filter: 'blur(0px)' }}
       exit={{ opacity: 0, scale: 0.96, filter: 'blur(4px)', transition: { duration: 0.14, ease: 'easeOut' } }}
-      transition={{ 
-        type: "spring", 
-        stiffness: 260, 
-        damping: 20, 
-        delay: historyAnimationKey > 0 ? 0 : Math.min(block.zIndex * 0.04, 0.8)
-      }}
+      transition={skipPlacementAnimation
+        ? undefined
+        : {
+            type: "spring",
+            stiffness: 260,
+            damping: 20,
+            delay: historyAnimationKey > 0 || block.type === 'text' ? 0 : Math.min(block.zIndex * 0.04, 0.8)
+          }}
       ref={shellRef}
       data-block-id={block.id}
       data-block-type={block.type}

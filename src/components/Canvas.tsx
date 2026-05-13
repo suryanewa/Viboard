@@ -2,6 +2,7 @@ import React, { useRef, useEffect, useCallback, useState } from 'react';
 import { motion, useMotionValue, useTransform, useMotionTemplate, useSpring, AnimatePresence } from 'framer-motion';
 import { useBoardStore } from '../store';
 import { v4 as uuidv4 } from 'uuid';
+import { getTextBlockHeight } from '../lib/textBlockMetrics';
 
 export const Canvas: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const containerRef = useRef<HTMLButtonElement>(null);
@@ -610,7 +611,7 @@ export const Canvas: React.FC<{ children: React.ReactNode }> = ({ children }) =>
         x: canvasX,
         y: canvasY,
         width: 240,
-        height: 60,
+        height: getTextBlockHeight(textFontSize),
         zIndex: highestZ + 1,
         data: { text: '', fontSize: textFontSize, hue: textHue, color, autoFocus: true }
       });
