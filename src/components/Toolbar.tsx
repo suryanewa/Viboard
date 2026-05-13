@@ -1,12 +1,13 @@
 import React, { useState, useEffect } from 'react';
 import { useBoardStore } from '../store';
-import { Type, Link, Magnet, Pencil, Circle, MousePointer, Hand, ZoomIn, ZoomOut, Search, Send, Eye, Edit3, MoreVertical, Plus, Frame } from 'lucide-react';
+import { Type, Link, Magnet, Pencil, Circle, MousePointer, Hand, ZoomIn, ZoomOut, Search, Send, Eye, Edit3, Plus, Frame } from 'lucide-react';
 import { v4 as uuidv4 } from 'uuid';
 import { motion, AnimatePresence } from 'framer-motion';
 import clsx from 'clsx';
 import type { Block, BlockType } from '../types';
 import { Tooltip } from './Tooltip';
 import { SearchOverlay } from './SearchOverlay';
+import { BoardMenu } from './BoardMenu';
 
 
 const VennDiagramIcon = ({ className }: { className?: string }) => (
@@ -240,30 +241,6 @@ export const Toolbar: React.FC = () => {
         }
       }
 
-      if (cmdOrCtrl) {
-        if (e.key === '=' || e.key === '+') {
-          e.preventDefault();
-          const newZoom = Math.min(5, viewport.zoom + 0.1);
-          const centerX = window.innerWidth / 2;
-          const centerY = window.innerHeight / 2;
-          const scaleRatio = newZoom / viewport.zoom;
-          const newX = centerX - (centerX - viewport.x) * scaleRatio;
-          const newY = centerY - (centerY - viewport.y) * scaleRatio;
-          setViewport({ x: newX, y: newY, zoom: newZoom });
-        } else if (e.key === '-') {
-          e.preventDefault();
-          const newZoom = Math.max(0.1, viewport.zoom - 0.1);
-          const centerX = window.innerWidth / 2;
-          const centerY = window.innerHeight / 2;
-          const scaleRatio = newZoom / viewport.zoom;
-          const newX = centerX - (centerX - viewport.x) * scaleRatio;
-          const newY = centerY - (centerY - viewport.y) * scaleRatio;
-          setViewport({ x: newX, y: newY, zoom: newZoom });
-        } else if (e.key === '0') {
-          e.preventDefault();
-          setViewport({ x: 300, y: 200, zoom: 0.5 });
-        }
-      }
     };
 
     window.addEventListener('keydown', handleKeyDown);
@@ -932,10 +909,14 @@ export const Toolbar: React.FC = () => {
                             transition={{ type: "spring", stiffness: 200, damping: 15 }}
                             className="flex items-center justify-center w-full h-full"
                           >
-                            <Icon 
-                              className="w-5 h-5 transition-colors duration-200"
-                              isSelected={isSelected} 
-                            />
+                            {t.id === 'sticky' ? (
+                              <Icon 
+                                className="w-5 h-5 transition-colors duration-200"
+                                isSelected={isSelected} 
+                              />
+                            ) : (
+                              <Icon className="w-5 h-5 transition-colors duration-200" />
+                            )}
                           </motion.div>
                         </motion.div>
                       </AnimatePresence>
@@ -1055,30 +1036,7 @@ export const Toolbar: React.FC = () => {
             }}
           >
             <motion.div variants={{ hidden: { opacity: 0, scale: 0.5 }, visible: { opacity: 1, scale: 1, transition: { type: "spring", bounce: 0.4 } } }}>
-              <Tooltip content="Menu" position="bottom">
-                <motion.button 
-                  type="button"
-                  whileHover="hover"
-                  onPointerEnter={() => setHoveredTopLeft('more')}
-                  className="relative w-9 h-9 p-2 transition-colors flex items-center justify-center rounded-lg text-zinc-600 hover:text-zinc-900"
-                >
-                  {hoveredTopLeft === 'more' && (
-                    <motion.div
-                      layoutId="top-left-hover-bg"
-                      initial={false}
-                      animate={{ opacity: 1 }}
-                      transition={{
-                        layout: { type: "spring", stiffness: 350, damping: 30, mass: 0.8 },
-                        opacity: { duration: 0.2 }
-                      }}
-                      className="absolute inset-0 rounded-lg bg-zinc-100 -z-10"
-                    />
-                  )}
-                  <motion.div variants={{ hover: { scale: 1.1, rotate: 90 } }} transition={{ duration: 0.3, type: "spring" }}>
-                    <MoreVertical className="w-5 h-5 relative z-10" />
-                  </motion.div>
-                </motion.button>
-              </Tooltip>
+              <BoardMenu />
             </motion.div>
 
             <motion.div variants={{ hidden: { opacity: 0, scale: 0.5 }, visible: { opacity: 1, scale: 1, transition: { type: "spring", bounce: 0.4 } } }}>

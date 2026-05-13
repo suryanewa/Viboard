@@ -59,7 +59,13 @@ export const StickyBlock: React.FC<BlockContentProps> = ({ block }) => {
         suppressContentEditableWarning
         onInput={handleInput}
         onBlur={handleBlur}
-        style={{ minHeight: '1.5em' }}
+        style={{
+          minHeight: '1.5em',
+          fontWeight: block.data.bold ? 700 : undefined,
+          fontStyle: block.data.italic ? 'italic' : undefined,
+          textDecoration: [block.data.underline ? 'underline' : '', block.data.strikethrough ? 'line-through' : ''].filter(Boolean).join(' ') || undefined,
+          textAlign: block.data.textAlign || undefined,
+        }}
       >
         {block.data.text}
       </p>
@@ -159,7 +165,15 @@ export const TextBlock: React.FC<BlockContentProps> = ({ block }) => {
         suppressContentEditableWarning
         onInput={handleInput}
         onBlur={handleBlur}
-        style={{ minHeight: '1.5em', fontSize, color }}
+        style={{
+          minHeight: '1.5em',
+          fontSize,
+          color,
+          fontWeight: block.data.bold ? 700 : undefined,
+          fontStyle: block.data.italic ? 'italic' : undefined,
+          textDecoration: [block.data.underline ? 'underline' : '', block.data.strikethrough ? 'line-through' : ''].filter(Boolean).join(' ') || undefined,
+          textAlign: block.data.textAlign || undefined,
+        }}
       />
     </div>
   );

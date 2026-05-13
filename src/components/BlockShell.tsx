@@ -859,7 +859,13 @@ export const BlockShell: React.FC<BlockShellProps> = ({ block, children }) => {
       {block.type === 'frame'
         ? selectionOverlay
         : overlayElement && createPortal(selectionOverlay, overlayElement)}
-      <div className={clsx("w-full h-full", block.type !== 'shape' && block.type !== 'drawing' && block.type !== 'audio' && block.type !== 'frame' && "overflow-hidden")}>
+      <div
+        className={clsx("w-full h-full", block.type !== 'shape' && block.type !== 'drawing' && block.type !== 'audio' && block.type !== 'frame' && "overflow-hidden")}
+        style={{
+          transform: `rotate(${block.data.rotation || 0}deg) scaleX(${block.data.flipX ? -1 : 1}) scaleY(${block.data.flipY ? -1 : 1})`,
+          transformOrigin: 'center',
+        }}
+      >
         {children}
       </div>
     </motion.div>
