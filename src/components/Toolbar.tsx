@@ -61,6 +61,8 @@ export const Toolbar: React.FC = () => {
   const plusMenuCloseTimeoutRef = React.useRef<number | null>(null);
   const titleInputRef = React.useRef<HTMLInputElement>(null);
 
+  const [plusRotation, setPlusRotation] = useState(0);
+
   const ZOOM_LEVELS = [0.25, 0.5, 0.75, 1, 2];
   const cycleZoom = () => {
     const { viewport, setViewport } = useBoardStore.getState();
@@ -736,8 +738,8 @@ export const Toolbar: React.FC = () => {
               }}
             >
               {TOOLS.filter(t => !['link', 'palette', 'font'].includes(t.id)).map((t) => {
-                const isSelected = activeToolbarTool === t.id;
-                const Icon = t.id === 'plus' && activePlusTool !== 'plus' ? TOOLS.find(tool => tool.id === activePlusTool)?.icon || t.icon : t.icon;
+                const isSelected = activeToolbarTool === t.id && !(t.id === 'plus' && isPlusMenuOpen);
+                const Icon = t.id === 'plus' && activePlusTool !== 'plus' && !isPlusMenuOpen ? TOOLS.find(tool => tool.id === activePlusTool)?.icon || t.icon : t.icon;
                 
                 const ButtonContent = (
                     <motion.button
@@ -745,7 +747,12 @@ export const Toolbar: React.FC = () => {
                       initial="rest"
                       animate={isSelected ? "selected" : "rest"}
                       whileHover="hover"
-                      onPointerEnter={() => setHoveredTool(t.id)}
+                      onPointerEnter={() => {
+                        setHoveredTool(t.id);
+                        if (t.id === 'plus' && (activePlusTool === 'plus' || isPlusMenuOpen)) {
+                          setPlusRotation(r => r + 90);
+                        }
+                      }}
                       onPointerDown={(e) => {
                         e.stopPropagation();
                         if (t.id === 'plus' || activeToolbarTool !== t.id) {
@@ -804,22 +811,7 @@ export const Toolbar: React.FC = () => {
                                     handleToolSelect(sub.id as ToolbarVisualTool, { isSubTool: true });
                                   }}
                                   variants={{
-                                    hidden: isSelected ? {
-                                      opacity: 0,
-                                      x: 0,
-                                      y: 0,
-                                      scale: 1,
-                                      borderRadius: 8,
-                                      width: 40,
-                                      height: 40,
-                                      backgroundColor: "#fee2e2",
-                                      color: "#dc2626",
-                                      borderColor: "transparent",
-                                      transition: { 
-                                        type: "spring", stiffness: 250, damping: 25, mass: 0.5,
-                                        opacity: { delay: 0.3, duration: 0 }
-                                      }
-                                    } : { 
+                                    hidden: { 
                                       opacity: 0, 
                                       x: 0, 
                                       y: 0, 
@@ -883,22 +875,19 @@ export const Toolbar: React.FC = () => {
                           },
                           y: { duration: 0.4, times: [0, 0.5, 1], ease: ["circOut", "circIn"] },
                           rotate: { duration: animationState === 'hopping' ? 0.45 : 0, times: [0, 0.85, 1], ease: ["easeInOut", "easeOut"] },
-                          scale: { duration: 0.45, times: [0, 0.4, 0.85, 1], ease: ["easeOut", "easeIn", "easeOut"] },
-                          opacity: { delay: (t.id === 'plus' && activePlusTool !== 'plus' && !isPlusMenuOpen) ? 0.3 : 0, duration: 0 }
+                          scale: { duration: 0.45, times: [0, 0.4, 0.85, 1], ease: ["easeOut", "easeIn", "easeOut"] }
                         }}
                         animate={
                           animationState === 'hopping' 
                             ? { 
                                 rotate: [0, hopDirection === 1 ? 385 : -385, hopDirection === 1 ? 360 : -360], 
                                 y: [0, -50, 0], 
-                                scale: [1, 1.15, 0.9, 1],
-                                opacity: (t.id === 'plus' && activePlusTool !== 'plus' && isPlusMenuOpen) ? 0 : 1
+                                scale: [1, 1.15, 0.9, 1]
                               } 
                             : { 
                                 rotate: hopDirection === 1 ? 360 : -360, 
                                 y: 0, 
-                                scale: 1,
-                                opacity: (t.id === 'plus' && activePlusTool !== 'plus' && isPlusMenuOpen) ? 0 : 1
+                                scale: 1
                               }
                         }
                         className={clsx(
@@ -910,11 +899,11 @@ export const Toolbar: React.FC = () => {
                     
                     <motion.div
                       variants={{ 
-                        hover: isSelected ? {} : t.hoverAnim,
-                        rest: { scale: 1, rotate: 0, x: 0, y: 0 },
+                        hover: isSelected ? {} : (t.id === 'plus' ? { scale: 1.1 } : t.hoverAnim),
+                        rest: { scale: 1, ...(t.id !== 'plus' && { rotate: 0 }), x: 0, y: 0 },
                         selected: { 
                           scale: [1, 0.8, 1.2, 1],
-                          rotate: 0,
+                          ...(t.id !== 'plus' && { rotate: 0 }),
                           x: 0,
                           y: 0
                         }
@@ -929,20 +918,25 @@ export const Toolbar: React.FC = () => {
                     >
                       <AnimatePresence mode="wait">
                         <motion.div
-                          key={t.id === 'plus' ? activePlusTool : t.id}
+                          key={t.id === 'plus' && activePlusTool !== 'plus' && !isPlusMenuOpen ? activePlusTool : t.id}
                           initial={{ opacity: 0, scale: 0.5, rotate: -45 }}
                           animate={{ opacity: 1, scale: 1, rotate: 0 }}
                           exit={{ opacity: 0, scale: 0.5, rotate: 45 }}
                           transition={{ 
-                            duration: 0.15,
-                            delay: t.id === 'plus' && !isPlusMenuOpen && activePlusTool !== 'plus' ? 0.15 : 0
+                            duration: 0.15
                           }}
                           className="flex items-center justify-center absolute inset-0"
                         >
-                          <Icon 
-                            className="w-5 h-5 transition-colors duration-200"
-                            isSelected={isSelected} 
-                          />
+                          <motion.div
+                            animate={{ rotate: t.id === 'plus' && (activePlusTool === 'plus' || isPlusMenuOpen) ? plusRotation : 0 }}
+                            transition={{ type: "spring", stiffness: 200, damping: 15 }}
+                            className="flex items-center justify-center w-full h-full"
+                          >
+                            <Icon 
+                              className="w-5 h-5 transition-colors duration-200"
+                              isSelected={isSelected} 
+                            />
+                          </motion.div>
                         </motion.div>
                       </AnimatePresence>
                     </motion.div>
