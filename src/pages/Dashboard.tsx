@@ -363,7 +363,16 @@ export default function Dashboard({ session }: { session: Session }) {
       )}
       <div className="max-w-6xl mx-auto">
         <div className="flex justify-between items-center mb-8">
-          <h1 className="text-3xl font-bold text-zinc-900">Your Boards</h1>
+          <h1 className="m-0 p-0 leading-none">
+            <img
+              src="/viboard-lockup.svg"
+              alt="Viboard"
+              className="block h-8 w-auto sm:h-9 md:h-10"
+              width={160}
+              height={35}
+              decoding="async"
+            />
+          </h1>
           <div className="flex gap-3">
             <motion.button
               whileHover="hover"
