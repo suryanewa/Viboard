@@ -31,10 +31,10 @@ type TextCommand =
   | 'alignCenter'
   | 'alignRight';
 
-const BOARD_FILE_EXTENSION = 'viboard.json';
+export const BOARD_FILE_EXTENSION = 'viboard.json';
 const BOARD_CONTENT_COLUMNS = ['snapshot', 'data', 'content'];
 
-const downloadBlob = (blob: Blob, filename: string) => {
+export const downloadBlob = (blob: Blob, filename: string) => {
   const url = URL.createObjectURL(blob);
   const anchor = document.createElement('a');
   anchor.href = url;
@@ -62,7 +62,7 @@ const boardContentPayloads = (snapshot: BoardSnapshot) => ({
   content: snapshot,
 });
 
-const parseSnapshot = (row: Record<string, unknown> | null): BoardSnapshot | null => {
+export const parseSnapshot = (row: Record<string, unknown> | null): BoardSnapshot | null => {
   if (!row) return null;
   const maybeSnapshot = BOARD_CONTENT_COLUMNS.map((column) => row[column]).find(Boolean);
   if (maybeSnapshot && typeof maybeSnapshot === 'object') {
@@ -105,7 +105,7 @@ const normalizeSnapshot = (value: unknown): BoardSnapshot => {
   };
 };
 
-const safeFilename = (name: string, extension: string) => {
+export const safeFilename = (name: string, extension: string) => {
   const normalized = name.trim().replace(/[^a-z0-9-_]+/gi, '-').replace(/^-+|-+$/g, '');
   return `${normalized || 'Untitled-Board'}.${extension}`;
 };
@@ -873,11 +873,14 @@ const drawBlockToCanvas = async (ctx: CanvasRenderingContext2D, block: Block) =>
   ctx.restore();
 };
 
-const renderBoardToCanvas = async (
+export const renderBoardToCanvas = async (
   targetBlocks?: Block[],
-  options: { transparentBackground?: boolean; targetDrawings?: DrawingPath[] } = {}
+  options: { transparentBackground?: boolean; targetDrawings?: DrawingPath[]; blocks?: Record<string, Block>; drawings?: DrawingPath[] } = {}
 ) => {
-  const { blocks, drawings } = useBoardStore.getState();
+  const state = useBoardStore.getState();
+  const blocks = options.blocks || state.blocks;
+  const drawings = options.drawings || state.drawings;
+  
   const blockList = targetBlocks !== undefined ? targetBlocks : Object.values(blocks);
   const drawingList = options.targetDrawings ?? drawings;
   const isTargetedRender = Boolean(targetBlocks || options.targetDrawings);
@@ -967,6 +970,40 @@ const dataUrlToBytes = (dataUrl: string) => {
   const bytes = new Uint8Array(binary.length);
   for (let i = 0; i < binary.length; i += 1) bytes[i] = binary.charCodeAt(i);
   return bytes;
+};
+
+export const generateBoardPreview = async (blocks: Record<string, Block>, drawings: DrawingPath[]): Promise<string | null> => {
+  try {
+    const canvas = await renderBoardToCanvas(undefined, { 
+      transparentBackground: false,
+      blocks,
+      drawings
+    });
+    if (!canvas) return null;
+    
+    // Create a smaller thumbnail version
+    const thumbnailCanvas = document.createElement('canvas');
+    const MAX_WIDTH = 800;
+    let width = canvas.width;
+    let height = canvas.height;
+    
+    if (width > MAX_WIDTH) {
+      height = Math.floor(height * (MAX_WIDTH / width));
+      width = MAX_WIDTH;
+    }
+    
+    thumbnailCanvas.width = width;
+    thumbnailCanvas.height = height;
+    const ctx = thumbnailCanvas.getContext('2d');
+    if (ctx) {
+      ctx.drawImage(canvas, 0, 0, width, height);
+      return thumbnailCanvas.toDataURL('image/jpeg', 0.8);
+    }
+    return canvas.toDataURL('image/jpeg', 0.8);
+  } catch (error) {
+    console.error('Error generating preview:', error);
+    return null;
+  }
 };
 
 export const exportBoard = async (format: ExportFormat) => {
