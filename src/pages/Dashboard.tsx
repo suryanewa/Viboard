@@ -437,13 +437,13 @@ export default function Dashboard({ session }: { session: Session }) {
 
                     <div className="relative" ref={menuOpenId === board.id ? menuRef : null}>
                       <motion.button
+                        type="button"
                         whileHover="hover"
-                        whileTap="tap"
                         onClick={(e) => {
                           e.stopPropagation();
                           setMenuOpenId((prev) => prev === board.id ? null : board.id);
                         }}
-                        className={`relative flex h-8 w-8 items-center justify-center rounded-lg p-1.5 transition-colors ${
+                        className={`relative flex h-8 w-8 items-center justify-center rounded-lg p-1.5 transition-colors active:scale-95 ${
                           menuOpenId === board.id 
                             ? 'text-zinc-900' 
                             : 'text-zinc-400 hover:text-zinc-900 opacity-0 group-hover:opacity-100'
@@ -456,7 +456,11 @@ export default function Dashboard({ session }: { session: Session }) {
                           variants={{ hover: { opacity: 1 } }}
                           transition={{ duration: 0.18 }}
                         />
-                        <motion.div variants={{ hover: { scale: 1.1, rotate: 90 } }} transition={{ type: 'spring', duration: 0.3 }}>
+                        <motion.div
+                          animate={menuOpenId === board.id ? { scale: 1.1, rotate: 90 } : undefined}
+                          variants={{ hover: { scale: 1.1, rotate: 90 } }}
+                          transition={{ type: 'spring', duration: 0.3 }}
+                        >
                           <MoreVertical className="relative z-10 h-4 w-4" />
                         </motion.div>
                       </motion.button>
