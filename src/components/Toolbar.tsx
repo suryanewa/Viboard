@@ -12,6 +12,23 @@ import { getTextBlockHeight } from '../lib/textBlockMetrics';
 
 type ToolbarVisualTool = 'select' | 'marker' | 'shape' | 'text' | 'pan' | 'sticky' | 'link' | 'frame';
 
+type ToolbarToolColor = 'blue' | 'brand';
+
+const toolbarSelectedFill = (color: ToolbarToolColor) =>
+  color === 'blue' ? 'bg-blue-100' : 'bg-[#dedcff]';
+
+const toolbarSelectedIcon = (color: ToolbarToolColor) =>
+  color === 'blue' ? 'text-blue-600' : 'text-[#6c5cff]';
+
+type ToolbarToolEntry = {
+  id: ToolbarVisualTool;
+  icon: React.ComponentType<{ className?: string; isSelected?: boolean }>;
+  shortcut: string;
+  color: ToolbarToolColor;
+  hasSecondary: boolean;
+  hoverAnim: any;
+};
+
 export const Toolbar: React.FC = () => {
   const addBlock = useBoardStore((state) => state.addBlock);
   const viewport = useBoardStore((state) => state.viewport);
@@ -72,15 +89,15 @@ export const Toolbar: React.FC = () => {
     setViewport({ x: newX, y: newY, zoom: newZoom });
   };
 
-  const TOOLS = React.useMemo(() => [
+  const TOOLS = React.useMemo((): ToolbarToolEntry[] => [
     { id: 'select', icon: MousePointer, shortcut: 'V', color: 'blue', hasSecondary: false, hoverAnim: { scale: 1.1, rotate: -15, x: -1, y: -1 } as any },
     { id: 'pan', icon: Hand, shortcut: 'P', color: 'blue', hasSecondary: false, hoverAnim: { scale: 1.1, rotate: [0, -15, 15, -10, 0] } as any },
     { id: 'frame', icon: Frame, shortcut: 'F', color: 'blue', hasSecondary: false, hoverAnim: { scale: 1.1 } as any },
-    { id: 'sticky', icon: ({ isSelected }: { isSelected?: boolean }) => <div className={clsx("w-4 h-4 border-2 transition-colors", isSelected ? 'border-red-600' : 'border-currentColor')} />, shortcut: 'S', color: 'red', hasSecondary: true, hoverAnim: { scale: 1.15, rotate: 10, y: -1 } as any },
-    { id: 'text', icon: Type, shortcut: 'T', color: 'red', hasSecondary: true, hoverAnim: { scale: 1.1, y: -2 } as any },
-    { id: 'marker', icon: Pencil, shortcut: 'M', color: 'red', hasSecondary: true, hoverAnim: { scale: 1.1, rotate: -20, x: 2, y: -2 } as any },
-    { id: 'shape', icon: Circle, shortcut: 'K', color: 'red', hasSecondary: true, hoverAnim: { scale: 1.15 } as any },
-    { id: 'link', icon: Upload, shortcut: 'L', color: 'red', hasSecondary: false, hoverAnim: { scale: 1.1 } as any },
+    { id: 'sticky', icon: ({ isSelected }: { isSelected?: boolean }) => <div className={clsx("w-4 h-4 border-2 transition-colors", isSelected ? 'border-[#6c5cff]' : 'border-currentColor')} />, shortcut: 'S', color: 'brand', hasSecondary: true, hoverAnim: { scale: 1.15, rotate: 10, y: -1 } as any },
+    { id: 'text', icon: Type, shortcut: 'T', color: 'brand', hasSecondary: true, hoverAnim: { scale: 1.1, y: -2 } as any },
+    { id: 'marker', icon: Pencil, shortcut: 'M', color: 'brand', hasSecondary: true, hoverAnim: { scale: 1.1, rotate: -20, x: 2, y: -2 } as any },
+    { id: 'shape', icon: Circle, shortcut: 'K', color: 'brand', hasSecondary: true, hoverAnim: { scale: 1.15 } as any },
+    { id: 'link', icon: Upload, shortcut: 'L', color: 'brand', hasSecondary: false, hoverAnim: { scale: 1.1 } as any },
   ], []);
 
   const handleToolSelect = React.useCallback((nextTool: ToolbarVisualTool) => {
@@ -722,7 +739,7 @@ export const Toolbar: React.FC = () => {
                         }
                         className={clsx(
                           "absolute inset-0 rounded-lg -z-10",
-                          t.color === 'blue' ? 'bg-blue-100' : 'bg-red-100'
+                          toolbarSelectedFill(t.color)
                         )}
                       />
                     )}
@@ -742,7 +759,7 @@ export const Toolbar: React.FC = () => {
                       className={clsx(
                         "relative z-10 transition-colors duration-200 flex items-center justify-center w-5 h-5",
                         isSelected 
-                          ? (t.color === 'blue' ? 'text-blue-600' : 'text-red-600')
+                          ? toolbarSelectedIcon(t.color)
                           : "text-zinc-600 hover:text-zinc-900"
                       )}
                     >

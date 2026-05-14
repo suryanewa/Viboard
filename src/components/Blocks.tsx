@@ -887,7 +887,7 @@ export const FrameBlock: React.FC<BlockContentProps> = ({ block }) => {
     <div 
       className={clsx(
         "w-full h-full border-2 transition-colors duration-200 pointer-events-none",
-        isSelected ? "border-blue-500" : "border-zinc-300"
+        isSelected ? "border-[#6c5cff]" : "border-zinc-300"
       )}
       style={{ 
         backgroundColor: 'transparent'

@@ -608,7 +608,7 @@ export const PropertyToolbar: React.FC = () => {
               />
               <button
                 type="submit"
-                className="flex items-center justify-center w-8 h-8 text-white bg-blue-600 rounded-full hover:bg-blue-700 transition-colors shadow-sm shrink-0"
+                className="flex items-center justify-center w-8 h-8 text-white bg-[#6c5cff] rounded-full hover:bg-[#5a4be8] transition-colors shadow-sm shrink-0"
               >
                 <CornerDownLeft className="w-4 h-4" />
               </button>

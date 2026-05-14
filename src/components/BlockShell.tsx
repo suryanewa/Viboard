@@ -137,7 +137,7 @@ const ResizeHandle = ({ direction, cursor, styles, delay = 0, onPointerDown, onP
       width: 12,
       height: 12,
       background: '#fff',
-      border: '2px solid #3b82f6',
+      border: '2px solid #6c5cff',
       borderRadius: '50%',
       cursor,
       zIndex: 2147483647,
@@ -896,7 +896,7 @@ export const BlockShell: React.FC<BlockShellProps> = ({ block, children }) => {
             <motion.path
               d={pathCw}
               fill="none"
-              stroke="#3b82f6"
+              stroke="#6c5cff"
               strokeWidth="2"
               initial={{ pathLength: 0, opacity: 0 }}
               animate={{ pathLength: 1, opacity: 1 }}
@@ -906,7 +906,7 @@ export const BlockShell: React.FC<BlockShellProps> = ({ block, children }) => {
             <motion.path
               d={pathCcw}
               fill="none"
-              stroke="#3b82f6"
+              stroke="#6c5cff"
               strokeWidth="2"
               initial={{ pathLength: 0, opacity: 0 }}
               animate={{ pathLength: 1, opacity: 1 }}
@@ -974,10 +974,10 @@ export const BlockShell: React.FC<BlockShellProps> = ({ block, children }) => {
         'transition-colors duration-300 ease-[cubic-bezier(0.22,1,0.36,1)]',
         block.type !== 'shape' && block.type !== 'drawing' && block.type !== 'text' && block.type !== 'link' && block.type !== 'audio' && block.type !== 'x' && block.type !== 'youtube' && block.type !== 'video' && block.type !== 'substack' && block.type !== 'medium' && block.type !== 'figma' && block.type !== 'arena' && block.type !== 'github' && block.type !== 'wikipedia' && block.type !== 'codepen' && block.type !== 'reddit' && block.type !== 'tiktok' && block.type !== 'pdf' && block.type !== 'frame' && [
           'border shadow-none bg-white',
-          isSelected ? 'border-transparent ring-2 ring-blue-500/20' : 'border-zinc-200 ring-2 ring-transparent hover:border-zinc-300'
+          isSelected ? 'border-transparent ring-2 ring-[#6c5cff]/25' : 'border-zinc-200 ring-2 ring-transparent hover:border-zinc-300'
         ],
-        block.type === 'audio' && (isSelected ? 'ring-2 ring-blue-500/20 rounded-md' : 'ring-2 ring-transparent rounded-md'),
-        block.type === 'shape' && (isSelected ? 'ring-2 ring-blue-500/20' : 'ring-2 ring-transparent')
+        block.type === 'audio' && (isSelected ? 'ring-2 ring-[#6c5cff]/25 rounded-md' : 'ring-2 ring-transparent rounded-md'),
+        block.type === 'shape' && (isSelected ? 'ring-2 ring-[#6c5cff]/25' : 'ring-2 ring-transparent')
       )}
     >
       {block.type === 'frame'

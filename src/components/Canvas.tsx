@@ -904,7 +904,7 @@ export const Canvas: React.FC<{ children: React.ReactNode }> = ({ children }) =>
                   stiffness: 400,
                   mass: 0.5
                 }}
-                className="absolute pointer-events-none z-[1000] rounded-md border-[1.5px] border-blue-500/50 bg-blue-500/10 shadow-none backdrop-blur-[0.5px]"
+                className="absolute pointer-events-none z-[1000] rounded-md border-[1.5px] border-[#6c5cff]/50 bg-[#6c5cff]/10 shadow-none backdrop-blur-[0.5px]"
               />
             )}
           </AnimatePresence>
@@ -924,7 +924,7 @@ export const Canvas: React.FC<{ children: React.ReactNode }> = ({ children }) =>
 
           {activeFrame && (
             <div
-              className="absolute border-2 border-blue-500 bg-transparent pointer-events-none z-[1002]"
+              className="absolute border-2 border-[#6c5cff] bg-transparent pointer-events-none z-[1002]"
               style={{
                 left: Math.min(activeFrame.x1, activeFrame.x2),
                 top: Math.min(activeFrame.y1, activeFrame.y2),
@@ -953,7 +953,7 @@ export const Canvas: React.FC<{ children: React.ReactNode }> = ({ children }) =>
                   exit={{ opacity: 0 }}
                   transition={{ duration: historyAnimationKey > 0 ? 0.16 : 0, ease: 'easeOut' }}
                   fill="none"
-                  stroke={drawingSelection.includes(path.id) ? '#3b82f6' : path.color}
+                  stroke={drawingSelection.includes(path.id) ? '#6c5cff' : path.color}
                   strokeWidth={path.strokeWidth}
                   strokeLinecap="round"
                   strokeLinejoin="round"
