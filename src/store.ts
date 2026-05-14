@@ -163,6 +163,7 @@ interface BoardState {
   undo: () => void;
   redo: () => void;
   syncBlocksToTypeSense: () => void;
+  clearBoard: () => void;
 }
 
 const MAX_HISTORY = 25;
@@ -665,4 +666,16 @@ export const useBoardStore = create<BoardState>((set, get) => ({
     const { blocks } = get();
     syncAllBlocks(blocks);
   },
+
+  clearBoard: () => {
+    set({
+      blocks: {},
+      drawings: [],
+      selection: [],
+      drawingSelection: [],
+      canvasTitle: 'Untitled Board',
+      history: { past: [], future: [] },
+      viewport: { x: 0, y: 0, zoom: 1 }
+    });
+  }
 }));

@@ -1,11 +1,35 @@
 import { useEffect, useState } from 'react';
-import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
+import { BrowserRouter, Routes, Route, Navigate, useLocation } from 'react-router-dom';
+import { AnimatePresence } from 'framer-motion';
 import { supabase } from './lib/supabase';
 import Login from './pages/Login';
 import Dashboard from './pages/Dashboard';
 import Board from './pages/Board';
 
 import type { Session } from '@supabase/supabase-js';
+
+function AnimatedRoutes({ session }: { session: Session | null }) {
+  const location = useLocation();
+  
+  return (
+    <AnimatePresence mode="wait">
+      <Routes location={location} key={location.pathname}>
+        <Route 
+          path="/login" 
+          element={!session ? <Login /> : <Navigate to="/" replace />} 
+        />
+        <Route 
+          path="/" 
+          element={session ? <Dashboard session={session} /> : <Navigate to="/login" replace />} 
+        />
+        <Route 
+          path="/board/:id" 
+          element={session ? <Board /> : <Navigate to="/login" replace />} 
+        />
+      </Routes>
+    </AnimatePresence>
+  );
+}
 
 function App() {
   const [session, setSession] = useState<Session | null>(null);
@@ -51,20 +75,7 @@ function App() {
 
   return (
     <BrowserRouter>
-      <Routes>
-        <Route 
-          path="/login" 
-          element={!session ? <Login /> : <Navigate to="/" replace />} 
-        />
-        <Route 
-          path="/" 
-          element={session ? <Dashboard session={session} /> : <Navigate to="/login" replace />} 
-        />
-        <Route 
-          path="/board/:id" 
-          element={session ? <Board /> : <Navigate to="/login" replace />} 
-        />
-      </Routes>
+      <AnimatedRoutes session={session} />
     </BrowserRouter>
   );
 }

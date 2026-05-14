@@ -274,6 +274,11 @@ export default function Dashboard({ session }: { session: Session }) {
         stiffness: 300, 
         damping: 24 
       } 
+    },
+    hover: {
+      y: -6,
+      scale: 1.015,
+      transition: { type: 'spring' as const, stiffness: 400, damping: 25 }
     }
   };
 
@@ -340,7 +345,13 @@ export default function Dashboard({ session }: { session: Session }) {
   };
 
   return (
-    <div className="min-h-screen bg-zinc-50 p-8">
+    <motion.div 
+      className="min-h-screen bg-zinc-50 p-8"
+      initial={{ opacity: 0, scale: 0.98, filter: 'blur(4px)' }}
+      animate={{ opacity: 1, scale: 1, filter: 'blur(0px)' }}
+      exit={{ opacity: 0, scale: 1.02, filter: 'blur(4px)', transition: { duration: 0.3, ease: 'easeIn' } }}
+      transition={{ duration: 0.4, ease: 'easeOut' }}
+    >
       {menuOpenId && (
         <div 
           className="fixed inset-0 z-40"
@@ -410,16 +421,16 @@ export default function Dashboard({ session }: { session: Session }) {
             animate="show"
             className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6"
           >
-            <AnimatePresence>
+            <AnimatePresence mode="popLayout">
               {moodboards.map((board) => (
                 <motion.div
                   key={board.id}
                   variants={boardItemVariants}
                   layout
-                  whileHover={{ y: -6, scale: 1.015 }}
-                  whileTap={{ scale: 0.98, y: -2 }}
+                  animate={menuOpenId === board.id ? "hover" : "show"}
+                  whileHover="hover"
                   transition={{ type: 'spring', stiffness: 400, damping: 25 }}
-                  exit={{ opacity: 0, scale: 0.9, transition: { duration: 0.2 } }}
+                  exit={{ opacity: 0, scale: 0.8, filter: 'blur(4px)', transition: { duration: 0.25, ease: 'easeOut' } }}
                   onClick={(e) => {
                     if (menuOpenId) {
                       e.preventDefault();
@@ -429,7 +440,13 @@ export default function Dashboard({ session }: { session: Session }) {
                     }
                     navigate(`/board/${board.id}`);
                   }}
-                  className={`group relative bg-white p-5 rounded-2xl border border-zinc-200 shadow-sm hover:shadow-[0_20px_40px_-15px_rgba(108,92,255,0.15)] hover:border-[#6c5cff]/30 cursor-pointer transition-[box-shadow,border-color,z-index] duration-300 ${menuOpenId === board.id || menuDismissRevealId === board.id ? 'z-50' : 'hover:z-10'}`}
+                  className={`group relative bg-white p-5 rounded-2xl border shadow-sm cursor-pointer transition-[box-shadow,border-color,z-index] duration-300 ${
+                    menuOpenId === board.id 
+                      ? 'z-50 border-zinc-300' 
+                      : menuDismissRevealId === board.id 
+                        ? 'z-50 border-zinc-200' 
+                        : 'hover:z-10 hover:border-zinc-300 border-zinc-200'
+                  }`}
                 >
                   <div className="w-full aspect-video bg-zinc-50 rounded-lg mb-4 flex items-center justify-center border border-zinc-100 overflow-hidden relative">
                     {previews[board.id] ? (
@@ -439,12 +456,12 @@ export default function Dashboard({ session }: { session: Session }) {
                         transition={{ duration: 0.3 }}
                         src={previews[board.id]} 
                         alt={`${board.title || 'Untitled Board'} preview`} 
-                        className="w-full h-full object-cover transition-transform duration-700 ease-out group-hover:scale-105"
+                        className={`w-full h-full object-cover transition-transform duration-700 ease-out ${menuOpenId === board.id ? 'scale-105' : 'group-hover:scale-105'}`}
                       />
                     ) : (
                       <span className="text-zinc-400 text-sm font-medium">No preview</span>
                     )}
-                    <div className="absolute inset-0 bg-gradient-to-t from-[#6c5cff]/10 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300 pointer-events-none" />
+                    <div className={`absolute inset-0 bg-gradient-to-t from-[#6c5cff]/10 to-transparent transition-opacity duration-300 pointer-events-none ${menuOpenId === board.id ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'}`} />
                   </div>
                   
                   <div className="flex justify-between items-start gap-2 relative">
@@ -460,7 +477,7 @@ export default function Dashboard({ session }: { session: Session }) {
                           className="w-full px-2 py-1 -ml-2 text-zinc-900 font-semibold bg-zinc-100 rounded border-none outline-none focus:ring-2 focus:ring-[#6c5cff]/50"
                         />
                       ) : (
-                        <h3 className="font-semibold text-zinc-900 truncate group-hover:text-[#6c5cff] transform group-hover:translate-x-1 transition-all duration-300 ease-out">
+                        <h3 className={`font-semibold text-zinc-900 truncate transform transition-all duration-300 ease-out ${menuOpenId === board.id ? 'text-[#6c5cff] translate-x-1' : 'group-hover:text-[#6c5cff] group-hover:translate-x-1'}`}>
                           {board.title || 'Untitled Board'}
                         </h3>
                       )}
@@ -479,7 +496,7 @@ export default function Dashboard({ session }: { session: Session }) {
                           if (menuOpenId === board.id) dismissBoardMenu();
                           else openBoardMenu(board.id);
                         }}
-                        className={`relative flex h-8 w-8 items-center justify-center rounded-lg p-1.5 transition-[color,opacity] duration-200 active:scale-95 ${
+                        className={`relative flex h-8 w-8 items-center justify-center rounded-lg p-1.5 transition-[color,opacity] duration-200 ${
                           menuOpenId === board.id || menuDismissRevealId === board.id
                             ? 'text-zinc-900 opacity-100'
                             : 'text-zinc-400 hover:text-zinc-900 opacity-0 group-hover:opacity-100'
@@ -615,6 +632,6 @@ export default function Dashboard({ session }: { session: Session }) {
           </motion.div>
         )}
       </div>
-    </div>
+    </motion.div>
   );
 }

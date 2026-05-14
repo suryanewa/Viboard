@@ -327,9 +327,18 @@ const mergeBoardSummaries = (primary: SavedBoardSummary[], secondary: SavedBoard
   });
 };
 
+export let currentLoadingBoardId: string | null = null;
+
+export const setCurrentLoadingBoardId = (id: string | null) => {
+  currentLoadingBoardId = id;
+};
+
 export const loadBoardFromWeb = async (boardId: string) => {
   const cached = localStorage.getItem(`viboard:web:${boardId}`);
   const { data, error } = await supabase.from('moodboards').select('*').eq('id', boardId).single();
+  
+  if (currentLoadingBoardId !== boardId) return;
+
   if (error && cached) {
     loadBoardSnapshot(JSON.parse(cached) as BoardSnapshot);
     return;

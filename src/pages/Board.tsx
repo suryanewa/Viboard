@@ -8,7 +8,7 @@ import { KeyboardShortcuts } from '../components/KeyboardShortcuts';
 import { ContextMenu } from '../components/ContextMenu';
 import { PropertyToolbar } from '../components/PropertyToolbar';
 import { useBoardStore } from '../store';
-import { loadBoardFromWeb, saveBoardToWeb } from '../lib/boardCommands';
+import { loadBoardFromWeb, saveBoardToWeb, setCurrentLoadingBoardId } from '../lib/boardCommands';
 import {
   consumeImportedLocalSnapshotFlag,
   getSavedBoardId,
@@ -38,7 +38,17 @@ function Board() {
   const autosaveTimerRef = useRef<number | null>(null);
 
   useEffect(() => {
+    return () => {
+      setCurrentLoadingBoardId(null);
+      useBoardStore.getState().clearBoard();
+    };
+  }, []);
+
+  useEffect(() => {
     if (!params.id) return;
+    
+    setCurrentLoadingBoardId(params.id);
+    
     if (consumeImportedLocalSnapshotFlag()) {
       autosaveReadyRef.current = true;
       lastSavedSignatureRef.current = boardSignature();
@@ -160,7 +170,13 @@ function Board() {
   }, []);
 
   return (
-    <div className="relative w-screen h-screen overflow-hidden bg-zinc-50">
+    <motion.div 
+      className="relative w-screen h-screen overflow-hidden bg-zinc-50"
+      initial={{ opacity: 0, scale: 1.02, filter: 'blur(4px)' }}
+      animate={{ opacity: 1, scale: 1, filter: 'blur(0px)' }}
+      exit={{ opacity: 0, scale: 0.98, filter: 'blur(4px)', transition: { duration: 0.3, ease: 'easeIn' } }}
+      transition={{ duration: 0.4, ease: 'easeOut' }}
+    >
       <AnimatePresence>
         {isDraggingOver && (
           <motion.div
@@ -189,7 +205,7 @@ function Board() {
       <KeyboardShortcuts />
       <ContextMenu />
       <Canvas>
-        <AnimatePresence initial={false}>
+        <AnimatePresence initial={false} key={params.id}>
           {Object.values(blocks).map((block) => (
             <BlockShell key={block.id} block={block}>
               <BlockRenderer block={block} />
@@ -199,7 +215,7 @@ function Board() {
       </Canvas>
       <Toolbar />
       {mode === 'edit' && <PropertyToolbar />}
-    </div>
+    </motion.div>
   );
 }
 
