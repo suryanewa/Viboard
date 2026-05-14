@@ -18,12 +18,42 @@ export default function Dashboard({ session }: { session: Session }) {
   const [moodboards, setMoodboards] = useState<Moodboard[]>([]);
   const [loading, setLoading] = useState(true);
   const [menuOpenId, setMenuOpenId] = useState<string | null>(null);
+  /** Keeps the kebab control visible briefly after dismiss so Framer can finish the spring. */
+  const [menuDismissRevealId, setMenuDismissRevealId] = useState<string | null>(null);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editTitle, setEditTitle] = useState('');
   const navigate = useNavigate();
   const menuRef = useRef<HTMLDivElement>(null);
-
+  const menuOpenIdRef = useRef<string | null>(null);
+  const menuDismissTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [previews, setPreviews] = useState<Record<string, string>>({});
+
+  const clearMenuDismissReveal = () => {
+    if (menuDismissTimerRef.current) {
+      clearTimeout(menuDismissTimerRef.current);
+      menuDismissTimerRef.current = null;
+    }
+    setMenuDismissRevealId(null);
+  };
+
+  const openBoardMenu = (boardId: string) => {
+    clearMenuDismissReveal();
+    menuOpenIdRef.current = boardId;
+    setMenuOpenId(boardId);
+  };
+
+  const dismissBoardMenu = () => {
+    const id = menuOpenIdRef.current;
+    menuOpenIdRef.current = null;
+    setMenuOpenId(null);
+    if (!id) return;
+    setMenuDismissRevealId(id);
+    if (menuDismissTimerRef.current) clearTimeout(menuDismissTimerRef.current);
+    menuDismissTimerRef.current = setTimeout(() => {
+      setMenuDismissRevealId(null);
+      menuDismissTimerRef.current = null;
+    }, 320);
+  };
 
   const fetchMoodboards = async () => {
     setLoading(true);
@@ -102,7 +132,7 @@ export default function Dashboard({ session }: { session: Session }) {
   useEffect(() => {
     const handleEscape = (event: KeyboardEvent) => {
       if (event.key === 'Escape') {
-        setMenuOpenId(null);
+        dismissBoardMenu();
       }
     };
 
@@ -110,6 +140,12 @@ export default function Dashboard({ session }: { session: Session }) {
     
     return () => {
       document.removeEventListener('keydown', handleEscape);
+    };
+  }, []);
+
+  useEffect(() => {
+    return () => {
+      if (menuDismissTimerRef.current) clearTimeout(menuDismissTimerRef.current);
     };
   }, []);
 
@@ -135,7 +171,7 @@ export default function Dashboard({ session }: { session: Session }) {
 
   const handleDelete = async (id: string, e: React.MouseEvent) => {
     e.stopPropagation();
-    setMenuOpenId(null);
+    dismissBoardMenu();
     
     // Optimistic update
     setMoodboards(prev => prev.filter(b => b.id !== id));
@@ -153,7 +189,7 @@ export default function Dashboard({ session }: { session: Session }) {
 
   const startRename = (board: Moodboard, e: React.MouseEvent) => {
     e.stopPropagation();
-    setMenuOpenId(null);
+    dismissBoardMenu();
     setEditingId(board.id);
     setEditTitle(board.title || 'Untitled Board');
   };
@@ -189,7 +225,7 @@ export default function Dashboard({ session }: { session: Session }) {
 
   const handleSaveLocally = async (board: Moodboard, e: React.MouseEvent) => {
     e.stopPropagation();
-    setMenuOpenId(null);
+    dismissBoardMenu();
 
     // Try to get from local storage first
     const cached = localStorage.getItem(`viboard:web:${board.id}`);
@@ -310,7 +346,7 @@ export default function Dashboard({ session }: { session: Session }) {
           className="fixed inset-0 z-40"
           onPointerDown={(e) => {
             e.stopPropagation();
-            setMenuOpenId(null);
+            dismissBoardMenu();
           }}
         />
       )}
@@ -380,18 +416,20 @@ export default function Dashboard({ session }: { session: Session }) {
                   key={board.id}
                   variants={boardItemVariants}
                   layout
-                  whileHover={{ y: -4, scale: 1.01 }}
+                  whileHover={{ y: -6, scale: 1.015 }}
+                  whileTap={{ scale: 0.98, y: -2 }}
+                  transition={{ type: 'spring', stiffness: 400, damping: 25 }}
                   exit={{ opacity: 0, scale: 0.9, transition: { duration: 0.2 } }}
                   onClick={(e) => {
                     if (menuOpenId) {
                       e.preventDefault();
                       e.stopPropagation();
-                      setMenuOpenId(null);
+                      dismissBoardMenu();
                       return;
                     }
                     navigate(`/board/${board.id}`);
                   }}
-                  className={`group relative bg-white p-5 rounded-xl border border-zinc-200 shadow-sm hover:shadow-lg hover:border-zinc-300 cursor-pointer transition-all duration-300 ${menuOpenId === board.id ? 'z-50' : 'hover:z-10'}`}
+                  className={`group relative bg-white p-5 rounded-2xl border border-zinc-200 shadow-sm hover:shadow-[0_20px_40px_-15px_rgba(108,92,255,0.15)] hover:border-[#6c5cff]/30 cursor-pointer transition-[box-shadow,border-color,z-index] duration-300 ${menuOpenId === board.id || menuDismissRevealId === board.id ? 'z-50' : 'hover:z-10'}`}
                 >
                   <div className="w-full aspect-video bg-zinc-50 rounded-lg mb-4 flex items-center justify-center border border-zinc-100 overflow-hidden relative">
                     {previews[board.id] ? (
@@ -399,15 +437,14 @@ export default function Dashboard({ session }: { session: Session }) {
                         initial={{ opacity: 0 }}
                         animate={{ opacity: 1 }}
                         transition={{ duration: 0.3 }}
-                        whileHover={{ scale: 1.05 }}
                         src={previews[board.id]} 
                         alt={`${board.title || 'Untitled Board'} preview`} 
-                        className="w-full h-full object-cover transition-transform duration-500"
+                        className="w-full h-full object-cover transition-transform duration-700 ease-out group-hover:scale-105"
                       />
                     ) : (
                       <span className="text-zinc-400 text-sm font-medium">No preview</span>
                     )}
-                    <div className="absolute inset-0 bg-gradient-to-t from-black/5 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-200 pointer-events-none" />
+                    <div className="absolute inset-0 bg-gradient-to-t from-[#6c5cff]/10 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300 pointer-events-none" />
                   </div>
                   
                   <div className="flex justify-between items-start gap-2 relative">
@@ -423,12 +460,9 @@ export default function Dashboard({ session }: { session: Session }) {
                           className="w-full px-2 py-1 -ml-2 text-zinc-900 font-semibold bg-zinc-100 rounded border-none outline-none focus:ring-2 focus:ring-[#6c5cff]/50"
                         />
                       ) : (
-                        <motion.h3 
-                          className="font-semibold text-zinc-900 truncate group-hover:text-[#6c5cff] transition-colors origin-left"
-                          whileHover={{ scale: 1.02 }}
-                        >
+                        <h3 className="font-semibold text-zinc-900 truncate group-hover:text-[#6c5cff] transform group-hover:translate-x-1 transition-all duration-300 ease-out">
                           {board.title || 'Untitled Board'}
-                        </motion.h3>
+                        </h3>
                       )}
                       <p className="text-xs text-zinc-500 mt-1">
                         {board.updated_at || board.created_at ? `Edited ${new Date(board.updated_at || board.created_at || '').toLocaleDateString()}` : 'Recently edited'}
@@ -438,14 +472,16 @@ export default function Dashboard({ session }: { session: Session }) {
                     <div className="relative" ref={menuOpenId === board.id ? menuRef : null}>
                       <motion.button
                         type="button"
+                        layout={false}
                         whileHover="hover"
                         onClick={(e) => {
                           e.stopPropagation();
-                          setMenuOpenId((prev) => prev === board.id ? null : board.id);
+                          if (menuOpenId === board.id) dismissBoardMenu();
+                          else openBoardMenu(board.id);
                         }}
-                        className={`relative flex h-8 w-8 items-center justify-center rounded-lg p-1.5 transition-colors active:scale-95 ${
-                          menuOpenId === board.id 
-                            ? 'text-zinc-900' 
+                        className={`relative flex h-8 w-8 items-center justify-center rounded-lg p-1.5 transition-[color,opacity] duration-200 active:scale-95 ${
+                          menuOpenId === board.id || menuDismissRevealId === board.id
+                            ? 'text-zinc-900 opacity-100'
                             : 'text-zinc-400 hover:text-zinc-900 opacity-0 group-hover:opacity-100'
                         }`}
                       >
@@ -457,11 +493,18 @@ export default function Dashboard({ session }: { session: Session }) {
                           transition={{ duration: 0.18 }}
                         />
                         <motion.div
-                          animate={menuOpenId === board.id ? { scale: 1.1, rotate: 90 } : undefined}
-                          variants={{ hover: { scale: 1.1, rotate: 90 } }}
+                          className="absolute inset-0 z-10 flex items-center justify-center"
+                          layout={false}
+                          initial={false}
+                          animate={menuOpenId === board.id ? "open" : "closed"}
+                          variants={{
+                            open: { scale: 1.1, rotate: 90 },
+                            closed: { scale: 1, rotate: 0 },
+                            hover: { scale: 1.1, rotate: 90 }
+                          }}
                           transition={{ type: 'spring', duration: 0.3 }}
                         >
-                          <MoreVertical className="relative z-10 h-4 w-4" />
+                          <MoreVertical className="h-4 w-4" />
                         </motion.div>
                       </motion.button>
                     </div>
