@@ -152,6 +152,7 @@ export const BlockShell: React.FC<BlockShellProps> = ({ block, children }) => {
   const isSelected = useBoardStore((state) => state.selection.includes(block.id));
   const selection = useBoardStore((state) => state.selection);
   const blocks = useBoardStore((state) => state.blocks);
+  const tool = useBoardStore((state) => state.tool);
   const updateBlock = useBoardStore((state) => state.updateBlock);
   const bringToFront = useBoardStore((state) => state.bringToFront);
   const historyAnimationKey = useBoardStore((state) => state.historyAnimationKey);
@@ -967,7 +968,10 @@ export const BlockShell: React.FC<BlockShellProps> = ({ block, children }) => {
         width,
         height,
         zIndex: block.zIndex,
-        pointerEvents: 'auto'
+        // Let sticky/text/marker/shape/frame creation hit the canvas through empty frame areas.
+        // Frame title + resize handles use their own pointer-events: auto.
+        pointerEvents:
+          block.type === 'frame' && tool !== 'select' ? 'none' : 'auto',
       }}
       className={clsx(
         'group absolute outline-none select-none touch-none',
