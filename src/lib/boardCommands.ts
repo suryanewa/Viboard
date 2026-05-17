@@ -33,6 +33,20 @@ type TextCommand =
 
 export const BOARD_FILE_EXTENSION = 'viboard.json';
 const BOARD_CONTENT_COLUMNS = ['snapshot', 'data', 'content'];
+const DEFAULT_BOARD_VIEWPORT_ZOOM = 1;
+const DEFAULT_LOCKUP_BLOCK: Block = {
+  id: 'viboard-lockup',
+  type: 'image',
+  x: 0,
+  y: 0,
+  width: 480,
+  height: 105,
+  zIndex: 1,
+  data: {
+    url: '/viboard-lockup.svg',
+    alt: 'Viboard',
+  },
+};
 
 export const downloadBlob = (blob: Blob, filename: string) => {
   const url = URL.createObjectURL(blob);
@@ -62,6 +76,28 @@ const boardContentPayloads = (snapshot: BoardSnapshot) => ({
   content: snapshot,
 });
 
+const centeredViewportForBlock = (block: Block): Viewport => {
+  if (typeof window === 'undefined') {
+    return { x: 300, y: 200, zoom: DEFAULT_BOARD_VIEWPORT_ZOOM };
+  }
+
+  return {
+    x: window.innerWidth / 2 - (block.x + block.width / 2) * DEFAULT_BOARD_VIEWPORT_ZOOM,
+    y: window.innerHeight / 2 - (block.y + block.height / 2) * DEFAULT_BOARD_VIEWPORT_ZOOM,
+    zoom: DEFAULT_BOARD_VIEWPORT_ZOOM,
+  };
+};
+
+const defaultBoardSnapshot = (title = 'Untitled Board'): BoardSnapshot => ({
+  version: 1,
+  title,
+  blocks: {
+    [DEFAULT_LOCKUP_BLOCK.id]: { ...DEFAULT_LOCKUP_BLOCK, data: { ...DEFAULT_LOCKUP_BLOCK.data } },
+  },
+  drawings: [],
+  viewport: centeredViewportForBlock(DEFAULT_LOCKUP_BLOCK),
+});
+
 export const parseSnapshot = (row: Record<string, unknown> | null): BoardSnapshot | null => {
   if (!row) return null;
   const maybeSnapshot = BOARD_CONTENT_COLUMNS.map((column) => row[column]).find(Boolean);
@@ -71,13 +107,8 @@ export const parseSnapshot = (row: Record<string, unknown> | null): BoardSnapsho
   return null;
 };
 
-const blankSnapshotForRow = (row: Record<string, unknown> | null): BoardSnapshot => ({
-  version: 1,
-  title: String(row?.title || 'Untitled Board'),
-  blocks: {},
-  drawings: [],
-  viewport: { x: 300, y: 200, zoom: 0.5 },
-});
+const blankSnapshotForRow = (row: Record<string, unknown> | null): BoardSnapshot =>
+  defaultBoardSnapshot(String(row?.title || 'Untitled Board'));
 
 const normalizeSnapshot = (value: unknown): BoardSnapshot => {
   if (!value || typeof value !== 'object') throw new Error('This file is not a Viboard board.');
@@ -100,7 +131,7 @@ const normalizeSnapshot = (value: unknown): BoardSnapshot => {
     viewport: {
       x: typeof viewport?.x === 'number' ? viewport.x : 300,
       y: typeof viewport?.y === 'number' ? viewport.y : 200,
-      zoom: typeof viewport?.zoom === 'number' ? viewport.zoom : 0.5,
+      zoom: typeof viewport?.zoom === 'number' ? viewport.zoom : DEFAULT_BOARD_VIEWPORT_ZOOM,
     },
   };
 };
@@ -111,7 +142,7 @@ export const safeFilename = (name: string, extension: string) => {
 };
 
 const stripListPrefix = (line: string) =>
-  line.replace(/^\s*(?:[-*•]\s+|\d+[\.\)]\s+)/, '');
+  line.replace(/^\s*(?:[-*•]\s+|\d+[.)]\s+)/, '');
 
 const applyListStyleToText = (text: string, style?: 'bullet' | 'number') => {
   const lines = text.split('\n');
@@ -131,6 +162,111 @@ const applyListStyleToText = (text: string, style?: 'bullet' | 'number') => {
       return next;
     })
     .join('\n');
+};
+
+const getSelectionTextOffset = (root: HTMLElement, container: Node, offset: number) => {
+  const range = document.createRange();
+  range.selectNodeContents(root);
+  range.setEnd(container, offset);
+  return range.toString().length;
+};
+
+const setEditableSelection = (root: HTMLElement, start: number, end: number) => {
+  const selection = window.getSelection();
+  if (!selection) return;
+
+  const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
+  const positions: { node: Node; offset: number }[] = [];
+  let remainingStart = start;
+  let remainingEnd = end;
+  let node = walker.nextNode();
+
+  while (node && positions.length < 2) {
+    const textLength = node.textContent?.length ?? 0;
+    if (positions.length === 0 && remainingStart <= textLength) {
+      positions.push({ node, offset: remainingStart });
+    }
+    if (remainingEnd <= textLength) {
+      positions.push({ node, offset: remainingEnd });
+      break;
+    }
+    remainingStart -= textLength;
+    remainingEnd -= textLength;
+    node = walker.nextNode();
+  }
+
+  const range = document.createRange();
+  if (positions[0] && positions[1]) {
+    range.setStart(positions[0].node, positions[0].offset);
+    range.setEnd(positions[1].node, positions[1].offset);
+  } else {
+    range.selectNodeContents(root);
+    range.collapse(false);
+  }
+  selection.removeAllRanges();
+  selection.addRange(range);
+};
+
+const getEditableSelectionContext = () => {
+  const selection = window.getSelection();
+  if (!selection || selection.rangeCount === 0) return null;
+  const range = selection.getRangeAt(0);
+  const startElement = range.startContainer instanceof HTMLElement
+    ? range.startContainer
+    : range.startContainer.parentElement;
+  const root = startElement?.closest<HTMLElement>('[data-viboard-block-id]');
+  if (!root || !root.isContentEditable || !root.contains(range.endContainer)) return null;
+  const blockId = root.dataset.viboardBlockId;
+  if (!blockId) return null;
+
+  return {
+    root,
+    blockId,
+    start: getSelectionTextOffset(root, range.startContainer, range.startOffset),
+    end: getSelectionTextOffset(root, range.endContainer, range.endOffset),
+  };
+};
+
+const applyListStyleToEditableSelection = (style: 'bullet' | 'number') => {
+  const context = getEditableSelectionContext();
+  if (!context) return false;
+
+  const text = context.root.innerText === '\n' ? '' : context.root.innerText;
+  const selectionStart = Math.min(context.start, context.end);
+  const selectionEnd = Math.max(context.start, context.end);
+  const firstLineStart = text.lastIndexOf('\n', Math.max(0, selectionStart - 1)) + 1;
+  const lastSelectedOffset = Math.max(selectionStart, selectionEnd - 1);
+  const nextLineBreak = text.indexOf('\n', lastSelectedOffset);
+  const lastLineEnd = nextLineBreak === -1 ? text.length : nextLineBreak;
+  const selectedLines = text.slice(firstLineStart, lastLineEnd).split('\n');
+  const hasSameListStyle = selectedLines
+    .filter((line) => line.trim())
+    .every((line) => style === 'bullet' ? /^\s*•\s+/.test(line) : /^\s*\d+[.)]\s+/.test(line));
+
+  let number = 1;
+  const transformed = selectedLines
+    .map((line) => {
+      const normalized = stripListPrefix(line);
+      if (!normalized.trim()) return '';
+      if (hasSameListStyle) return normalized;
+      if (style === 'bullet') return `• ${normalized}`;
+      const next = `${number}. ${normalized}`;
+      number += 1;
+      return next;
+    })
+    .join('\n');
+
+  const nextText = `${text.slice(0, firstLineStart)}${transformed}${text.slice(lastLineEnd)}`;
+  context.root.textContent = nextText;
+  setEditableSelection(context.root, firstLineStart, firstLineStart + transformed.length);
+
+  const { blocks, updateBlock } = useBoardStore.getState();
+  const block = blocks[context.blockId];
+  if (block && (block.type === 'text' || block.type === 'sticky')) {
+    updateBlock(context.blockId, { data: { ...block.data, text: nextText } }, true);
+  }
+
+  return true;
 };
 
 const saveRecentSnapshot = (snapshot: BoardSnapshot) => {
@@ -153,13 +289,14 @@ const saveWebSnapshotCache = (boardId: string, snapshot: BoardSnapshot) => {
 export const getCachedWebBoards = () => JSON.parse(localStorage.getItem('viboard:web:index') || '[]') as SavedBoardSummary[];
 
 export const newBoard = () => {
+  const snapshot = defaultBoardSnapshot();
   useBoardStore.setState({
-    blocks: {},
-    drawings: [],
+    blocks: snapshot.blocks,
+    drawings: snapshot.drawings,
     selection: [],
     drawingSelection: [],
-    canvasTitle: 'Untitled Board',
-    viewport: { x: 300, y: 200, zoom: 0.5 },
+    canvasTitle: snapshot.title,
+    viewport: snapshot.viewport,
     history: { past: [], future: [] },
   });
   markBoardUnsaved();
@@ -367,7 +504,7 @@ const loadBoardSnapshot = (snapshot: BoardSnapshot) => {
     selection: [],
     drawingSelection: [],
     canvasTitle: snapshot.title || 'Untitled Board',
-    viewport: snapshot.viewport || { x: 300, y: 200, zoom: 0.5 },
+    viewport: snapshot.viewport || { x: 300, y: 200, zoom: DEFAULT_BOARD_VIEWPORT_ZOOM },
     history: { past: [], future: [] },
   });
   saveRecentSnapshot(snapshot);
@@ -581,6 +718,9 @@ export const rotateSelection = (degrees: 90 | -90 | 180) => {
 };
 
 export const applyTextCommand = (command: TextCommand) => {
+  if (command === 'bulletedList' && applyListStyleToEditableSelection('bullet')) return;
+  if (command === 'numberedList' && applyListStyleToEditableSelection('number')) return;
+
   updateSelectedBlocks((block) => {
     if (block.type !== 'text' && block.type !== 'sticky') return {};
     const data = { ...block.data };

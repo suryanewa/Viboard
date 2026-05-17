@@ -67,41 +67,45 @@ export const PropertyToolbar: React.FC = () => {
   const [currentFontSize, setCurrentFontSize] = useState(textFontSizeDefault);
   const [hoveredProperty, setHoveredProperty] = useState<string | null>(null);
   const [linkUrl, setLinkUrl] = useState('');
+  const selectionKey = selection.join(',');
 
   useEffect(() => {
-    const st = useBoardStore.getState();
-    const sel = st.selection;
-    const bl = st.blocks;
-    const selected = sel.map((id) => bl[id]).filter(Boolean);
+    const timeoutId = window.setTimeout(() => {
+      const st = useBoardStore.getState();
+      const sel = st.selection;
+      const bl = st.blocks;
+      const selected = sel.map((id) => bl[id]).filter(Boolean);
 
-    if (propertyTool === 'text') {
-      const allText = selected.length > 0 && selected.every((b) => b.type === 'text');
-      if (!allText) {
-        setCurrentFontSize(st.textFontSize);
-        setCurrentHue(st.textHue);
+      if (propertyTool === 'text') {
+        const allText = selected.length > 0 && selected.every((b) => b.type === 'text');
+        if (!allText) {
+          setCurrentFontSize(st.textFontSize);
+          setCurrentHue(st.textHue);
+          return;
+        }
+        const fs = selected[0]?.data?.fontSize;
+        const h = selected[0]?.data?.hue;
+        if (fs != null) setCurrentFontSize(fs);
+        if (h !== undefined) setCurrentHue(h);
         return;
       }
-      const fs = selected[0]?.data?.fontSize;
-      const h = selected[0]?.data?.hue;
-      if (fs != null) setCurrentFontSize(fs);
-      if (h !== undefined) setCurrentHue(h);
-      return;
-    }
 
-    if (propertyTool === 'sticky') {
-      const allSticky = selected.length > 0 && selected.every((b) => b.type === 'sticky');
-      const h = allSticky ? selected[0]?.data?.hue : st.stickyHue;
-      if (h !== undefined) setCurrentHue(h);
-      return;
-    }
+      if (propertyTool === 'sticky') {
+        const allSticky = selected.length > 0 && selected.every((b) => b.type === 'sticky');
+        const h = allSticky ? selected[0]?.data?.hue : st.stickyHue;
+        if (h !== undefined) setCurrentHue(h);
+        return;
+      }
 
-    if (propertyTool === 'shape') {
-      const allShape = selected.length > 0 && selected.every((b) => b.type === 'shape');
-      const h = allShape ? selected[0]?.data?.hue : st.shapeHue;
-      if (h !== undefined) setCurrentHue(h);
-      return;
-    }
-  }, [propertyTool, selection.join(','), textFontSizeDefault, textDefaultHue, stickyHue, shapeHue]);
+      if (propertyTool === 'shape') {
+        const allShape = selected.length > 0 && selected.every((b) => b.type === 'shape');
+        const h = allShape ? selected[0]?.data?.hue : st.shapeHue;
+        if (h !== undefined) setCurrentHue(h);
+      }
+    }, 0);
+
+    return () => window.clearTimeout(timeoutId);
+  }, [propertyTool, selectionKey, textFontSizeDefault, textDefaultHue, stickyHue, shapeHue]);
 
   const handleHueChangeSlider = (newHue: number) => {
     setCurrentHue(newHue);
@@ -153,8 +157,8 @@ export const PropertyToolbar: React.FC = () => {
   const handleLinkSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (linkUrl.trim()) {
-      if ((window as any).__handleAddBlock) {
-        (window as any).__handleAddBlock('link', {
+      if (window.__handleAddBlock) {
+        window.__handleAddBlock('link', {
           url: linkUrl.trim(),
           title: linkUrl.trim(),
           description: ''
@@ -171,8 +175,8 @@ export const PropertyToolbar: React.FC = () => {
     const reader = new FileReader();
     reader.onload = (event) => {
       const url = event.target?.result as string;
-      if ((window as any).__handleAddBlock) {
-        (window as any).__handleAddBlock('image', { url });
+      if (window.__handleAddBlock) {
+        window.__handleAddBlock('image', { url });
       }
     };
     reader.readAsDataURL(file);

@@ -231,7 +231,7 @@ export const Canvas: React.FC<{ children: React.ReactNode }> = ({ children }) =>
             const isReddit = trimmed.includes('reddit.com');
             const isArena = trimmed.includes('are.na');
             const isTiktok = trimmed.includes('tiktok.com');
-            const ytMatch = trimmed.match(/(?:youtube\.com\/(?:[^\/]+\/.+\/|(?:v|e(?:mbed)?)\/|.*[?&]v=)|youtu\.be\/)([^"&?\/\s]{11})/i);
+            const ytMatch = trimmed.match(/(?:youtube\.com\/(?:[^/]+\/.+\/|(?:v|e(?:mbed)?)\/|.*[?&]v=)|youtu\.be\/)([^"&?/\s]{11})/i);
 
             if (ytMatch) {
               const id = uuidv4();

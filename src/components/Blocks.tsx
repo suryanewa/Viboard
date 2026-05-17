@@ -9,6 +9,16 @@ interface BlockContentProps {
   block: Block;
 }
 
+type LinkMetadata = {
+  title?: string;
+  description?: string;
+  image?: string;
+  logo?: string;
+  author?: string;
+  publisher?: string;
+  date?: string;
+};
+
 const placeCaretAtEnd = (el: HTMLElement) => {
   el.focus();
   if (typeof window === 'undefined') return;
@@ -29,6 +39,121 @@ const ensureEditableLine = (el: HTMLElement) => {
 const getEditableText = (el: HTMLElement) => {
   const text = el.innerText;
   return text === '\n' ? '' : text;
+};
+
+const getCaretTextOffset = (root: HTMLElement) => {
+  const selection = window.getSelection();
+  if (!selection || selection.rangeCount === 0) return null;
+  const range = selection.getRangeAt(0);
+  if (!root.contains(range.startContainer)) return null;
+
+  const preCaretRange = range.cloneRange();
+  preCaretRange.selectNodeContents(root);
+  preCaretRange.setEnd(range.startContainer, range.startOffset);
+  return preCaretRange.toString().length;
+};
+
+const setCaretTextOffset = (root: HTMLElement, offset: number) => {
+  const selection = window.getSelection();
+  if (!selection) return;
+
+  const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
+  let remaining = offset;
+  let node = walker.nextNode();
+
+  while (node) {
+    const textLength = node.textContent?.length ?? 0;
+    if (remaining <= textLength) {
+      const range = document.createRange();
+      range.setStart(node, remaining);
+      range.collapse(true);
+      selection.removeAllRanges();
+      selection.addRange(range);
+      return;
+    }
+    remaining -= textLength;
+    node = walker.nextNode();
+  }
+
+  placeCaretAtEnd(root);
+};
+
+const getListPrefix = (line: string, fallbackStyle?: 'bullet' | 'number') => {
+  const bulletMatch = line.match(/^(\s*•\s+)/);
+  if (bulletMatch) {
+    return { prefix: bulletMatch[1], style: 'bullet' as const, number: null };
+  }
+
+  const numberMatch = line.match(/^(\s*)(\d+)([.)]\s+)/);
+  if (numberMatch) {
+    return {
+      prefix: numberMatch[0],
+      style: 'number' as const,
+      number: Number(numberMatch[2]),
+      indent: numberMatch[1],
+      separator: numberMatch[3],
+    };
+  }
+
+  if (fallbackStyle === 'bullet') {
+    return { prefix: '• ', style: 'bullet' as const, number: null };
+  }
+  if (fallbackStyle === 'number') {
+    return { prefix: '1. ', style: 'number' as const, number: 1, indent: '', separator: '. ' };
+  }
+
+  return null;
+};
+
+const getNextListPrefix = (currentPrefix: NonNullable<ReturnType<typeof getListPrefix>>) => {
+  if (currentPrefix.style === 'bullet') return currentPrefix.prefix;
+  return `${currentPrefix.indent}${(currentPrefix.number ?? 0) + 1}${currentPrefix.separator}`;
+};
+
+const handleListEnter = (
+  event: React.KeyboardEvent<HTMLElement>,
+  block: Block,
+  updateText: (text: string) => void,
+) => {
+  if (event.key !== 'Enter' || event.shiftKey || event.metaKey || event.ctrlKey || event.altKey) return false;
+
+  const el = event.currentTarget;
+  const caretOffset = getCaretTextOffset(el);
+  if (caretOffset === null) return false;
+
+  const text = getEditableText(el);
+  const lineStart = text.lastIndexOf('\n', Math.max(0, caretOffset - 1)) + 1;
+  const nextLineBreak = text.indexOf('\n', caretOffset);
+  const lineEnd = nextLineBreak === -1 ? text.length : nextLineBreak;
+  if (caretOffset !== lineEnd) return false;
+
+  const currentLine = text.slice(lineStart, lineEnd);
+  const currentPrefix = getListPrefix(currentLine, block.data.listStyle);
+  if (!currentPrefix || !currentLine.startsWith(currentPrefix.prefix)) return false;
+
+  event.preventDefault();
+
+  const content = currentLine.slice(currentPrefix.prefix.length);
+  const beforeLine = text.slice(0, lineStart);
+  const afterLine = text.slice(lineEnd);
+
+  if (!content.trim()) {
+    const nextText = `${beforeLine}${afterLine.startsWith('\n') ? afterLine.slice(1) : afterLine}`;
+    el.textContent = nextText;
+    ensureEditableLine(el);
+    const nextCaretOffset = lineStart;
+    setCaretTextOffset(el, nextCaretOffset);
+    updateText(getEditableText(el));
+    return true;
+  }
+
+  const nextPrefix = getNextListPrefix(currentPrefix);
+  const insertion = `\n${nextPrefix}`;
+  const nextText = `${text.slice(0, caretOffset)}${insertion}${text.slice(caretOffset)}`;
+  el.textContent = nextText;
+  setCaretTextOffset(el, caretOffset + insertion.length);
+  updateText(getEditableText(el));
+  return true;
 };
 
 export const StickyBlock: React.FC<BlockContentProps> = ({ block }) => {
@@ -90,6 +215,12 @@ export const StickyBlock: React.FC<BlockContentProps> = ({ block }) => {
     window.getSelection()?.removeAllRanges();
   };
 
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLParagraphElement>) => {
+    handleListEnter(e, block, (text) => {
+      updateBlock(block.id, { data: { ...block.data, text } }, true);
+    });
+  };
+
   const hue = block.data.hue !== undefined ? block.data.hue : (block.data.color === 'yellow' ? 55 : 55);
   const bgColor = `hsl(${hue}, 90%, 85%)`;
 
@@ -102,8 +233,10 @@ export const StickyBlock: React.FC<BlockContentProps> = ({ block }) => {
         ref={setRef}
         className="text-zinc-800 font-medium text-lg leading-relaxed outline-none whitespace-pre-wrap break-words"
         contentEditable
+        data-viboard-block-id={block.id}
         suppressContentEditableWarning
         onFocus={handleFocus}
+        onKeyDown={handleKeyDown}
         onInput={handleInput}
         onBlur={handleBlur}
         style={{
@@ -210,6 +343,14 @@ export const TextBlock: React.FC<BlockContentProps> = ({ block }) => {
     window.getSelection()?.removeAllRanges();
   };
 
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLParagraphElement>) => {
+    if (handleListEnter(e, block, (text) => {
+      updateBlock(block.id, { data: { ...block.data, text } }, true);
+    })) {
+      syncShellHeight();
+    }
+  };
+
   return (
     <div
       ref={wrapRef}
@@ -219,8 +360,10 @@ export const TextBlock: React.FC<BlockContentProps> = ({ block }) => {
         ref={setRef}
         className="font-sans outline-none whitespace-pre-wrap break-words"
         contentEditable
+        data-viboard-block-id={block.id}
         suppressContentEditableWarning
         onFocus={handleFocus}
+        onKeyDown={handleKeyDown}
         onInput={handleInput}
         onBlur={handleBlur}
         style={{
@@ -296,46 +439,31 @@ export const DrawingBlock: React.FC<BlockContentProps> = ({ block }) => {
 
 export const ImageBlock: React.FC<BlockContentProps> = ({ block }) => {
   const updateBlock = useBoardStore((state) => state.updateBlock);
-  const [aspectRatio, setAspectRatio] = useState<{ width: number; height: number } | null>(null);
 
-  const calculateAspectRatio = useCallback((naturalWidth: number, naturalHeight: number) => {
-    const originalAspect = naturalWidth / naturalHeight;
-    const ratios = [
-      { name: '2:1', value: 2 },
-      { name: '1:1', value: 1 },
-      { name: '1:2', value: 0.5 }
-    ];
-
-    const closest = ratios.reduce((prev, curr) => 
-      Math.abs(curr.value - originalAspect) < Math.abs(prev.value - originalAspect) ? curr : prev
-    );
-
+  const calculateNativeRatioDimensions = useCallback((naturalWidth: number, naturalHeight: number) => {
+    const aspectRatio = naturalWidth / naturalHeight;
     const baseSize = 240;
-    if (closest.name === '2:1') {
-      return { width: baseSize * 2, height: baseSize };
-    } else if (closest.name === '1:2') {
-      return { width: baseSize, height: baseSize * 2 };
+    const maxSize = 480;
+
+    if (aspectRatio >= 1) {
+      const width = Math.min(maxSize, Math.round(baseSize * aspectRatio));
+      return { width, height: Math.round(width / aspectRatio) };
     }
-    return { width: baseSize, height: baseSize };
+
+    const height = Math.min(maxSize, Math.round(baseSize / aspectRatio));
+    return { width: Math.round(height * aspectRatio), height };
   }, []);
 
   const handleImageLoad = useCallback((e: React.SyntheticEvent<HTMLImageElement>) => {
     const img = e.currentTarget;
     if (!img.naturalWidth || !img.naturalHeight) return;
     
-    const newDims = calculateAspectRatio(img.naturalWidth, img.naturalHeight);
-    setAspectRatio(newDims);
+    const newDims = calculateNativeRatioDimensions(img.naturalWidth, img.naturalHeight);
     
     if (block.width !== newDims.width || block.height !== newDims.height) {
       updateBlock(block.id, { width: newDims.width, height: newDims.height }, true);
     }
-  }, [block.id, block.width, block.height, updateBlock, calculateAspectRatio]);
-
-  useEffect(() => {
-    if (aspectRatio && (block.width !== aspectRatio.width || block.height !== aspectRatio.height)) {
-      updateBlock(block.id, { width: aspectRatio.width, height: aspectRatio.height }, true);
-    }
-  }, [aspectRatio, block.id, block.width, block.height, updateBlock]);
+  }, [block.id, block.width, block.height, updateBlock, calculateNativeRatioDimensions]);
 
   return (
     <div className="w-full h-full flex items-center justify-center overflow-hidden">
@@ -349,7 +477,7 @@ export const ImageBlock: React.FC<BlockContentProps> = ({ block }) => {
           src={block.data.url}
           alt={block.data.alt || "User content"}
           title="User content"
-          className="w-full h-full object-cover"
+          className="w-full h-full object-contain"
           draggable={false}
           onLoad={handleImageLoad}
         />
@@ -367,7 +495,8 @@ export const LinkBlock: React.FC<BlockContentProps> = ({ block }) => {
   let domain = block.data.url;
   try {
     domain = new URL(block.data.url).hostname;
-  } catch (e) {
+  } catch {
+    // Keep the original text when URL parsing fails.
   }
 
   useEffect(() => {
@@ -380,7 +509,7 @@ export const LinkBlock: React.FC<BlockContentProps> = ({ block }) => {
           setPreviewUrl(apiUrl);
           setPreviewState('preview');
         }
-      } catch (err) {
+      } catch {
         if (isMounted) setPreviewState('error');
       }
     };
@@ -611,7 +740,7 @@ export const SubstackBlock: React.FC<BlockContentProps> = ({ block }) => {
         return `${url.origin}${url.pathname}/embed`;
       }
       return `${url.origin}/embed`;
-    } catch (e) {
+    } catch {
       return block.data.url;
     }
   }, [block.data.url]);
@@ -631,7 +760,7 @@ export const SubstackBlock: React.FC<BlockContentProps> = ({ block }) => {
 };
 
 export const MediumBlock: React.FC<BlockContentProps> = ({ block }) => {
-  const [metadata, setMetadata] = useState<any>(null);
+  const [metadata, setMetadata] = useState<LinkMetadata | null>(null);
   const [isLoading, setIsLoading] = useState(!block.data.fetched);
   const updateBlock = useBoardStore((state) => state.updateBlock);
 
@@ -659,14 +788,15 @@ export const MediumBlock: React.FC<BlockContentProps> = ({ block }) => {
           setMetadata(meta);
           updateBlock(block.id, { data: { ...block.data, fetched: true, metadata: meta } }, true);
         }
-      } catch (e) {
+      } catch {
+        // Metadata is optional; render the fallback card on failure.
       } finally {
         if (isMounted) setIsLoading(false);
       }
     };
     fetchMeta();
     return () => { isMounted = false; };
-  }, [block.data.url, block.data.fetched, block.id, updateBlock]);
+  }, [block.data, block.id, updateBlock]);
 
   return (
     <div className="w-full h-full bg-white border border-zinc-200 rounded-[12px] overflow-hidden font-sans flex flex-col shadow-sm">
@@ -731,7 +861,7 @@ export const CodepenBlock: React.FC<BlockContentProps> = ({ block }) => {
 };
 
 export const SmartCardBlock: React.FC<BlockContentProps & { platform: string }> = ({ block, platform }) => {
-  const [metadata, setMetadata] = useState<any>(null);
+  const [metadata, setMetadata] = useState<LinkMetadata | null>(null);
   const [isLoading, setIsLoading] = useState(!block.data.fetched);
   const updateBlock = useBoardStore((state) => state.updateBlock);
 
@@ -758,14 +888,15 @@ export const SmartCardBlock: React.FC<BlockContentProps & { platform: string }> 
           setMetadata(meta);
           updateBlock(block.id, { data: { ...block.data, fetched: true, metadata: meta } }, true);
         }
-      } catch (e) {
+      } catch {
+        // Metadata is optional; render the fallback card on failure.
       } finally {
         if (isMounted) setIsLoading(false);
       }
     };
     fetchMeta();
     return () => { isMounted = false; };
-  }, [block.data.url, block.data.fetched, block.id, updateBlock]);
+  }, [block.data, block.id, updateBlock]);
 
   const isDark = platform === 'github' || platform === 'codepen' || platform === 'reddit';
   
@@ -858,12 +989,6 @@ export const FrameBlock: React.FC<BlockContentProps> = ({ block }) => {
   const titleInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
-    if (!isEditingTitle) {
-      setDraftTitle(block.data.title || 'Frame');
-    }
-  }, [block.data.title, isEditingTitle]);
-
-  useEffect(() => {
     if (isEditingTitle) {
       requestAnimationFrame(() => {
         titleInputRef.current?.focus();
@@ -897,6 +1022,7 @@ export const FrameBlock: React.FC<BlockContentProps> = ({ block }) => {
         className="absolute top-0 left-0 -translate-y-full px-2 py-1 bg-white border border-zinc-200 rounded-t-md text-xs font-medium text-zinc-600 pointer-events-auto"
         onDoubleClick={(e) => {
           e.stopPropagation();
+          setDraftTitle(block.data.title || 'Frame');
           setIsEditingTitle(true);
         }}
         onPointerDown={(e) => e.stopPropagation()}

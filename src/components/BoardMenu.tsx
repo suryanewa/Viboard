@@ -711,6 +711,10 @@ export const BoardMenu: React.FC = () => {
         aria-haspopup="menu"
         aria-expanded={open}
         whileHover="hover"
+        onPointerDown={(event) => {
+          event.preventDefault();
+          event.stopPropagation();
+        }}
         onClick={(event) => {
           event.stopPropagation();
           setOpen((value) => !value);
@@ -738,7 +742,10 @@ export const BoardMenu: React.FC = () => {
             initial="hidden"
             animate="visible"
             exit="exit"
-            onPointerDown={(event) => event.stopPropagation()}
+            onPointerDown={(event) => {
+              event.preventDefault();
+              event.stopPropagation();
+            }}
             style={{ originX: 0, originY: 0 }}
           >
             <div className="flex flex-col" style={{ width: 'calc(var(--toolbar-width) - 12px)', minWidth: '160px' }}>

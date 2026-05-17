@@ -150,8 +150,8 @@ function Board() {
         const reader = new FileReader();
         reader.onload = (event) => {
           const url = event.target?.result as string;
-          if ((window as any).__handleAddBlock) {
-            (window as any).__handleAddBlock('image', { url });
+          if (window.__handleAddBlock) {
+            window.__handleAddBlock('image', { url });
           }
         };
         reader.readAsDataURL(file);

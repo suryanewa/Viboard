@@ -203,7 +203,7 @@ const nextHistoryAnimationKey = () => {
 export const useBoardStore = create<BoardState>((set, get) => ({
   blocks: createMockBlocks(),
   selection: [],
-  viewport: { x: 300, y: 200, zoom: 0.5 },
+  viewport: { x: 300, y: 200, zoom: 1 },
   snapping: false,
   lastSnapTime: 0,
   gridView: 'none' as 'box' | 'dot' | 'none',

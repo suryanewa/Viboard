@@ -125,8 +125,9 @@ export default function Dashboard({ session }: { session: Session }) {
   };
 
   useEffect(() => {
-    // eslint-disable-next-line react-hooks/set-state-in-effect
     void fetchMoodboards();
+    // fetchMoodboards intentionally runs once on mount to hydrate local and remote boards.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   useEffect(() => {

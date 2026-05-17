@@ -23,6 +23,15 @@ export const SearchOverlay: React.FC = () => {
   const [selectedIndex, setSelectedIndex] = useState(0);
   const [isSearching, setIsSearching] = useState(false);
 
+  const updateQuery = (nextQuery: string) => {
+    setQuery(nextQuery);
+    if (!nextQuery.trim()) {
+      setResults([]);
+      setSelectedIndex(0);
+      setIsSearching(false);
+    }
+  };
+
   useEffect(() => {
     if (isSearchOpen) {
       const timer = setTimeout(() => inputRef.current?.focus(), 400);
@@ -46,7 +55,6 @@ export const SearchOverlay: React.FC = () => {
 
   useEffect(() => {
     if (!query.trim()) {
-      setResults([]);
       return;
     }
 
@@ -150,7 +158,7 @@ export const SearchOverlay: React.FC = () => {
                     ref={inputRef}
                     type="text"
                     value={query}
-                    onChange={(e) => setQuery(e.target.value)}
+                    onChange={(e) => updateQuery(e.target.value)}
                     onKeyDown={handleKeyDown}
                     placeholder="Search for objects and commands..."
                     className="flex-1 bg-transparent border-none outline-none text-xl text-zinc-900 placeholder-zinc-400 font-medium"
@@ -158,7 +166,7 @@ export const SearchOverlay: React.FC = () => {
                   {query && (
                     <button
                       type="button"
-                      onClick={() => setQuery('')}
+                      onClick={() => updateQuery('')}
                       className="p-1 rounded-lg hover:bg-zinc-100 transition-colors"
                     >
                       <X className="w-4 h-4 text-zinc-400" />

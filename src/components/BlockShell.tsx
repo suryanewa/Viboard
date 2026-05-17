@@ -6,6 +6,8 @@ import clsx from 'clsx';
 
 import { createPortal } from 'react-dom';
 
+type BlockPositionUpdate = { id: string, updates: Pick<Block, 'x' | 'y'> };
+
 interface BlockShellProps {
   block: Block;
   children: React.ReactNode;
@@ -30,7 +32,7 @@ const getSplitPathsForPoint = (w: number, h: number, p: { x: number, y: number, 
                  2 * w + h + (h - y);
 
   const getPt = (t: number) => {
-    let pt = ((t % perim) + perim) % perim;
+    const pt = ((t % perim) + perim) % perim;
     if (pt <= w + 0.01) return [pt, 0];
     if (pt <= w + h + 0.01) return [w, pt - w];
     if (pt <= 2 * w + h + 0.01) return [w - (pt - (w + h)), h];
@@ -40,20 +42,20 @@ const getSplitPathsForPoint = (w: number, h: number, p: { x: number, y: number, 
   const baseCorners = [0, w, w + h, 2 * w + h];
   const allCorners: number[] = [];
   for (let i = -2; i <= 2; i++) {
-    for (let bc of baseCorners) {
+    for (const bc of baseCorners) {
       allCorners.push(i * perim + bc);
     }
   }
   
-  let cwPts = [getPt(tStart)];
-  for (let c of allCorners) {
+  const cwPts = [getPt(tStart)];
+  for (const c of allCorners) {
     if (c > tStart && c < tStart + w + h) cwPts.push(getPt(c));
   }
   cwPts.push(getPt(tStart + w + h));
   
-  let ccwPts = [getPt(tStart)];
+  const ccwPts = [getPt(tStart)];
   for (let i = allCorners.length - 1; i >= 0; i--) {
-    let c = allCorners[i];
+    const c = allCorners[i];
     if (c < tStart && c > tStart - (w + h)) ccwPts.push(getPt(c));
   }
   ccwPts.push(getPt(tStart - (w + h)));
@@ -437,8 +439,8 @@ export const BlockShell: React.FC<BlockShellProps> = ({ block, children }) => {
       hasPushedHistory.current = true;
     }
 
-    let rawX = dragStartPos.current.x + deltaX;
-    let rawY = dragStartPos.current.y + deltaY;
+    const rawX = dragStartPos.current.x + deltaX;
+    const rawY = dragStartPos.current.y + deltaY;
 
     let snapX = rawX;
     let snapY = rawY;
@@ -614,7 +616,7 @@ export const BlockShell: React.FC<BlockShellProps> = ({ block, children }) => {
         const startPos = dragStartGroupPos.current[index];
         if (!startPos) return null;
         return { id, updates: { x: startPos.x + snapOffsetX, y: startPos.y + snapOffsetY } };
-      }).filter(Boolean) as { id: string, updates: any }[];
+      }).filter((update): update is BlockPositionUpdate => update !== null);
       
       updateBlocks(updates, true);
     } else if (draggedIds.length > 1 && draggedIds.includes(block.id)) {
@@ -622,7 +624,7 @@ export const BlockShell: React.FC<BlockShellProps> = ({ block, children }) => {
         const startPos = dragStartGroupPos.current.find(s => s.id === id);
         if (!startPos) return null;
         return { id, updates: { x: startPos.x + snapOffsetX, y: startPos.y + snapOffsetY } };
-      }).filter(Boolean) as { id: string, updates: any }[];
+      }).filter((update): update is BlockPositionUpdate => update !== null);
       
       updateBlocks(updates, true);
       x.set(snapX);
@@ -809,19 +811,16 @@ export const BlockShell: React.FC<BlockShellProps> = ({ block, children }) => {
     scaleX = Math.max(minScaleX, scaleX);
     scaleY = Math.max(minScaleY, scaleY);
 
-    let draggedUpdate: any = null;
     const updates = selectedBlocks.map(b => {
       const bx = originX + (b.x - originX) * scaleX;
       const by = originY + (b.y - originY) * scaleY;
       const bw = Math.max(10, b.width * scaleX);
       const bh = Math.max(10, b.height * scaleY);
-      
-      if (b.id === block.id) {
-        draggedUpdate = { x: bx, y: by, width: bw, height: bh };
-      }
+
       return { id: b.id, updates: { x: bx, y: by, width: bw, height: bh } };
     });
 
+    const draggedUpdate = updates.find((update) => update.id === block.id)?.updates;
     if (draggedUpdate) {
       x.set(draggedUpdate.x);
       y.set(draggedUpdate.y);

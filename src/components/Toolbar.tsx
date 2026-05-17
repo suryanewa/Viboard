@@ -2,9 +2,9 @@ import React, { useState, useEffect } from 'react';
 import { useBoardStore } from '../store';
 import { Type, Magnet, Pencil, Circle, MousePointer, Hand, ZoomIn, ZoomOut, Search, Send, Eye, Edit3, Frame, Upload } from 'lucide-react';
 import { v4 as uuidv4 } from 'uuid';
-import { motion, AnimatePresence } from 'framer-motion';
+import { motion, AnimatePresence, type TargetAndTransition } from 'framer-motion';
 import clsx from 'clsx';
-import type { Block, BlockType } from '../types';
+import type { Block, BlockData, BlockType } from '../types';
 import { Tooltip } from './Tooltip';
 import { SearchOverlay } from './SearchOverlay';
 import { BoardMenu } from './BoardMenu';
@@ -26,7 +26,7 @@ type ToolbarToolEntry = {
   shortcut: string;
   color: ToolbarToolColor;
   hasSecondary: boolean;
-  hoverAnim: any;
+  hoverAnim: TargetAndTransition;
 };
 
 export const Toolbar: React.FC = () => {
@@ -90,14 +90,14 @@ export const Toolbar: React.FC = () => {
   };
 
   const TOOLS = React.useMemo((): ToolbarToolEntry[] => [
-    { id: 'select', icon: MousePointer, shortcut: 'V', color: 'blue', hasSecondary: false, hoverAnim: { scale: 1.1, rotate: -15, x: -1, y: -1 } as any },
-    { id: 'pan', icon: Hand, shortcut: 'P', color: 'blue', hasSecondary: false, hoverAnim: { scale: 1.1, rotate: [0, -15, 15, -10, 0] } as any },
-    { id: 'frame', icon: Frame, shortcut: 'F', color: 'blue', hasSecondary: false, hoverAnim: { scale: 1.1 } as any },
-    { id: 'sticky', icon: ({ isSelected }: { isSelected?: boolean }) => <div className={clsx("w-4 h-4 border-2 transition-colors", isSelected ? 'border-[#6c5cff]' : 'border-currentColor')} />, shortcut: 'S', color: 'brand', hasSecondary: true, hoverAnim: { scale: 1.15, rotate: 10, y: -1 } as any },
-    { id: 'text', icon: Type, shortcut: 'T', color: 'brand', hasSecondary: true, hoverAnim: { scale: 1.1, y: -2 } as any },
-    { id: 'marker', icon: Pencil, shortcut: 'M', color: 'brand', hasSecondary: true, hoverAnim: { scale: 1.1, rotate: -20, x: 2, y: -2 } as any },
-    { id: 'shape', icon: Circle, shortcut: 'K', color: 'brand', hasSecondary: true, hoverAnim: { scale: 1.15 } as any },
-    { id: 'link', icon: Upload, shortcut: 'L', color: 'brand', hasSecondary: false, hoverAnim: { scale: 1.1 } as any },
+    { id: 'select', icon: MousePointer, shortcut: 'V', color: 'blue', hasSecondary: false, hoverAnim: { scale: 1.1, rotate: -15, x: -1, y: -1 } },
+    { id: 'pan', icon: Hand, shortcut: 'P', color: 'blue', hasSecondary: false, hoverAnim: { scale: 1.1, rotate: [0, -15, 15, -10, 0] } },
+    { id: 'frame', icon: Frame, shortcut: 'F', color: 'blue', hasSecondary: false, hoverAnim: { scale: 1.1 } },
+    { id: 'sticky', icon: ({ isSelected }: { isSelected?: boolean }) => <div className={clsx("w-4 h-4 border-2 transition-colors", isSelected ? 'border-[#6c5cff]' : 'border-currentColor')} />, shortcut: 'S', color: 'brand', hasSecondary: true, hoverAnim: { scale: 1.15, rotate: 10, y: -1 } },
+    { id: 'text', icon: Type, shortcut: 'T', color: 'brand', hasSecondary: true, hoverAnim: { scale: 1.1, y: -2 } },
+    { id: 'marker', icon: Pencil, shortcut: 'M', color: 'brand', hasSecondary: true, hoverAnim: { scale: 1.1, rotate: -20, x: 2, y: -2 } },
+    { id: 'shape', icon: Circle, shortcut: 'K', color: 'brand', hasSecondary: true, hoverAnim: { scale: 1.15 } },
+    { id: 'link', icon: Upload, shortcut: 'L', color: 'brand', hasSecondary: false, hoverAnim: { scale: 1.1 } },
   ], []);
 
   const handleToolSelect = React.useCallback((nextTool: ToolbarVisualTool) => {
@@ -137,9 +137,6 @@ export const Toolbar: React.FC = () => {
       animationTimeoutRef.current = null;
     }, 450);
   }, [activeToolbarTool, setAnimationState, setTool, TOOLS]);
-
-  const activeToolbarToolRef = React.useRef(activeToolbarTool);
-  activeToolbarToolRef.current = activeToolbarTool;
 
   useEffect(() => {
     setActiveToolbarTool(tool);
@@ -210,7 +207,7 @@ export const Toolbar: React.FC = () => {
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [snapping, gridView, viewport, handleToolSelect, setSnapping, setGridView, setViewport]);
 
-  const handleAddBlock = React.useCallback((type: BlockType, dataOverride: any = {}) => {
+  const handleAddBlock = React.useCallback((type: BlockType, dataOverride: BlockData = {}) => {
     setTool('select');
     const centerX = -viewport.x / viewport.zoom + window.innerWidth / 2 / viewport.zoom;
     const centerY = -viewport.y / viewport.zoom + window.innerHeight / 2 / viewport.zoom;
@@ -222,7 +219,7 @@ export const Toolbar: React.FC = () => {
     const highestZ = Math.max(0, ...Object.values(blocks).map((b) => b.zIndex));
 
     const id = uuidv4();
-    let newBlock: Block = {
+    const newBlock: Block = {
       id,
       type,
       x: snappedX,
@@ -281,9 +278,9 @@ export const Toolbar: React.FC = () => {
   }, [canvasTitle]);
 
   useEffect(() => {
-    (window as any).__handleAddBlock = handleAddBlock;
+    window.__handleAddBlock = handleAddBlock;
     return () => {
-      delete (window as any).__handleAddBlock;
+      delete window.__handleAddBlock;
     };
   }, [handleAddBlock]);
 
@@ -880,7 +877,7 @@ export const Toolbar: React.FC = () => {
         {mode === 'edit' && (
           <motion.div 
             ref={topLeftToolbarRef}
-            style={{ '--toolbar-width': `${topLeftWidth}px` } as any}
+            style={{ '--toolbar-width': `${topLeftWidth}px` } as React.CSSProperties & { '--toolbar-width': string }}
             className="fixed top-8 left-8 flex items-center gap-1 px-2 py-1.5 bg-white/90 backdrop-blur-md shadow-none border border-zinc-200 pointer-events-auto rounded-xl"
             onPointerLeave={() => setHoveredTopLeft(null)}
             initial="hidden"

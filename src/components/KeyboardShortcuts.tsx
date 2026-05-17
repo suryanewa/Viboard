@@ -100,8 +100,10 @@ export const KeyboardShortcuts: React.FC = () => {
       }
 
       if (isCmd && key === 'v') {
-        e.preventDefault();
-        paste();
+        if (state.clipboard.length > 0) {
+          e.preventDefault();
+          paste();
+        }
         return;
       }
 
