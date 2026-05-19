@@ -38,6 +38,7 @@ export const Canvas: React.FC<{ children: React.ReactNode }> = ({ children }) =>
   const isDraggingDrawing = useRef(false);
   const isErasing = useRef(false);
   const hasPushedEraserHistory = useRef(false);
+  const liveCommittedDrawingIds = useRef(new Set<string>());
 
   const markerType = useBoardStore((state) => state.markerType);
   const markerColor = useBoardStore((state) => state.markerColor);
@@ -767,8 +768,11 @@ export const Canvas: React.FC<{ children: React.ReactNode }> = ({ children }) =>
     }
     if (isDrawing.current && currentPath) {
       isDrawing.current = false;
+      liveCommittedDrawingIds.current.add(currentPath.id);
       addDrawing(currentPath);
-      setCurrentPath(null);
+      requestAnimationFrame(() => {
+        setCurrentPath(null);
+      });
     }
     if (isCreatingFrame.current && activeFrame) {
       isCreatingFrame.current = false;
@@ -947,14 +951,14 @@ export const Canvas: React.FC<{ children: React.ReactNode }> = ({ children }) =>
               {drawings.map((path) => (
                 <motion.path
                   key={path.id}
-                  initial={historyAnimationKey > 0 ? { opacity: 0 } : false}
+                  initial={historyAnimationKey > 0 && !liveCommittedDrawingIds.current.has(path.id) ? { opacity: 0 } : false}
                   animate={{
                     opacity: path.toolType === 'highlighter' ? 0.4 : 1,
                     d: `M ${path.points[0].x} ${path.points[0].y} ` +
                       path.points.slice(1).map(p => `L ${p.x} ${p.y}`).join(' '),
                   }}
                   exit={{ opacity: 0 }}
-                  transition={{ duration: historyAnimationKey > 0 ? 0.16 : 0, ease: 'easeOut' }}
+                  transition={{ duration: historyAnimationKey > 0 && !liveCommittedDrawingIds.current.has(path.id) ? 0.16 : 0, ease: 'easeOut' }}
                   fill="none"
                   stroke={drawingSelection.includes(path.id) ? '#6c5cff' : path.color}
                   strokeWidth={path.strokeWidth}

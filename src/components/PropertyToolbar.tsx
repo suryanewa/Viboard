@@ -117,6 +117,7 @@ export const PropertyToolbar: React.FC = () => {
       setMarkerColor(`hsl(${newHue}, 90%, 65%)`);
     } else if (propertyTool === 'shape') {
       setShapeHue(newHue);
+      setMarkerColor(`hsl(${newHue}, 90%, 65%)`);
       if (hasSelectedShapes) {
         selection.forEach(id => {
           updateBlock(id, { data: { ...blocks[id].data, hue: newHue, color: `hsl(${newHue}, 90%, 65%)` } });
@@ -125,6 +126,7 @@ export const PropertyToolbar: React.FC = () => {
     } else if (propertyTool === 'text') {
       setTextHue(newHue);
       const color = `hsl(${newHue}, 75%, 28%)`;
+      setMarkerColor(`hsl(${newHue}, 90%, 65%)`);
       if (hasSelectedTexts) {
         selection.forEach(id => {
           updateBlock(id, { data: { ...blocks[id].data, hue: newHue, color } });
