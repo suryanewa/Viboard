@@ -68,6 +68,11 @@ export const PropertyToolbar: React.FC = () => {
   const [hoveredProperty, setHoveredProperty] = useState<string | null>(null);
   const [linkUrl, setLinkUrl] = useState('');
   const selectionKey = selection.join(',');
+  const syncDrawingTextShapeHues = (hue: number) => {
+    setMarkerColor(`hsl(${hue}, 90%, 65%)`);
+    setShapeHue(hue);
+    setTextHue(hue);
+  };
 
   useEffect(() => {
     const timeoutId = window.setTimeout(() => {
@@ -101,11 +106,16 @@ export const PropertyToolbar: React.FC = () => {
         const allShape = selected.length > 0 && selected.every((b) => b.type === 'shape');
         const h = allShape ? selected[0]?.data?.hue : st.shapeHue;
         if (h !== undefined) setCurrentHue(h);
+        return;
+      }
+
+      if (propertyTool === 'marker') {
+        setCurrentHue(parseInt(st.markerColor.match(/\d+/)?.[0] || '45', 10));
       }
     }, 0);
 
     return () => window.clearTimeout(timeoutId);
-  }, [propertyTool, selectionKey, textFontSizeDefault, textDefaultHue, stickyHue, shapeHue]);
+  }, [propertyTool, selectionKey, textFontSizeDefault, textDefaultHue, stickyHue, shapeHue, markerColor]);
 
   const handleHueChangeSlider = (newHue: number) => {
     setCurrentHue(newHue);
@@ -114,19 +124,17 @@ export const PropertyToolbar: React.FC = () => {
         updateBlock(id, { data: { ...blocks[id].data, hue: newHue } });
       });
     } else if (propertyTool === 'marker') {
-      setMarkerColor(`hsl(${newHue}, 90%, 65%)`);
+      syncDrawingTextShapeHues(newHue);
     } else if (propertyTool === 'shape') {
-      setShapeHue(newHue);
-      setMarkerColor(`hsl(${newHue}, 90%, 65%)`);
+      syncDrawingTextShapeHues(newHue);
       if (hasSelectedShapes) {
         selection.forEach(id => {
           updateBlock(id, { data: { ...blocks[id].data, hue: newHue, color: `hsl(${newHue}, 90%, 65%)` } });
         });
       }
     } else if (propertyTool === 'text') {
-      setTextHue(newHue);
+      syncDrawingTextShapeHues(newHue);
       const color = `hsl(${newHue}, 75%, 28%)`;
-      setMarkerColor(`hsl(${newHue}, 90%, 65%)`);
       if (hasSelectedTexts) {
         selection.forEach(id => {
           updateBlock(id, { data: { ...blocks[id].data, hue: newHue, color } });
