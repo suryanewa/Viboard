@@ -413,6 +413,8 @@ export const StickyBlock: React.FC<BlockContentProps> = ({ block }) => {
   };
 
   const handlePointerDownCapture = (e: React.PointerEvent<HTMLParagraphElement>) => {
+    if (isEditing) return;
+
     const previous = lastPointerDown.current;
     const current = { time: e.timeStamp, x: e.clientX, y: e.clientY };
     lastPointerDown.current = current;
@@ -429,6 +431,7 @@ export const StickyBlock: React.FC<BlockContentProps> = ({ block }) => {
 
   const handleDoubleClick = (e: React.MouseEvent<HTMLParagraphElement>) => {
     e.stopPropagation();
+    if (isEditing) return;
     beginEditing();
   };
 
@@ -592,6 +595,8 @@ export const TextBlock: React.FC<BlockContentProps> = ({ block }) => {
   };
 
   const handlePointerDownCapture = (e: React.PointerEvent<HTMLParagraphElement>) => {
+    if (isEditing) return;
+
     const previous = lastPointerDown.current;
     const current = { time: e.timeStamp, x: e.clientX, y: e.clientY };
     lastPointerDown.current = current;
@@ -608,6 +613,7 @@ export const TextBlock: React.FC<BlockContentProps> = ({ block }) => {
 
   const handleDoubleClick = (e: React.MouseEvent<HTMLParagraphElement>) => {
     e.stopPropagation();
+    if (isEditing) return;
     beginEditing();
   };
 

@@ -23,8 +23,8 @@ import { UploadCloud } from 'lucide-react';
 import type { Block, Viewport } from '../types';
 
 const boardSignature = () => {
-  const { blocks, drawings, canvasTitle, history } = useBoardStore.getState();
-  return JSON.stringify({ blocks, drawings, canvasTitle, history });
+  const { blocks, drawings, canvasTitle } = useBoardStore.getState();
+  return JSON.stringify({ blocks, drawings, canvasTitle });
 };
 
 const LOCAL_DEFAULT_BOARD_ID = 'local-default-board';
@@ -61,7 +61,6 @@ function Board() {
   const blocks = useBoardStore((state) => state.blocks);
   const drawings = useBoardStore((state) => state.drawings);
   const canvasTitle = useBoardStore((state) => state.canvasTitle);
-  const history = useBoardStore((state) => state.history);
   const selection = useBoardStore((state) => state.selection);
   const mode = useBoardStore((state) => state.mode);
   const [isDraggingOver, setIsDraggingOver] = useState(false);
@@ -201,7 +200,7 @@ function Board() {
             console.error('Error autosaving moodboard:', error);
           });
       });
-  }, [blocks, drawings, canvasTitle, history, params.id]);
+  }, [blocks, drawings, canvasTitle, params.id]);
 
   useEffect(() => {
     const handleBeforeUnload = (event: BeforeUnloadEvent) => {

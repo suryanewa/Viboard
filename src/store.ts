@@ -195,22 +195,53 @@ interface BoardState {
 export const MAX_HISTORY = 25;
 let historyAnimationSequence = 0;
 
+const cloneBlockForHistory = (block: Block): Block => {
+  const data = { ...block.data };
+  delete data.autoFocus;
+  return { ...block, data };
+};
+
 const cloneHistoryEntry = (entry: HistoryEntry): HistoryEntry => ({
   blocks: Object.fromEntries(
-    Object.entries(structuredClone(entry.blocks)).map(([id, block]) => {
-      if (!block.data?.autoFocus) return [id, block];
-      const data = { ...block.data };
-      delete data.autoFocus;
-      return [id, { ...block, data }];
-    })
+    Object.entries(entry.blocks).map(([id, block]) => [id, cloneBlockForHistory(block)])
   ),
-  drawings: structuredClone(entry.drawings),
+  drawings: entry.drawings.map((drawing) => ({
+    ...drawing,
+    points: drawing.points.map((point) => ({ ...point })),
+  })),
 });
 
 const currentHistoryEntry = (state: Pick<BoardState, 'blocks' | 'drawings'>): HistoryEntry =>
   cloneHistoryEntry({ blocks: state.blocks, drawings: state.drawings });
 
-const recordsEqual = (first: unknown, second: unknown) => JSON.stringify(first) === JSON.stringify(second);
+const recordsEqual = (first: unknown, second: unknown) => {
+  if (first === second) return true;
+  if (!first || !second || typeof first !== 'object' || typeof second !== 'object') return false;
+
+  const firstRecord = first as Record<string, unknown>;
+  const secondRecord = second as Record<string, unknown>;
+  const firstKeys = Object.keys(firstRecord);
+  const secondKeys = Object.keys(secondRecord);
+  if (firstKeys.length !== secondKeys.length) return false;
+
+  return firstKeys.every((key) => firstRecord[key] === secondRecord[key]);
+};
+
+const blocksEqual = (first: Block, second: Block) => {
+  if (
+    first.id !== second.id ||
+    first.type !== second.type ||
+    first.x !== second.x ||
+    first.y !== second.y ||
+    first.width !== second.width ||
+    first.height !== second.height ||
+    first.zIndex !== second.zIndex
+  ) {
+    return false;
+  }
+
+  return recordsEqual(first.data, second.data);
+};
 
 const snapLinesEqual = (
   first: { x?: number, y?: number }[],
@@ -280,7 +311,7 @@ export const useBoardStore = create<BoardState>((set, get) => ({
   commitBlockEdit: (beforeBlock) => {
     const { blocks, drawings, history } = get();
     const currentBlock = blocks[beforeBlock.id];
-    if (!currentBlock || recordsEqual(currentBlock, beforeBlock)) return;
+    if (!currentBlock || blocksEqual(currentBlock, beforeBlock)) return;
     set({
       history: pushHistoryEntry(history, {
         blocks: { ...blocks, [beforeBlock.id]: beforeBlock },
@@ -309,7 +340,7 @@ export const useBoardStore = create<BoardState>((set, get) => ({
     if (!block) return;
     
     const updatedBlock = { ...block, ...updates };
-    if (recordsEqual(block, updatedBlock)) return;
+    if (blocksEqual(block, updatedBlock)) return;
     if (
       (updates.data?.text !== undefined || updates.data?.url !== undefined ||
        updates.data?.title !== undefined || updates.data?.description !== undefined) &&
@@ -335,7 +366,7 @@ export const useBoardStore = create<BoardState>((set, get) => ({
     updates.forEach(({ id, updates }) => {
       if (newBlocks[id]) {
         const updatedBlock = { ...newBlocks[id], ...updates };
-        if (!recordsEqual(newBlocks[id], updatedBlock)) {
+        if (!blocksEqual(newBlocks[id], updatedBlock)) {
           newBlocks[id] = updatedBlock;
           hasChanges = true;
         }
