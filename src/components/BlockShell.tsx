@@ -154,6 +154,8 @@ const UNIFORM_SCALE_TYPES = new Set<Block['type']>([
   'pdf',
 ]);
 
+const TEXT_EDIT_REQUEST_EVENT = 'viboard:request-text-edit';
+
 const withoutImageAutoSizeOnLoad = (block: Block): Block['data'] | undefined => {
   if (block.type !== 'image' || block.data.autoSizeOnLoad !== true) return undefined;
   const data = { ...block.data };
@@ -474,6 +476,12 @@ const BlockShellComponent: React.FC<BlockShellProps> = ({ block, children }) => 
     } else {
       altDupeIds.current = [];
     }
+  };
+
+  const handleDoubleClick = (e: React.MouseEvent) => {
+    if (block.type !== 'text' && block.type !== 'sticky') return;
+    e.stopPropagation();
+    window.dispatchEvent(new CustomEvent(TEXT_EDIT_REQUEST_EVENT, { detail: { blockId: block.id } }));
   };
 
   const handlePointerMove = (e: React.PointerEvent) => {
@@ -873,6 +881,7 @@ const BlockShellComponent: React.FC<BlockShellProps> = ({ block, children }) => 
       ref={shellRef}
       data-block-id={block.id}
       data-block-type={block.type}
+      onDoubleClick={handleDoubleClick}
       onPointerDown={handlePointerDown}
       onPointerMove={handlePointerMove}
       onPointerUp={handlePointerUp}

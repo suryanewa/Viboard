@@ -28,6 +28,8 @@ type WikipediaSummaryData = {
   language?: string;
 };
 
+const TEXT_EDIT_REQUEST_EVENT = 'viboard:request-text-edit';
+
 const useScaledEmbedFrame = (block: Block, embedWidth: number, embedHeight: number) => {
   const containerRef = useRef<HTMLDivElement>(null);
   const [containerSize, setContainerSize] = useState({ width: block.width, height: block.height });
@@ -324,7 +326,18 @@ export const StickyBlock: React.FC<BlockContentProps> = ({ block }) => {
   const [isEditing, setIsEditing] = useState(Boolean(block.data.autoFocus));
   const hasFocused = useRef(false);
   const editStartBlock = useRef<Block | null>(null);
+  const lastPointerDown = useRef<{ time: number; x: number; y: number } | null>(null);
   const stickyVerticalPadding = 48;
+
+  const beginEditing = useCallback(() => {
+    setIsEditing(true);
+    const el = textRef.current;
+    if (!el) return;
+    el.contentEditable = 'true';
+    requestAnimationFrame(() => {
+      if (textRef.current) placeCaretAtEnd(textRef.current);
+    });
+  }, []);
 
   const syncStickyHeight = useCallback((growOnly = false) => {
     const el = textRef.current;
@@ -345,7 +358,7 @@ export const StickyBlock: React.FC<BlockContentProps> = ({ block }) => {
     if (el) ensureEditableLine(el);
     if (el && block.data.autoFocus && !hasFocused.current) {
       hasFocused.current = true;
-      setIsEditing(true);
+      beginEditing();
       const data = { ...block.data };
       delete data.autoFocus;
       updateBlock(block.id, { data }, true);
@@ -363,6 +376,18 @@ export const StickyBlock: React.FC<BlockContentProps> = ({ block }) => {
       if (textRef.current) placeCaretAtEnd(textRef.current);
     });
   }, [isEditing]);
+
+  useEffect(() => {
+    const handleEditRequest = (event: Event) => {
+      const detail = (event as CustomEvent<{ blockId?: string }>).detail;
+      if (detail?.blockId === block.id) {
+        beginEditing();
+      }
+    };
+
+    window.addEventListener(TEXT_EDIT_REQUEST_EVENT, handleEditRequest);
+    return () => window.removeEventListener(TEXT_EDIT_REQUEST_EVENT, handleEditRequest);
+  }, [beginEditing, block.id]);
 
   useLayoutEffect(() => {
     const el = textRef.current;
@@ -387,16 +412,24 @@ export const StickyBlock: React.FC<BlockContentProps> = ({ block }) => {
     editStartBlock.current = structuredClone(block);
   };
 
-  const handlePointerDown = (e: React.PointerEvent<HTMLParagraphElement>) => {
-    if (e.detail < 2) return;
+  const handlePointerDownCapture = (e: React.PointerEvent<HTMLParagraphElement>) => {
+    const previous = lastPointerDown.current;
+    const current = { time: e.timeStamp, x: e.clientX, y: e.clientY };
+    lastPointerDown.current = current;
+
+    const isDoubleClick = previous
+      && current.time - previous.time < 500
+      && Math.hypot(current.x - previous.x, current.y - previous.y) < 6;
+
+    if (!isDoubleClick) return;
     e.preventDefault();
     e.stopPropagation();
-    setIsEditing(true);
+    beginEditing();
   };
 
   const handleDoubleClick = (e: React.MouseEvent<HTMLParagraphElement>) => {
     e.stopPropagation();
-    setIsEditing(true);
+    beginEditing();
   };
 
   const handleBlur = () => {
@@ -438,7 +471,7 @@ export const StickyBlock: React.FC<BlockContentProps> = ({ block }) => {
         contentEditable={isEditing}
         data-viboard-block-id={block.id}
         suppressContentEditableWarning
-        onPointerDown={handlePointerDown}
+        onPointerDownCapture={handlePointerDownCapture}
         onDoubleClick={handleDoubleClick}
         onFocus={handleFocus}
         onKeyDown={handleKeyDown}
@@ -464,6 +497,17 @@ export const TextBlock: React.FC<BlockContentProps> = ({ block }) => {
   const [isEditing, setIsEditing] = useState(Boolean(block.data.autoFocus));
   const hasFocused = useRef(false);
   const editStartBlock = useRef<Block | null>(null);
+  const lastPointerDown = useRef<{ time: number; x: number; y: number } | null>(null);
+
+  const beginEditing = useCallback(() => {
+    setIsEditing(true);
+    const el = textRef.current;
+    if (!el) return;
+    el.contentEditable = 'true';
+    requestAnimationFrame(() => {
+      if (textRef.current) placeCaretAtEnd(textRef.current);
+    });
+  }, []);
 
   const fontSize = block.data.fontSize ?? 20;
   const lineHeight = getTextBlockLineHeight(fontSize);
@@ -478,7 +522,7 @@ export const TextBlock: React.FC<BlockContentProps> = ({ block }) => {
     textRef.current = el;
     if (el && block.data.autoFocus && !hasFocused.current) {
       hasFocused.current = true;
-      setIsEditing(true);
+      beginEditing();
       requestAnimationFrame(() => {
         placeCaretAtEnd(el);
         const data = { ...block.data };
@@ -494,6 +538,18 @@ export const TextBlock: React.FC<BlockContentProps> = ({ block }) => {
       if (textRef.current) placeCaretAtEnd(textRef.current);
     });
   }, [isEditing]);
+
+  useEffect(() => {
+    const handleEditRequest = (event: Event) => {
+      const detail = (event as CustomEvent<{ blockId?: string }>).detail;
+      if (detail?.blockId === block.id) {
+        beginEditing();
+      }
+    };
+
+    window.addEventListener(TEXT_EDIT_REQUEST_EVENT, handleEditRequest);
+    return () => window.removeEventListener(TEXT_EDIT_REQUEST_EVENT, handleEditRequest);
+  }, [beginEditing, block.id]);
 
   const syncShellHeight = useCallback(() => {
     const el = textRef.current;
@@ -535,16 +591,24 @@ export const TextBlock: React.FC<BlockContentProps> = ({ block }) => {
     editStartBlock.current = structuredClone(block);
   };
 
-  const handlePointerDown = (e: React.PointerEvent<HTMLParagraphElement>) => {
-    if (e.detail < 2) return;
+  const handlePointerDownCapture = (e: React.PointerEvent<HTMLParagraphElement>) => {
+    const previous = lastPointerDown.current;
+    const current = { time: e.timeStamp, x: e.clientX, y: e.clientY };
+    lastPointerDown.current = current;
+
+    const isDoubleClick = previous
+      && current.time - previous.time < 500
+      && Math.hypot(current.x - previous.x, current.y - previous.y) < 6;
+
+    if (!isDoubleClick) return;
     e.preventDefault();
     e.stopPropagation();
-    setIsEditing(true);
+    beginEditing();
   };
 
   const handleDoubleClick = (e: React.MouseEvent<HTMLParagraphElement>) => {
     e.stopPropagation();
-    setIsEditing(true);
+    beginEditing();
   };
 
   const handleBlur = () => {
@@ -588,7 +652,7 @@ export const TextBlock: React.FC<BlockContentProps> = ({ block }) => {
         contentEditable={isEditing}
         data-viboard-block-id={block.id}
         suppressContentEditableWarning
-        onPointerDown={handlePointerDown}
+        onPointerDownCapture={handlePointerDownCapture}
         onDoubleClick={handleDoubleClick}
         onFocus={handleFocus}
         onKeyDown={handleKeyDown}
