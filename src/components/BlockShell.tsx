@@ -154,11 +154,36 @@ const UNIFORM_SCALE_TYPES = new Set<Block['type']>([
   'pdf',
 ]);
 
+const SNAP_CANDIDATE_MARGIN = 1200;
+
 const withoutImageAutoSizeOnLoad = (block: Block): Block['data'] | undefined => {
   if (block.type !== 'image' || block.data.autoSizeOnLoad !== true) return undefined;
   const data = { ...block.data };
   delete data.autoSizeOnLoad;
   return data;
+};
+
+const getSnapCandidates = (
+  blocks: Record<string, Block>,
+  ignoredIds: Set<string>,
+  bounds: { x: number; y: number; width: number; height: number },
+  zoom: number,
+) => {
+  const margin = SNAP_CANDIDATE_MARGIN / Math.max(zoom, 0.25);
+  const minX = bounds.x - margin;
+  const minY = bounds.y - margin;
+  const maxX = bounds.x + bounds.width + margin;
+  const maxY = bounds.y + bounds.height + margin;
+
+  return Object.values(blocks).filter((candidate) => {
+    if (ignoredIds.has(candidate.id)) return false;
+    return (
+      candidate.x < maxX &&
+      candidate.x + candidate.width > minX &&
+      candidate.y < maxY &&
+      candidate.y + candidate.height > minY
+    );
+  });
 };
 
 interface ResizeHandleProps {
@@ -520,9 +545,10 @@ export const BlockShell: React.FC<BlockShellProps> = ({ block, children }) => {
       const myEdgesY = [rawY, rawY + currentH / 2, rawY + currentH];
       
       const draggedIdsForSnap = altDupeIds.current.length > 0 ? altDupeIds.current : dragStartGroupPos.current.map(s => s.id);
-      const unselectedBlocks = Object.values(blocks).filter(b => !draggedIdsForSnap.includes(b.id) && !selection.includes(b.id));
+      const ignoredSnapIds = new Set([...draggedIdsForSnap, ...selection]);
+      const snapCandidates = getSnapCandidates(blocks, ignoredSnapIds, { x: rawX, y: rawY, width: currentW, height: currentH }, zoom);
 
-      unselectedBlocks.forEach(other => {
+      snapCandidates.forEach(other => {
         const otherEdgesX = [other.x, other.x + other.width / 2, other.x + other.width];
         const otherEdgesY = [other.y, other.y + other.height / 2, other.y + other.height];
         
@@ -546,93 +572,10 @@ export const BlockShell: React.FC<BlockShellProps> = ({ block, children }) => {
           });
         });
       });
-
-      let bestSnapXLines: { x?: number, y?: number }[] = [];
-      let bestSnapYLines: { x?: number, y?: number }[] = [];
-
-      unselectedBlocks.forEach(B => {
-        unselectedBlocks.forEach(C => {
-          if (B.id === C.id) return;
-
-          const overlapY_BC = B.y < C.y + C.height && B.y + B.height > C.y;
-          if (overlapY_BC && C.x >= B.x + B.width) {
-            const overlapY_A = rawY < B.y + B.height && rawY + currentH > B.y;
-            if (overlapY_A) {
-              const gapX = C.x - (B.x + B.width);
-              
-              const targetLeftX = B.x - gapX - currentW;
-              const distLeft = Math.abs(rawX - targetLeftX);
-              if (distLeft < bestDistX) {
-                bestDistX = distLeft;
-                snapX = targetLeftX;
-                bestSnapXLines = [{ x: targetLeftX + currentW }, { x: B.x }, { x: C.x }];
-              }
-              
-              const targetRightX = C.x + C.width + gapX;
-              const distRight = Math.abs(rawX - targetRightX);
-              if (distRight < bestDistX) {
-                bestDistX = distRight;
-                snapX = targetRightX;
-                bestSnapXLines = [{ x: B.x + B.width }, { x: C.x }, { x: C.x + C.width }, { x: targetRightX }];
-              }
-              
-              const spaceForA = C.x - (B.x + B.width);
-              if (spaceForA >= currentW) {
-                const midGap = (spaceForA - currentW) / 2;
-                const targetMidX = B.x + B.width + midGap;
-                const distMid = Math.abs(rawX - targetMidX);
-                if (distMid < bestDistX) {
-                  bestDistX = distMid;
-                  snapX = targetMidX;
-                  bestSnapXLines = [{ x: B.x + B.width }, { x: targetMidX }, { x: targetMidX + currentW }, { x: C.x }];
-                }
-              }
-            }
-          }
-
-          const overlapX_BC = B.x < C.x + C.width && B.x + B.width > C.x;
-          if (overlapX_BC && C.y >= B.y + B.height) {
-            const overlapX_A = rawX < B.x + B.width && rawX + currentW > B.x;
-            if (overlapX_A) {
-              const gapY = C.y - (B.y + B.height);
-              
-              const targetTopY = B.y - gapY - currentH;
-              const distTop = Math.abs(rawY - targetTopY);
-              if (distTop < bestDistY) {
-                bestDistY = distTop;
-                snapY = targetTopY;
-                bestSnapYLines = [{ y: targetTopY + currentH }, { y: B.y }, { y: B.y + B.height }, { y: C.y }];
-              }
-              
-              const targetBotY = C.y + C.height + gapY;
-              const distBot = Math.abs(rawY - targetBotY);
-              if (distBot < bestDistY) {
-                bestDistY = distBot;
-                snapY = targetBotY;
-                bestSnapYLines = [{ y: B.y + B.height }, { y: C.y }, { y: C.y + C.height }, { y: targetBotY }];
-              }
-              
-              const spaceForA = C.y - (B.y + B.height);
-              if (spaceForA >= currentH) {
-                const midGap = (spaceForA - currentH) / 2;
-                const targetMidY = B.y + B.height + midGap;
-                const distMid = Math.abs(rawY - targetMidY);
-                if (distMid < bestDistY) {
-                  bestDistY = distMid;
-                  snapY = targetMidY;
-                  bestSnapYLines = [{ y: B.y + B.height }, { y: targetMidY }, { y: targetMidY + currentH }, { y: C.y }];
-                }
-              }
-            }
-          }
-        });
-      });
-
-      if (bestSnapXLines.length > 0) {
-        activeSnapLines.push(...bestSnapXLines);
-      } else if (bestDistX < SNAP_THRESHOLD) {
+      
+      if (bestDistX < SNAP_THRESHOLD) {
         const snappedEdgesX = [snapX, snapX + currentW / 2, snapX + currentW];
-        unselectedBlocks.forEach(other => {
+        snapCandidates.forEach(other => {
           const otherEdgesX = [other.x, other.x + other.width / 2, other.x + other.width];
           snappedEdgesX.forEach(myEx => {
             otherEdgesX.forEach(otherEx => {
@@ -646,11 +589,9 @@ export const BlockShell: React.FC<BlockShellProps> = ({ block, children }) => {
         });
       }
 
-      if (bestSnapYLines.length > 0) {
-        activeSnapLines.push(...bestSnapYLines);
-      } else if (bestDistY < SNAP_THRESHOLD) {
+      if (bestDistY < SNAP_THRESHOLD) {
         const snappedEdgesY = [snapY, snapY + currentH / 2, snapY + currentH];
-        unselectedBlocks.forEach(other => {
+        snapCandidates.forEach(other => {
           const otherEdgesY = [other.y, other.y + other.height / 2, other.y + other.height];
           snappedEdgesY.forEach(myEy => {
             otherEdgesY.forEach(otherEy => {
