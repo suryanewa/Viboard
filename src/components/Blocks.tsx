@@ -74,7 +74,7 @@ const getSubstackEmbedUrl = (rawUrl?: string) => {
   }
 };
 
-const getRedditEmbedHtml = (rawUrl?: string) => {
+const getRedditPermalink = (rawUrl?: string) => {
   if (!rawUrl) return null;
 
   try {
@@ -83,25 +83,7 @@ const getRedditEmbedHtml = (rawUrl?: string) => {
     if (host !== 'reddit.com' || !url.pathname.includes('/comments/')) return null;
 
     const permalink = new URL(url.pathname, 'https://www.reddit.com');
-    const href = permalink.toString();
-
-    return `<!doctype html>
-<html>
-  <head>
-    <base target="_blank" />
-    <style>
-      html, body { margin: 0; padding: 0; background: white; overflow: hidden; }
-      .reddit-embed-bq { margin: 0 !important; max-width: none !important; width: 100% !important; }
-      iframe { width: 100% !important; max-width: none !important; }
-    </style>
-  </head>
-  <body>
-    <blockquote class="reddit-embed-bq" style="height: 500px">
-      <a href="${href}"></a>
-    </blockquote>
-    <script async src="https://embed.reddit.com/widgets.js" charset="UTF-8"></script>
-  </body>
-</html>`;
+    return permalink.toString();
   } catch {
     return null;
   }
@@ -1034,18 +1016,43 @@ export const CodepenBlock: React.FC<BlockContentProps> = ({ block }) => {
 };
 
 export const RedditBlock: React.FC<BlockContentProps> = ({ block }) => {
-  const embedHtml = React.useMemo(() => getRedditEmbedHtml(block.data.url), [block.data.url]);
+  const embedRef = useRef<HTMLDivElement>(null);
+  const permalink = React.useMemo(() => getRedditPermalink(block.data.url), [block.data.url]);
+
+  useEffect(() => {
+    const container = embedRef.current;
+    if (!container || !permalink) return;
+
+    container.replaceChildren();
+
+    const blockquote = document.createElement('blockquote');
+    blockquote.className = 'reddit-embed-bq';
+    blockquote.style.height = '500px';
+    blockquote.style.margin = '0';
+
+    const link = document.createElement('a');
+    link.href = permalink;
+    link.textContent = permalink;
+    blockquote.appendChild(link);
+    container.appendChild(blockquote);
+
+    const script = document.createElement('script');
+    script.async = true;
+    script.src = 'https://embed.reddit.com/widgets.js';
+    script.charset = 'UTF-8';
+    container.appendChild(script);
+
+    return () => {
+      container.replaceChildren();
+    };
+  }, [permalink]);
 
   return (
     <div className="w-full h-full bg-white rounded-[10px] overflow-hidden shadow-sm pointer-events-auto border border-[#ff4500]/25">
-      {embedHtml ? (
-        <iframe
-          srcDoc={embedHtml}
-          title="Reddit embed"
-          className="w-full h-full"
-          frameBorder="0"
-          scrolling="yes"
-          sandbox="allow-scripts allow-popups allow-popups-to-escape-sandbox"
+      {permalink ? (
+        <div
+          ref={embedRef}
+          className="w-full h-full overflow-y-auto [&_.reddit-embed-bq]:!m-0 [&_.reddit-embed-bq]:!max-w-none [&_.reddit-embed-bq]:!w-full [&_iframe]:!max-w-none [&_iframe]:!w-full"
         />
       ) : (
         <div className="w-full h-full bg-[#fff7f0] p-5 flex flex-col justify-between text-[#24110a]">
@@ -1135,8 +1142,12 @@ export const WikipediaBlock: React.FC<BlockContentProps> = ({ block }) => {
     >
       <div className="absolute inset-y-0 left-0 w-1.5 bg-stone-950" />
       {summary?.image && (
-        <div className="absolute right-0 top-0 h-full w-[40%] border-l border-stone-200 opacity-20 group-hover:opacity-30 transition-opacity">
-          <img src={summary.image} alt="" className="w-full h-full object-cover grayscale" />
+        <div className="absolute right-0 top-0 h-full w-[40%] border-l border-stone-200 opacity-45 group-hover:opacity-85 transition-opacity duration-200">
+          <img
+            src={summary.image}
+            alt=""
+            className="w-full h-full object-cover saturate-[0.55] contrast-90 brightness-110 group-hover:saturate-100 group-hover:contrast-100 group-hover:brightness-100 transition-[filter] duration-200"
+          />
         </div>
       )}
 
