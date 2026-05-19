@@ -12,6 +12,11 @@ export const markBoardUnsaved = () => {
   hasUnsavedLocalChanges = true;
 };
 
+export const markBoardDraftClean = () => {
+  savedBoardId = null;
+  hasUnsavedLocalChanges = false;
+};
+
 export const markBoardImported = () => {
   savedBoardId = null;
   hasUnsavedLocalChanges = true;

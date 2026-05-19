@@ -59,6 +59,7 @@ import {
   flipSelection,
   groupSelection,
   importBoardFile,
+  queueAuthenticatedSave,
   type SavedBoardSummary,
   newBoard,
   rotateSelection,
@@ -71,6 +72,7 @@ import {
   zoomToFit,
 } from '../lib/boardCommands';
 import { shouldPromptToSaveBoard, getSavedBoardId } from '../lib/boardSession';
+import { supabase } from '../lib/supabase';
 
 type MenuItem = {
   id: string;
@@ -360,6 +362,14 @@ export const BoardMenu: React.FC = () => {
     setIsSaving(true);
     setSaveError(null);
     try {
+      const { data: sessionData } = await supabase.auth.getSession();
+      if (!sessionData.session) {
+        queueAuthenticatedSave(saveTitle, getSavedBoardId() === params.id ? params.id : null);
+        setIsSaveDialogOpen(false);
+        navigate('/login');
+        return;
+      }
+
       const savedId = await saveBoardToWeb(saveTitle, getSavedBoardId() === params.id ? params.id : null);
       setIsSaveDialogOpen(false);
       const afterSaveAction = afterSaveActionRef.current;

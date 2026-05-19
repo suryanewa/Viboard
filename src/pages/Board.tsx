@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { useParams } from 'react-router-dom';
 import { Canvas } from '../components/Canvas';
 import { BlockShell } from '../components/BlockShell';
@@ -8,7 +8,7 @@ import { KeyboardShortcuts } from '../components/KeyboardShortcuts';
 import { ContextMenu } from '../components/ContextMenu';
 import { PropertyToolbar } from '../components/PropertyToolbar';
 import { useBoardStore } from '../store';
-import { loadBoardFromWeb, saveBoardToWeb, setCurrentLoadingBoardId } from '../lib/boardCommands';
+import { loadBoardFromWeb, loadDefaultBoard, saveBoardToWeb, setCurrentLoadingBoardId } from '../lib/boardCommands';
 import {
   consumeImportedLocalSnapshotFlag,
   getSavedBoardId,
@@ -26,8 +26,11 @@ const boardSignature = () => {
   return JSON.stringify({ blocks, drawings, canvasTitle });
 };
 
+const LOCAL_DEFAULT_BOARD_ID = 'local-default-board';
+
 function Board() {
   const params = useParams();
+  const activeBoardId = params.id ?? LOCAL_DEFAULT_BOARD_ID;
   const blocks = useBoardStore((state) => state.blocks);
   const drawings = useBoardStore((state) => state.drawings);
   const canvasTitle = useBoardStore((state) => state.canvasTitle);
@@ -36,6 +39,7 @@ function Board() {
   const autosaveReadyRef = useRef(false);
   const lastSavedSignatureRef = useRef('');
   const autosaveTimerRef = useRef<number | null>(null);
+  const importedSnapshotBoardIdRef = useRef<string | null>(null);
 
   useEffect(() => {
     return () => {
@@ -44,28 +48,55 @@ function Board() {
     };
   }, []);
 
-  useEffect(() => {
-    if (!params.id) return;
+  useLayoutEffect(() => {
+    if (!params.id) {
+      setCurrentLoadingBoardId(null);
+      importedSnapshotBoardIdRef.current = null;
+      loadDefaultBoard();
+      lastSavedSignatureRef.current = boardSignature();
+      autosaveReadyRef.current = true;
+      return;
+    }
+
+    const boardId = params.id;
     
-    setCurrentLoadingBoardId(params.id);
+    setCurrentLoadingBoardId(boardId);
     
     if (consumeImportedLocalSnapshotFlag()) {
+      importedSnapshotBoardIdRef.current = boardId;
       autosaveReadyRef.current = true;
       lastSavedSignatureRef.current = boardSignature();
       return;
     }
+
+    importedSnapshotBoardIdRef.current = null;
     autosaveReadyRef.current = false;
-    void loadBoardFromWeb(params.id)
+    useBoardStore.getState().clearBoard();
+  }, [params.id]);
+
+  useEffect(() => {
+    if (!params.id || importedSnapshotBoardIdRef.current === params.id) return;
+    const boardId = params.id;
+
+    let cancelled = false;
+
+    void loadBoardFromWeb(boardId)
       .then(() => {
+        if (cancelled) return;
         lastSavedSignatureRef.current = boardSignature();
         autosaveReadyRef.current = true;
         markBoardClean();
       })
       .catch((error) => {
+        if (cancelled) return;
         autosaveReadyRef.current = true;
         markBoardUnsaved();
         console.error('Error loading moodboard:', error);
       });
+
+    return () => {
+      cancelled = true;
+    };
   }, [params.id]);
 
   useEffect(() => {
@@ -205,7 +236,7 @@ function Board() {
       <KeyboardShortcuts />
       <ContextMenu />
       <Canvas>
-        <AnimatePresence initial={false} key={params.id}>
+        <AnimatePresence initial={false} key={activeBoardId}>
           {Object.values(blocks).map((block) => (
             <BlockShell key={block.id} block={block}>
               <BlockRenderer block={block} />

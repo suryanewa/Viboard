@@ -1,7 +1,7 @@
 import { v4 as uuidv4 } from 'uuid';
 import { useBoardStore } from '../store';
 import { supabase } from './supabase';
-import { getSavedBoardId, markBoardImported, markBoardSaved, markBoardUnsaved } from './boardSession';
+import { getSavedBoardId, markBoardDraftClean, markBoardImported, markBoardSaved, markBoardUnsaved } from './boardSession';
 import type { Block, DrawingPath, Viewport } from '../types';
 
 type BoardSnapshot = {
@@ -33,6 +33,7 @@ type TextCommand =
 
 export const BOARD_FILE_EXTENSION = 'viboard.json';
 const BOARD_CONTENT_COLUMNS = ['snapshot', 'data', 'content'];
+const PENDING_AUTHENTICATED_SAVE_KEY = 'viboard:pending-authenticated-save';
 const DEFAULT_BOARD_VIEWPORT_ZOOM = 1;
 const DEFAULT_LOCKUP_BLOCK: Block = {
   id: 'viboard-lockup',
@@ -302,10 +303,64 @@ export const newBoard = () => {
   markBoardUnsaved();
 };
 
+export const loadDefaultBoard = () => {
+  const snapshot = defaultBoardSnapshot();
+  useBoardStore.setState({
+    blocks: snapshot.blocks,
+    drawings: snapshot.drawings,
+    selection: [],
+    drawingSelection: [],
+    canvasTitle: snapshot.title,
+    viewport: snapshot.viewport,
+    history: { past: [], future: [] },
+  });
+  markBoardDraftClean();
+};
+
 export const saveBoard = () => {
   const snapshot = getSnapshot();
   localStorage.setItem('viboard:autosave', JSON.stringify(snapshot));
   saveRecentSnapshot(snapshot);
+};
+
+type PendingAuthenticatedSave = {
+  boardId: string | null;
+  snapshot: BoardSnapshot;
+};
+
+const readPendingAuthenticatedSave = (): PendingAuthenticatedSave | null => {
+  const raw = localStorage.getItem(PENDING_AUTHENTICATED_SAVE_KEY);
+  if (!raw) return null;
+
+  try {
+    const pending = JSON.parse(raw) as PendingAuthenticatedSave;
+    return pending?.snapshot ? pending : null;
+  } catch {
+    localStorage.removeItem(PENDING_AUTHENTICATED_SAVE_KEY);
+    return null;
+  }
+};
+
+export const hasPendingAuthenticatedSave = () => Boolean(readPendingAuthenticatedSave());
+
+export const queueAuthenticatedSave = (title: string, boardId?: string | null) => {
+  const snapshot = { ...getSnapshot(), title: title.trim() || 'Untitled Board' };
+  localStorage.setItem(PENDING_AUTHENTICATED_SAVE_KEY, JSON.stringify({
+    boardId: boardId || null,
+    snapshot,
+  } satisfies PendingAuthenticatedSave));
+  localStorage.setItem('viboard:autosave', JSON.stringify(snapshot));
+  saveRecentSnapshot(snapshot);
+};
+
+export const savePendingAuthenticatedBoard = async () => {
+  const pending = readPendingAuthenticatedSave();
+  if (!pending) return null;
+
+  loadBoardSnapshot(pending.snapshot);
+  const savedId = await saveBoardToWeb(pending.snapshot.title, pending.boardId);
+  localStorage.removeItem(PENDING_AUTHENTICATED_SAVE_KEY);
+  return savedId;
 };
 
 export const saveBoardToWeb = async (title: string, boardId?: string | null) => {

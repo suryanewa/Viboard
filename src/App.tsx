@@ -1,7 +1,8 @@
-import { useEffect, useState } from 'react';
-import { BrowserRouter, Routes, Route, Navigate, useLocation } from 'react-router-dom';
+import { useEffect, useRef, useState } from 'react';
+import { BrowserRouter, Routes, Route, Navigate, useLocation, useNavigate } from 'react-router-dom';
 import { AnimatePresence } from 'framer-motion';
 import { supabase } from './lib/supabase';
+import { hasPendingAuthenticatedSave, savePendingAuthenticatedBoard } from './lib/boardCommands';
 import Login from './pages/Login';
 import Dashboard from './pages/Dashboard';
 import Board from './pages/Board';
@@ -20,15 +21,38 @@ function AnimatedRoutes({ session }: { session: Session | null }) {
         />
         <Route 
           path="/" 
-          element={session ? <Dashboard session={session} /> : <Navigate to="/login" replace />} 
+          element={session ? <Dashboard session={session} /> : <Board />}
         />
         <Route 
           path="/board/:id" 
-          element={session ? <Board /> : <Navigate to="/login" replace />} 
+          element={session ? <Board /> : <Navigate to="/" replace />}
         />
       </Routes>
     </AnimatePresence>
   );
+}
+
+function PendingAuthenticatedSaveHandler({ session }: { session: Session | null }) {
+  const navigate = useNavigate();
+  const savingRef = useRef(false);
+
+  useEffect(() => {
+    if (!session || savingRef.current || !hasPendingAuthenticatedSave()) return;
+
+    savingRef.current = true;
+    void savePendingAuthenticatedBoard()
+      .then((savedId) => {
+        if (savedId) navigate(`/board/${savedId}`, { replace: true });
+      })
+      .catch((error) => {
+        console.error('Error saving pending board:', error);
+      })
+      .finally(() => {
+        savingRef.current = false;
+      });
+  }, [navigate, session]);
+
+  return null;
 }
 
 function App() {
@@ -75,6 +99,7 @@ function App() {
 
   return (
     <BrowserRouter>
+      <PendingAuthenticatedSaveHandler session={session} />
       <AnimatedRoutes session={session} />
     </BrowserRouter>
   );
