@@ -38,7 +38,6 @@ export const KeyboardShortcuts: React.FC = () => {
         setDrawingSelection,
         updateBlocks,
         copy,
-        paste,
         duplicate,
         undo,
         redo,
@@ -96,14 +95,6 @@ export const KeyboardShortcuts: React.FC = () => {
       if (isCmd && key === 'c') {
         e.preventDefault();
         copy();
-        return;
-      }
-
-      if (isCmd && key === 'v') {
-        if (state.clipboard.length > 0) {
-          e.preventDefault();
-          paste();
-        }
         return;
       }
 

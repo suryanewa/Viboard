@@ -194,21 +194,40 @@ const MenuButton = ({
   index,
   onEnter,
   onClick,
+  onPointerDownAction,
 }: {
   item: MenuItem;
   active?: boolean;
   index: number;
   onEnter?: () => void;
   onClick?: () => void;
+  onPointerDownAction?: () => void;
 }) => {
   const Icon = item.icon;
+  const actionHandledOnPointerDownRef = React.useRef(false);
+
+  const handlePointerDown = (event: React.PointerEvent<HTMLButtonElement>) => {
+    if (!onPointerDownAction || event.button !== 0) return;
+    actionHandledOnPointerDownRef.current = true;
+    onPointerDownAction();
+  };
+
+  const handleClick = () => {
+    if (actionHandledOnPointerDownRef.current) {
+      actionHandledOnPointerDownRef.current = false;
+      return;
+    }
+    onClick?.();
+  };
+
   return (
     <motion.button
       type="button"
       custom={index}
       variants={itemVariants}
       onPointerEnter={onEnter}
-      onClick={onClick}
+      onPointerDown={handlePointerDown}
+      onClick={handleClick}
       whileHover="hover"
       whileTap="tap"
       className={clsx(
@@ -769,6 +788,10 @@ export const BoardMenu: React.FC = () => {
                     setHoveredTop(item.id);
                     setHoveredNested(null);
                   }}
+                  onClick={() => {
+                    setHoveredTop(item.id);
+                    setHoveredNested(null);
+                  }}
                 />
               ))}
             </div>
@@ -791,7 +814,14 @@ export const BoardMenu: React.FC = () => {
                         index={i}
                         active={hoveredNested === item.id}
                         onEnter={() => setHoveredNested(item.children ? item.id : null)}
-                        onClick={() => run(item.action)}
+                        onClick={() => {
+                          if (item.children) {
+                            setHoveredNested(item.id);
+                            return;
+                          }
+                          run(item.action);
+                        }}
+                        onPointerDownAction={item.id === 'saveLocal' ? () => run(item.action) : undefined}
                       />
                     ))}
                   </div>

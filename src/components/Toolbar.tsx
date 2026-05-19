@@ -9,6 +9,7 @@ import { Tooltip } from './Tooltip';
 import { SearchOverlay } from './SearchOverlay';
 import { BoardMenu } from './BoardMenu';
 import { getTextBlockHeight } from '../lib/textBlockMetrics';
+import { createUrlBlock } from '../lib/urlBlocks';
 
 type ToolbarVisualTool = 'select' | 'marker' | 'shape' | 'text' | 'pan' | 'sticky' | 'link' | 'frame';
 
@@ -219,6 +220,22 @@ export const Toolbar: React.FC = () => {
     const highestZ = Math.max(0, ...Object.values(blocks).map((b) => b.zIndex));
 
     const id = uuidv4();
+    if (type === 'link') {
+      const urlBlock = createUrlBlock({
+        id,
+        url: dataOverride.url || '',
+        centerX: snappedX,
+        centerY: snappedY,
+        zIndex: highestZ + 1,
+      });
+
+      if (urlBlock) {
+        addBlock(urlBlock);
+        useBoardStore.getState().setSelection([id]);
+        return;
+      }
+    }
+
     const newBlock: Block = {
       id,
       type,

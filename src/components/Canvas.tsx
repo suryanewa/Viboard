@@ -3,6 +3,7 @@ import { motion, useMotionValue, useTransform, useMotionTemplate, useSpring, Ani
 import { useBoardStore } from '../store';
 import { v4 as uuidv4 } from 'uuid';
 import { getTextBlockHeight } from '../lib/textBlockMetrics';
+import { createUrlBlock } from '../lib/urlBlocks';
 
 export const Canvas: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const containerRef = useRef<HTMLButtonElement>(null);
@@ -208,266 +209,30 @@ export const Canvas: React.FC<{ children: React.ReactNode }> = ({ children }) =>
 
       const text = e.clipboardData?.getData('text/plain');
       if (text) {
-        const urlRegex = /^(https?:\/\/[^\s]+)$/;
         const lines = text.split('\n').filter(line => line.trim() !== '');
         const newSelection: string[] = [];
 
         lines.forEach((line, i) => {
-          const trimmed = line.trim();
-          if (urlRegex.test(trimmed)) {
-            const isSpotify = trimmed.includes('spotify.com');
-            const isSoundCloud = trimmed.includes('soundcloud.com');
-            const isAppleMusic = trimmed.includes('music.apple.com');
-            const isAudioFile = trimmed.match(/\.(mp3|wav|ogg|m4a)$/i);
-            const isVideoFile = trimmed.match(/\.(mp4|webm|ogg|mov)$/i);
-            const isPdfFile = trimmed.match(/\.pdf$/i);
-            const isImageFile = trimmed.match(/\.(jpeg|jpg|gif|png|webp|svg)$/i);
-            const isInstagram = trimmed.includes('instagram.com');
-            const isX = trimmed.includes('x.com') || trimmed.includes('twitter.com');
-            const isSubstack = trimmed.includes('substack.com');
-            const isMedium = trimmed.includes('medium.com');
-            const isFigma = trimmed.includes('figma.com');
-            const isCodepen = trimmed.includes('codepen.io');
-            const isGithub = trimmed.includes('github.com');
-            const isWikipedia = trimmed.includes('wikipedia.org');
-            const isReddit = trimmed.includes('reddit.com');
-            const isArena = trimmed.includes('are.na');
-            const isTiktok = trimmed.includes('tiktok.com');
-            const ytMatch = trimmed.match(/(?:youtube\.com\/(?:[^/]+\/.+\/|(?:v|e(?:mbed)?)\/|.*[?&]v=)|youtu\.be\/)([^"&?/\s]{11})/i);
+          const id = uuidv4();
+          const block = createUrlBlock({
+            id,
+            url: line,
+            centerX: targetX,
+            centerY: targetY,
+            zIndex: highestZ + 1 + i,
+            offsetIndex: i,
+          });
+          if (!block) return;
 
-            if (ytMatch) {
-              const id = uuidv4();
-              addBlock({
-                id,
-                type: 'youtube',
-                x: targetX - 240 + i * 20,
-                y: targetY - 135 + i * 20,
-                width: 480,
-                height: 270,
-                zIndex: highestZ + 1 + i,
-                data: { videoId: ytMatch[1] }
-              });
-              newSelection.push(id);
-            } else if (isX) {
-              const id = uuidv4();
-              addBlock({
-                id,
-                type: 'x',
-                x: targetX - 160 + i * 20,
-                y: targetY - 160 + i * 20,
-                width: 320,
-                height: 480,
-                zIndex: highestZ + 1 + i,
-                data: { url: trimmed }
-              });
-              newSelection.push(id);
-            } else if (isInstagram) {
-              const id = uuidv4();
-              addBlock({
-                id,
-                type: 'instagram',
-                x: targetX - 164 + i * 20,
-                y: targetY - 240 + i * 20,
-                width: 328,
-                height: 480,
-                zIndex: highestZ + 1 + i,
-                data: { url: trimmed }
-              });
-              newSelection.push(id);
-            } else if (isSubstack) {
-              const id = uuidv4();
-              addBlock({
-                id,
-                type: 'substack',
-                x: targetX - 200 + i * 20,
-                y: targetY - 240 + i * 20,
-                width: 400,
-                height: 480,
-                zIndex: highestZ + 1 + i,
-                data: { url: trimmed }
-              });
-              newSelection.push(id);
-            } else if (isMedium) {
-              const id = uuidv4();
-              addBlock({
-                id,
-                type: 'medium',
-                x: targetX - 160 + i * 20,
-                y: targetY - 180 + i * 20,
-                width: 320,
-                height: 360,
-                zIndex: highestZ + 1 + i,
-                data: { url: trimmed }
-              });
-              newSelection.push(id);
-            } else if (isFigma) {
-              const id = uuidv4();
-              addBlock({
-                id,
-                type: 'figma',
-                x: targetX - 320 + i * 20,
-                y: targetY - 180 + i * 20,
-                width: 640,
-                height: 360,
-                zIndex: highestZ + 1 + i,
-                data: { url: trimmed }
-              });
-              newSelection.push(id);
-            } else if (isCodepen) {
-              const id = uuidv4();
-              addBlock({
-                id,
-                type: 'codepen',
-                x: targetX - 300 + i * 20,
-                y: targetY - 200 + i * 20,
-                width: 600,
-                height: 400,
-                zIndex: highestZ + 1 + i,
-                data: { url: trimmed }
-              });
-              newSelection.push(id);
-            } else if (isGithub) {
-              const id = uuidv4();
-              addBlock({
-                id,
-                type: 'github',
-                x: targetX - 200 + i * 20,
-                y: targetY - 100 + i * 20,
-                width: 400,
-                height: 200,
-                zIndex: highestZ + 1 + i,
-                data: { url: trimmed }
-              });
-              newSelection.push(id);
-            } else if (isWikipedia) {
-              const id = uuidv4();
-              addBlock({
-                id,
-                type: 'wikipedia',
-                x: targetX - 200 + i * 20,
-                y: targetY - 120 + i * 20,
-                width: 400,
-                height: 240,
-                zIndex: highestZ + 1 + i,
-                data: { url: trimmed }
-              });
-              newSelection.push(id);
-            } else if (isReddit) {
-              const id = uuidv4();
-              addBlock({
-                id,
-                type: 'reddit',
-                x: targetX - 200 + i * 20,
-                y: targetY - 150 + i * 20,
-                width: 400,
-                height: 300,
-                zIndex: highestZ + 1 + i,
-                data: { url: trimmed }
-              });
-              newSelection.push(id);
-            } else if (isArena) {
-              const id = uuidv4();
-              addBlock({
-                id,
-                type: 'arena',
-                x: targetX - 200 + i * 20,
-                y: targetY - 200 + i * 20,
-                width: 400,
-                height: 400,
-                zIndex: highestZ + 1 + i,
-                data: { url: trimmed }
-              });
-              newSelection.push(id);
-            } else if (isTiktok) {
-              const id = uuidv4();
-              addBlock({
-                id,
-                type: 'tiktok',
-                x: targetX - 164 + i * 20,
-                y: targetY - 280 + i * 20,
-                width: 328,
-                height: 560,
-                zIndex: highestZ + 1 + i,
-                data: { url: trimmed }
-              });
-              newSelection.push(id);
-            } else if (isVideoFile) {
-              const id = uuidv4();
-              addBlock({
-                id,
-                type: 'video',
-                x: targetX - 240 + i * 20,
-                y: targetY - 135 + i * 20,
-                width: 480,
-                height: 270,
-                zIndex: highestZ + 1 + i,
-                data: { url: trimmed }
-              });
-              newSelection.push(id);
-            } else if (isPdfFile) {
-              const id = uuidv4();
-              addBlock({
-                id,
-                type: 'pdf',
-                x: targetX - 300 + i * 20,
-                y: targetY - 400 + i * 20,
-                width: 600,
-                height: 800,
-                zIndex: highestZ + 1 + i,
-                data: { url: trimmed }
-              });
-              newSelection.push(id);
-            } else if (isImageFile) {
-              const id = uuidv4();
-              addBlock({
-                id,
-                type: 'image',
-                x: targetX - 120 + i * 20,
-                y: targetY - 120 + i * 20,
-                width: 240,
-                height: 240,
-                zIndex: highestZ + 1 + i,
-                data: { url: trimmed }
-              });
-              newSelection.push(id);
-            } else if (isSpotify || isSoundCloud || isAppleMusic || isAudioFile) {
-              const platform = isSpotify ? 'Spotify' : 
-                             isSoundCloud ? 'SoundCloud' : 
-                             isAppleMusic ? 'Apple Music' : 'Audio File';
-              
-              const id = uuidv4();
-              addBlock({
-                id,
-                type: 'audio',
-                x: targetX - 120 + i * 20,
-                y: targetY - 120 + i * 20,
-                width: 240,
-                height: 240,
-                zIndex: highestZ + 1 + i,
-                data: { url: trimmed, platform }
-              });
-              newSelection.push(id);
-            } else {
-              const id = uuidv4();
-              addBlock({
-                id,
-                type: 'link',
-                x: targetX - 240 + i * 20,
-                y: targetY - 120 + i * 20,
-                width: 480,
-                height: 240,
-                zIndex: highestZ + 1 + i,
-                data: { url: trimmed, title: '', description: '' }
-              });
-              newSelection.push(id);
-            }
-          }
+          addBlock(block);
+          newSelection.push(id);
         });
 
         if (newSelection.length > 0) {
           setSelection(newSelection);
           return;
         }
+
       }
     };
 

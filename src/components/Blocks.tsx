@@ -254,17 +254,16 @@ export const StickyBlock: React.FC<BlockContentProps> = ({ block }) => {
   const commitBlockEdit = useBoardStore((state) => state.commitBlockEdit);
   const hasFocused = useRef(false);
   const editStartBlock = useRef<Block | null>(null);
-  const minStickyHeight = 240;
   const stickyVerticalPadding = 48;
 
-  const syncStickyHeight = useCallback(() => {
+  const syncStickyHeight = useCallback((growOnly = false) => {
     const el = textRef.current;
     if (!el) return block.height;
 
     el.style.height = 'auto';
-    el.style.height = `${el.scrollHeight}px`;
 
-    const nextHeight = Math.max(minStickyHeight, Math.ceil(el.scrollHeight + stickyVerticalPadding));
+    const contentHeight = Math.ceil(el.scrollHeight + stickyVerticalPadding);
+    const nextHeight = growOnly ? Math.max(block.height, contentHeight) : contentHeight;
     if (Math.abs(nextHeight - block.height) >= 0.5) {
       updateBlock(block.id, { height: nextHeight }, true);
     }
@@ -297,12 +296,12 @@ export const StickyBlock: React.FC<BlockContentProps> = ({ block }) => {
         ensureEditableLine(el);
       }
     }
-    syncStickyHeight();
-  }, [block.data.text, block.id, syncStickyHeight]);
+    syncStickyHeight(true);
+  }, [block.data.text, block.id, block.width, syncStickyHeight]);
 
   const handleInput = (e: React.FormEvent<HTMLParagraphElement>) => {
     const el = e.currentTarget;
-    syncStickyHeight();
+    syncStickyHeight(true);
     updateBlock(block.id, { data: { ...block.data, text: getEditableText(el) } }, true);
   };
 
@@ -313,7 +312,7 @@ export const StickyBlock: React.FC<BlockContentProps> = ({ block }) => {
   const handleBlur = () => {
     if (textRef.current) {
       const nextText = getEditableText(textRef.current);
-      const nextHeight = syncStickyHeight();
+      const nextHeight = syncStickyHeight(true);
       updateBlock(block.id, {
         height: nextHeight,
         data: { ...block.data, text: nextText },
@@ -329,7 +328,7 @@ export const StickyBlock: React.FC<BlockContentProps> = ({ block }) => {
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLParagraphElement>) => {
     handleListEnter(e, block, (text) => {
-      syncStickyHeight();
+      syncStickyHeight(true);
       updateBlock(block.id, { data: { ...block.data, text } }, true);
     });
   };

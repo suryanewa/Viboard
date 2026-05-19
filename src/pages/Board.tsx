@@ -8,7 +8,7 @@ import { KeyboardShortcuts } from '../components/KeyboardShortcuts';
 import { ContextMenu } from '../components/ContextMenu';
 import { PropertyToolbar } from '../components/PropertyToolbar';
 import { useBoardStore } from '../store';
-import { loadBoardFromWeb, loadDefaultBoard, saveBoardToWeb, setCurrentLoadingBoardId } from '../lib/boardCommands';
+import { loadBoardFromWeb, loadDefaultBoard, saveBoard, saveBoardToWeb, setCurrentLoadingBoardId } from '../lib/boardCommands';
 import {
   consumeImportedLocalSnapshotFlag,
   getSavedBoardId,
@@ -106,7 +106,6 @@ function Board() {
 
     markBoardDirty();
     const savedBoardId = getSavedBoardId();
-    if (!savedBoardId || savedBoardId !== params.id) return;
 
     if (autosaveTimerRef.current !== null) {
       window.clearTimeout(autosaveTimerRef.current);
@@ -114,6 +113,15 @@ function Board() {
 
     autosaveTimerRef.current = window.setTimeout(() => {
       const signatureAtSave = boardSignature();
+      if (!savedBoardId || savedBoardId !== params.id) {
+        saveBoard();
+        if (boardSignature() === signatureAtSave) {
+          lastSavedSignatureRef.current = signatureAtSave;
+        }
+        autosaveTimerRef.current = null;
+        return;
+      }
+
       void saveBoardToWeb(useBoardStore.getState().canvasTitle, savedBoardId)
         .then(() => {
           if (boardSignature() === signatureAtSave) {

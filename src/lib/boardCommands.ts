@@ -34,6 +34,9 @@ type TextCommand =
 export const BOARD_FILE_EXTENSION = 'viboard.json';
 const BOARD_CONTENT_COLUMNS = ['snapshot', 'data', 'content'];
 const PENDING_AUTHENTICATED_SAVE_KEY = 'viboard:pending-authenticated-save';
+const WEB_CACHE_INDEX_KEY = 'viboard:web:index';
+const AUTOSAVE_KEY = 'viboard:autosave';
+const RECENT_BOARDS_KEY = 'viboard:recent';
 const DEFAULT_BOARD_VIEWPORT_ZOOM = 1;
 const DEFAULT_LOCKUP_BLOCK: Block = {
   id: 'viboard-lockup',
@@ -76,6 +79,60 @@ const boardContentPayloads = (snapshot: BoardSnapshot) => ({
   data: snapshot,
   content: snapshot,
 });
+
+const isQuotaExceededError = (error: unknown) =>
+  error instanceof DOMException &&
+  (error.name === 'QuotaExceededError' ||
+    error.name === 'NS_ERROR_DOM_QUOTA_REACHED' ||
+    error.code === 22 ||
+    error.code === 1014);
+
+const safeParseJson = <T,>(value: string | null, fallback: T): T => {
+  if (!value) return fallback;
+  try {
+    return JSON.parse(value) as T;
+  } catch {
+    return fallback;
+  }
+};
+
+const removeCachedWebSnapshots = (exceptBoardId?: string) => {
+  const keysToRemove: string[] = [];
+  for (let index = 0; index < localStorage.length; index += 1) {
+    const key = localStorage.key(index);
+    if (!key?.startsWith('viboard:web:') || key === WEB_CACHE_INDEX_KEY) continue;
+    if (exceptBoardId && key === `viboard:web:${exceptBoardId}`) continue;
+    keysToRemove.push(key);
+  }
+  keysToRemove.forEach((key) => localStorage.removeItem(key));
+};
+
+const freeBoardStorage = (key: string) => {
+  const boardId = key.startsWith('viboard:web:') ? key.slice('viboard:web:'.length) : undefined;
+  removeCachedWebSnapshots(boardId);
+  if (key !== RECENT_BOARDS_KEY) localStorage.removeItem(RECENT_BOARDS_KEY);
+  if (key !== AUTOSAVE_KEY) localStorage.removeItem(AUTOSAVE_KEY);
+};
+
+const safeSetLocalStorage = (key: string, value: string) => {
+  try {
+    localStorage.setItem(key, value);
+    return true;
+  } catch (error) {
+    if (!isQuotaExceededError(error)) throw error;
+  }
+
+  freeBoardStorage(key);
+
+  try {
+    localStorage.setItem(key, value);
+    return true;
+  } catch (error) {
+    if (!isQuotaExceededError(error)) throw error;
+    console.warn(`Skipping browser cache write for ${key} because the board exceeds available storage.`);
+    return false;
+  }
+};
 
 const centeredViewportForBlock = (block: Block): Viewport => {
   if (typeof window === 'undefined') {
@@ -271,23 +328,27 @@ const applyListStyleToEditableSelection = (style: 'bullet' | 'number') => {
 };
 
 const saveRecentSnapshot = (snapshot: BoardSnapshot) => {
-  const recent = JSON.parse(localStorage.getItem('viboard:recent') || '[]') as BoardSnapshot[];
+  const recent = safeParseJson<BoardSnapshot[]>(localStorage.getItem(RECENT_BOARDS_KEY), []);
   const next = [snapshot, ...recent.filter((item) => item.title !== snapshot.title)].slice(0, 5);
-  localStorage.setItem('viboard:recent', JSON.stringify(next));
+  return safeSetLocalStorage(RECENT_BOARDS_KEY, JSON.stringify(next));
 };
 
 const saveWebSnapshotCache = (boardId: string, snapshot: BoardSnapshot) => {
-  localStorage.setItem(`viboard:web:${boardId}`, JSON.stringify(snapshot));
-  const cachedBoards = JSON.parse(localStorage.getItem('viboard:web:index') || '[]') as SavedBoardSummary[];
+  const cacheKey = `viboard:web:${boardId}`;
+  if (!safeSetLocalStorage(cacheKey, JSON.stringify(snapshot))) {
+    localStorage.removeItem(cacheKey);
+  }
+
+  const cachedBoards = safeParseJson<SavedBoardSummary[]>(localStorage.getItem(WEB_CACHE_INDEX_KEY), []);
   const now = new Date().toISOString();
   const next = [
     { id: boardId, title: snapshot.title, updated_at: now },
     ...cachedBoards.filter((board) => board.id !== boardId),
   ].slice(0, 25);
-  localStorage.setItem('viboard:web:index', JSON.stringify(next));
+  safeSetLocalStorage(WEB_CACHE_INDEX_KEY, JSON.stringify(next));
 };
 
-export const getCachedWebBoards = () => JSON.parse(localStorage.getItem('viboard:web:index') || '[]') as SavedBoardSummary[];
+export const getCachedWebBoards = () => safeParseJson<SavedBoardSummary[]>(localStorage.getItem(WEB_CACHE_INDEX_KEY), []);
 
 export const newBoard = () => {
   const snapshot = defaultBoardSnapshot();
@@ -319,8 +380,9 @@ export const loadDefaultBoard = () => {
 
 export const saveBoard = () => {
   const snapshot = getSnapshot();
-  localStorage.setItem('viboard:autosave', JSON.stringify(snapshot));
-  saveRecentSnapshot(snapshot);
+  const savedAutosave = safeSetLocalStorage(AUTOSAVE_KEY, JSON.stringify(snapshot));
+  const savedRecent = saveRecentSnapshot(snapshot);
+  return savedAutosave || savedRecent;
 };
 
 type PendingAuthenticatedSave = {
@@ -345,11 +407,14 @@ export const hasPendingAuthenticatedSave = () => Boolean(readPendingAuthenticate
 
 export const queueAuthenticatedSave = (title: string, boardId?: string | null) => {
   const snapshot = { ...getSnapshot(), title: title.trim() || 'Untitled Board' };
-  localStorage.setItem(PENDING_AUTHENTICATED_SAVE_KEY, JSON.stringify({
+  const queued = safeSetLocalStorage(PENDING_AUTHENTICATED_SAVE_KEY, JSON.stringify({
     boardId: boardId || null,
     snapshot,
   } satisfies PendingAuthenticatedSave));
-  localStorage.setItem('viboard:autosave', JSON.stringify(snapshot));
+  if (!queued) {
+    throw new Error('This board is too large to queue in browser storage. Sign in first, then save it again.');
+  }
+  safeSetLocalStorage(AUTOSAVE_KEY, JSON.stringify(snapshot));
   saveRecentSnapshot(snapshot);
 };
 
@@ -428,7 +493,7 @@ export const saveBoardToWeb = async (title: string, boardId?: string | null) => 
     const fallbackId = boardId || crypto.randomUUID();
     useBoardStore.setState({ canvasTitle: snapshot.title });
     saveWebSnapshotCache(fallbackId, snapshot);
-    localStorage.setItem('viboard:autosave', JSON.stringify(snapshot));
+    safeSetLocalStorage(AUTOSAVE_KEY, JSON.stringify(snapshot));
     saveRecentSnapshot(snapshot);
     markBoardSaved(fallbackId);
     return fallbackId;
@@ -436,7 +501,7 @@ export const saveBoardToWeb = async (title: string, boardId?: string | null) => 
 
   useBoardStore.setState({ canvasTitle: snapshot.title });
   saveWebSnapshotCache(savedBoard.id, snapshot);
-  localStorage.setItem('viboard:autosave', JSON.stringify(snapshot));
+  safeSetLocalStorage(AUTOSAVE_KEY, JSON.stringify(snapshot));
   saveRecentSnapshot(snapshot);
   markBoardSaved(savedBoard.id);
   return savedBoard.id;
@@ -458,13 +523,13 @@ export const deleteCurrentBoard = async () => {
   if (error) throw error;
   localStorage.removeItem(`viboard:web:${boardId}`);
   const cachedBoards = getCachedWebBoards().filter((board) => board.id !== boardId);
-  localStorage.setItem('viboard:web:index', JSON.stringify(cachedBoards));
+  safeSetLocalStorage(WEB_CACHE_INDEX_KEY, JSON.stringify(cachedBoards));
   markBoardUnsaved();
 };
 
 export const openRecentBoard = () => {
-  const recent = JSON.parse(localStorage.getItem('viboard:recent') || '[]') as BoardSnapshot[];
-  const latest = recent[0] || JSON.parse(localStorage.getItem('viboard:autosave') || 'null') as BoardSnapshot | null;
+  const recent = safeParseJson<BoardSnapshot[]>(localStorage.getItem(RECENT_BOARDS_KEY), []);
+  const latest = recent[0] || safeParseJson<BoardSnapshot | null>(localStorage.getItem(AUTOSAVE_KEY), null);
   if (latest) loadBoardSnapshot(latest);
 };
 
@@ -532,7 +597,7 @@ export const loadBoardFromWeb = async (boardId: string) => {
   if (currentLoadingBoardId !== boardId) return;
 
   if (error && cached) {
-    loadBoardSnapshot(JSON.parse(cached) as BoardSnapshot);
+    loadBoardSnapshot(safeParseJson<BoardSnapshot>(cached, blankSnapshotForRow(null)));
     return;
   }
   if (error) throw error;
@@ -544,7 +609,7 @@ export const loadBoardFromWeb = async (boardId: string) => {
     return;
   }
   if (cached) {
-    loadBoardSnapshot(JSON.parse(cached) as BoardSnapshot);
+    loadBoardSnapshot(safeParseJson<BoardSnapshot>(cached, blankSnapshotForRow(data as Record<string, unknown>)));
     markBoardSaved(boardId);
     return;
   }
