@@ -113,6 +113,19 @@ const getGroupedIds = (block: Block, blocks: Record<string, Block>) => {
     .map((candidate) => candidate.id);
 };
 
+const INTERACTIVE_EMBED_TYPES = new Set<Block['type']>([
+  'x',
+  'youtube',
+  'video',
+  'substack',
+  'figma',
+  'arena',
+  'codepen',
+  'reddit',
+  'tiktok',
+  'pdf',
+]);
+
 interface ResizeHandleProps {
   direction: string;
   cursor: string;
@@ -164,6 +177,7 @@ export const BlockShell: React.FC<BlockShellProps> = ({ block, children }) => {
     selection.length > 0 &&
     selection.every((id) => blocks[id]?.type === 'text') &&
     selection.includes(block.id);
+  const showEmbedDragShield = isSelected && tool === 'select' && INTERACTIVE_EMBED_TYPES.has(block.type);
   const skipPlacementAnimation = block.type === 'shape' || block.data.skipPlacementAnimation;
   
   const clickPoint = useRef({ x: 0, y: 0, edge: 'top' });
@@ -1003,6 +1017,12 @@ export const BlockShell: React.FC<BlockShellProps> = ({ block, children }) => {
       >
         {children}
       </div>
+      {showEmbedDragShield && (
+        <div
+          aria-hidden="true"
+          className="absolute inset-0 z-10 cursor-move bg-transparent"
+        />
+      )}
     </motion.div>
   );
 };

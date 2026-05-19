@@ -19,6 +19,23 @@ type LinkMetadata = {
   date?: string;
 };
 
+const getInstagramEmbedUrl = (rawUrl?: string) => {
+  if (!rawUrl) return null;
+
+  try {
+    const url = new URL(rawUrl);
+    const host = url.hostname.replace(/^www\./, '');
+    if (host !== 'instagram.com') return null;
+
+    const parts = url.pathname.split('/').filter(Boolean);
+    if (parts.length < 2 || !['p', 'reel', 'tv'].includes(parts[0])) return null;
+
+    return `https://www.instagram.com/${parts[0]}/${parts[1]}/embed/captioned`;
+  } catch {
+    return null;
+  }
+};
+
 const placeCaretAtEnd = (el: HTMLElement) => {
   el.focus();
   if (typeof window === 'undefined') return;
@@ -711,6 +728,40 @@ export const XBlock: React.FC<BlockContentProps> = ({ block }) => {
   );
 };
 
+export const InstagramBlock: React.FC<BlockContentProps> = ({ block }) => {
+  const embedUrl = getInstagramEmbedUrl(block.data.url);
+
+  return (
+    <div className="w-full h-full bg-white rounded-md overflow-hidden shadow-sm pointer-events-auto border border-zinc-200">
+      {embedUrl ? (
+        <iframe
+          src={embedUrl}
+          title="Instagram embed"
+          className="w-full h-full"
+          frameBorder="0"
+          scrolling="no"
+          allowTransparency={true}
+          allow="encrypted-media; picture-in-picture"
+        />
+      ) : (
+        <div className="w-full h-full flex flex-col items-center justify-center gap-2 p-4 text-center text-zinc-500">
+          <span className="text-sm font-medium">Invalid Instagram URL</span>
+          {block.data.url && (
+            <a
+              href={block.data.url}
+              target="_blank"
+              rel="noreferrer"
+              className="max-w-full truncate text-xs text-pink-600 underline"
+            >
+              {block.data.url}
+            </a>
+          )}
+        </div>
+      )}
+    </div>
+  );
+};
+
 export const YoutubeBlock: React.FC<BlockContentProps> = ({ block }) => {
   const videoId = block.data.videoId;
 
@@ -1086,6 +1137,7 @@ export const BlockRenderer: React.FC<BlockContentProps> = ({ block }) => {
     case 'image': return <ImageBlock block={block} />;
     case 'link': return <LinkBlock block={block} />;
     case 'audio': return <AudioBlock block={block} />;
+    case 'instagram': return <InstagramBlock block={block} />;
     case 'x': return <XBlock block={block} />;
     case 'youtube': return <YoutubeBlock block={block} />;
     case 'video': return <VideoBlock block={block} />;
