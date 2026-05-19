@@ -74,7 +74,7 @@ const getSubstackEmbedUrl = (rawUrl?: string) => {
   }
 };
 
-const getRedditEmbedUrl = (rawUrl?: string) => {
+const getRedditEmbedHtml = (rawUrl?: string) => {
   if (!rawUrl) return null;
 
   try {
@@ -83,7 +83,25 @@ const getRedditEmbedUrl = (rawUrl?: string) => {
     if (host !== 'reddit.com' || !url.pathname.includes('/comments/')) return null;
 
     const permalink = new URL(url.pathname, 'https://www.reddit.com');
-    return `https://publish.reddit.com/embed?url=${encodeURIComponent(permalink.toString())}`;
+    const href = permalink.toString();
+
+    return `<!doctype html>
+<html>
+  <head>
+    <base target="_blank" />
+    <style>
+      html, body { margin: 0; padding: 0; background: white; overflow: hidden; }
+      .reddit-embed-bq { margin: 0 !important; max-width: none !important; width: 100% !important; }
+      iframe { width: 100% !important; max-width: none !important; }
+    </style>
+  </head>
+  <body>
+    <blockquote class="reddit-embed-bq" style="height: 500px">
+      <a href="${href}"></a>
+    </blockquote>
+    <script async src="https://embed.reddit.com/widgets.js" charset="UTF-8"></script>
+  </body>
+</html>`;
   } catch {
     return null;
   }
@@ -1016,18 +1034,18 @@ export const CodepenBlock: React.FC<BlockContentProps> = ({ block }) => {
 };
 
 export const RedditBlock: React.FC<BlockContentProps> = ({ block }) => {
-  const embedUrl = React.useMemo(() => getRedditEmbedUrl(block.data.url), [block.data.url]);
+  const embedHtml = React.useMemo(() => getRedditEmbedHtml(block.data.url), [block.data.url]);
 
   return (
     <div className="w-full h-full bg-white rounded-[10px] overflow-hidden shadow-sm pointer-events-auto border border-[#ff4500]/25">
-      {embedUrl ? (
+      {embedHtml ? (
         <iframe
-          src={embedUrl}
+          srcDoc={embedHtml}
           title="Reddit embed"
           className="w-full h-full"
           frameBorder="0"
           scrolling="yes"
-          sandbox="allow-scripts allow-same-origin allow-popups allow-popups-to-escape-sandbox"
+          sandbox="allow-scripts allow-popups allow-popups-to-escape-sandbox"
         />
       ) : (
         <div className="w-full h-full bg-[#fff7f0] p-5 flex flex-col justify-between text-[#24110a]">
@@ -1170,7 +1188,7 @@ export const WikipediaBlock: React.FC<BlockContentProps> = ({ block }) => {
             )}
           </div>
 
-          <h3 className="mt-4 pb-1 text-[26px] font-serif font-bold leading-[1.12] tracking-normal line-clamp-3">
+          <h3 className="mt-4 max-h-[3.9em] overflow-hidden pb-2 text-[25px] font-serif font-bold leading-[1.3] tracking-normal">
             {summary?.title || 'Wikipedia article'}
           </h3>
           <p className="mt-3 text-[14px] leading-snug text-stone-700 line-clamp-6">
