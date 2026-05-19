@@ -64,6 +64,14 @@ const getSplitPathsForPoint = (w: number, h: number, p: { x: number, y: number, 
   return [toPath(cwPts), toPath(ccwPts)];
 };
 
+const getAudioDiscPath = (w: number, h: number) => {
+  const radius = Math.min(w, h) * 0.475;
+  const cx = w;
+  const cy = h / 2;
+
+  return `M ${cx} ${cy - radius} a ${radius} ${radius} 0 0 1 0 ${radius * 2}`;
+};
+
 const parseHue = (value: unknown): number | null => {
   if (typeof value !== 'string') return null;
   const match = value.match(/hsl\(\s*([\d.]+)/i);
@@ -281,12 +289,14 @@ export const BlockShell: React.FC<BlockShellProps> = ({ block, children }) => {
 
   const pathCw = useMotionValue('');
   const pathCcw = useMotionValue('');
+  const audioDiscPath = useMotionValue('');
 
   useEffect(() => {
     const updatePaths = () => {
       const [cw, ccw] = getSplitPathsForPoint(width.get(), height.get(), clickPoint.current);
       pathCw.set(cw);
       pathCcw.set(ccw);
+      audioDiscPath.set(getAudioDiscPath(width.get(), height.get()));
     };
 
     updatePaths();
@@ -298,7 +308,7 @@ export const BlockShell: React.FC<BlockShellProps> = ({ block, children }) => {
       unsubW();
       unsubH();
     };
-  }, [width, height, pathCw, pathCcw]);
+  }, [width, height, pathCw, pathCcw, audioDiscPath]);
 
   useEffect(() => {
     if (!isDragging.current && !isResizing.current) {
@@ -935,6 +945,18 @@ export const BlockShell: React.FC<BlockShellProps> = ({ block, children }) => {
               exit={{ pathLength: 0, opacity: 0 }}
               transition={{ duration: 0.5, ease: [0.22, 1, 0.36, 1] }}
             />
+            {block.type === 'audio' && (
+              <motion.path
+                d={audioDiscPath}
+                fill="none"
+                stroke="#6c5cff"
+                strokeWidth="2"
+                initial={{ pathLength: 0, opacity: 0 }}
+                animate={{ pathLength: 1, opacity: 1 }}
+                exit={{ pathLength: 0, opacity: 0 }}
+                transition={{ duration: 0.5, ease: [0.22, 1, 0.36, 1] }}
+              />
+            )}
           </motion.svg>,
 
           ...(textOnlyResize
@@ -1001,7 +1023,6 @@ export const BlockShell: React.FC<BlockShellProps> = ({ block, children }) => {
           'border shadow-none bg-white',
           isSelected ? 'border-transparent ring-2 ring-[#6c5cff]/25' : 'border-zinc-200 ring-2 ring-transparent hover:border-zinc-300'
         ],
-        block.type === 'audio' && (isSelected ? 'ring-2 ring-[#6c5cff]/25 rounded-md' : 'ring-2 ring-transparent rounded-md'),
         block.type === 'shape' && (isSelected ? 'ring-2 ring-[#6c5cff]/25' : 'ring-2 ring-transparent')
       )}
     >

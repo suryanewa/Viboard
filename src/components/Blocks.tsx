@@ -706,6 +706,11 @@ export const AudioBlock: React.FC<BlockContentProps> = ({ block }) => {
   }, [url, coverUrl]);
 
   const displayImage = coverUrl || metadata?.image;
+  const discCenterClass =
+    platform === 'Spotify' ? 'bg-[#1DB954]' :
+    platform === 'SoundCloud' ? 'bg-[#FF5500]' :
+    platform === 'Apple Music' ? 'bg-[#FF2D55]' :
+    'bg-red-500';
 
   return (
     <div className="relative w-full h-full flex items-center bg-transparent">
@@ -725,15 +730,9 @@ export const AudioBlock: React.FC<BlockContentProps> = ({ block }) => {
         
         {/* Center Label */}
         <div className={clsx(
-          "w-1/3 h-1/3 rounded-full flex items-center justify-center overflow-hidden",
-          platform === 'Spotify' ? 'bg-[#1DB954]' :
-          platform === 'SoundCloud' ? 'bg-[#FF5500]' :
-          platform === 'Apple Music' ? 'bg-[#FA243C]' :
-          'bg-red-500'
+          "w-1/3 h-1/3 rounded-full flex items-center justify-center",
+          discCenterClass
         )}>
-          {displayImage && (
-            <img src={displayImage} alt="Center Label" className="absolute inset-0 w-full h-full object-cover opacity-50 mix-blend-overlay" />
-          )}
           <div className="w-3 h-3 rounded-full bg-zinc-900 relative z-10" />
         </div>
       </div>
