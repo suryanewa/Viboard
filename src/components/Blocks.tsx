@@ -357,6 +357,13 @@ export const StickyBlock: React.FC<BlockContentProps> = ({ block }) => {
     }
   };
 
+  useEffect(() => {
+    if (!isEditing) return;
+    requestAnimationFrame(() => {
+      if (textRef.current) placeCaretAtEnd(textRef.current);
+    });
+  }, [isEditing]);
+
   useLayoutEffect(() => {
     const el = textRef.current;
     if (!el) return;
@@ -380,12 +387,16 @@ export const StickyBlock: React.FC<BlockContentProps> = ({ block }) => {
     editStartBlock.current = structuredClone(block);
   };
 
+  const handlePointerDown = (e: React.PointerEvent<HTMLParagraphElement>) => {
+    if (e.detail < 2) return;
+    e.preventDefault();
+    e.stopPropagation();
+    setIsEditing(true);
+  };
+
   const handleDoubleClick = (e: React.MouseEvent<HTMLParagraphElement>) => {
     e.stopPropagation();
     setIsEditing(true);
-    requestAnimationFrame(() => {
-      if (textRef.current) placeCaretAtEnd(textRef.current);
-    });
   };
 
   const handleBlur = () => {
@@ -427,6 +438,7 @@ export const StickyBlock: React.FC<BlockContentProps> = ({ block }) => {
         contentEditable={isEditing}
         data-viboard-block-id={block.id}
         suppressContentEditableWarning
+        onPointerDown={handlePointerDown}
         onDoubleClick={handleDoubleClick}
         onFocus={handleFocus}
         onKeyDown={handleKeyDown}
@@ -476,6 +488,13 @@ export const TextBlock: React.FC<BlockContentProps> = ({ block }) => {
     }
   };
 
+  useEffect(() => {
+    if (!isEditing) return;
+    requestAnimationFrame(() => {
+      if (textRef.current) placeCaretAtEnd(textRef.current);
+    });
+  }, [isEditing]);
+
   const syncShellHeight = useCallback(() => {
     const el = textRef.current;
     const wrap = wrapRef.current;
@@ -516,12 +535,16 @@ export const TextBlock: React.FC<BlockContentProps> = ({ block }) => {
     editStartBlock.current = structuredClone(block);
   };
 
+  const handlePointerDown = (e: React.PointerEvent<HTMLParagraphElement>) => {
+    if (e.detail < 2) return;
+    e.preventDefault();
+    e.stopPropagation();
+    setIsEditing(true);
+  };
+
   const handleDoubleClick = (e: React.MouseEvent<HTMLParagraphElement>) => {
     e.stopPropagation();
     setIsEditing(true);
-    requestAnimationFrame(() => {
-      if (textRef.current) placeCaretAtEnd(textRef.current);
-    });
   };
 
   const handleBlur = () => {
@@ -565,6 +588,7 @@ export const TextBlock: React.FC<BlockContentProps> = ({ block }) => {
         contentEditable={isEditing}
         data-viboard-block-id={block.id}
         suppressContentEditableWarning
+        onPointerDown={handlePointerDown}
         onDoubleClick={handleDoubleClick}
         onFocus={handleFocus}
         onKeyDown={handleKeyDown}
