@@ -3,7 +3,11 @@ import type { Block, Viewport, DrawingPath } from './types';
 import { v4 as uuidv4 } from 'uuid';
 import { indexBlock, removeBlockFromIndex, syncAllBlocks } from './lib/typesense';
 
-type HistoryEntry = { blocks: Record<string, Block>; drawings: DrawingPath[] };
+export type HistoryEntry = { blocks: Record<string, Block>; drawings: DrawingPath[] };
+export type BoardHistory = {
+  past: HistoryEntry[];
+  future: HistoryEntry[];
+};
 export const VIBOARD_CLIPBOARD_MIME = 'web application/x-viboard-blocks';
 const VIBOARD_CLIPBOARD_BLOB_MIME = 'application/x-viboard-blocks';
 export const VIBOARD_CLIPBOARD_TEXT = 'Viboard canvas selection';
@@ -135,10 +139,7 @@ interface BoardState {
   drawings: DrawingPath[];
   drawingSelection: string[];
   snapLines: { x?: number, y?: number }[];
-  history: {
-    past: HistoryEntry[];
-    future: HistoryEntry[];
-  };
+  history: BoardHistory;
   historyAnimationKey: number;
   
   pushHistory: () => void;
@@ -190,7 +191,7 @@ interface BoardState {
   clearBoard: () => void;
 }
 
-const MAX_HISTORY = 25;
+export const MAX_HISTORY = 25;
 let historyAnimationSequence = 0;
 
 const cloneHistoryEntry = (entry: HistoryEntry): HistoryEntry => ({

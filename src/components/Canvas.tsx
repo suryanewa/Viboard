@@ -65,7 +65,7 @@ export const Canvas: React.FC<{ children: React.ReactNode }> = ({ children }) =>
   const lastDragPos = useRef({ x: 0, y: 0 });
   const shiftHeldRef = useRef(false);
   const viewportRef = useRef<Viewport>(viewport);
-  const viewportStoreFrame = useRef<number | null>(null);
+  const viewportStoreTimeout = useRef<number | null>(null);
 
   const captureCanvasPointer = (e: React.PointerEvent) => {
     const target = e.currentTarget;
@@ -106,10 +106,12 @@ export const Canvas: React.FC<{ children: React.ReactNode }> = ({ children }) =>
     myRaw.set(nextViewport.y);
     mZoomRaw.set(nextViewport.zoom);
 
-    if (viewportStoreFrame.current !== null) return;
+    if (viewportStoreTimeout.current !== null) {
+      window.clearTimeout(viewportStoreTimeout.current);
+    }
 
-    viewportStoreFrame.current = window.requestAnimationFrame(() => {
-      viewportStoreFrame.current = null;
+    viewportStoreTimeout.current = window.setTimeout(() => {
+      viewportStoreTimeout.current = null;
 
       const latestViewport = viewportRef.current;
       const storeViewport = useBoardStore.getState().viewport;
@@ -120,13 +122,13 @@ export const Canvas: React.FC<{ children: React.ReactNode }> = ({ children }) =>
       ) {
         useBoardStore.getState().setViewport(latestViewport);
       }
-    });
+    }, 120);
   }, [mZoomRaw, mxRaw, myRaw]);
 
   const flushViewport = useCallback(() => {
-    if (viewportStoreFrame.current !== null) {
-      window.cancelAnimationFrame(viewportStoreFrame.current);
-      viewportStoreFrame.current = null;
+    if (viewportStoreTimeout.current !== null) {
+      window.clearTimeout(viewportStoreTimeout.current);
+      viewportStoreTimeout.current = null;
     }
 
     const latestViewport = viewportRef.current;
@@ -157,8 +159,8 @@ export const Canvas: React.FC<{ children: React.ReactNode }> = ({ children }) =>
 
   useEffect(() => {
     return () => {
-      if (viewportStoreFrame.current !== null) {
-        window.cancelAnimationFrame(viewportStoreFrame.current);
+      if (viewportStoreTimeout.current !== null) {
+        window.clearTimeout(viewportStoreTimeout.current);
       }
     };
   }, []);
@@ -508,11 +510,6 @@ export const Canvas: React.FC<{ children: React.ReactNode }> = ({ children }) =>
 
   const handlePointerMove = useCallback((e: React.PointerEvent) => {
     const currentViewport = viewportRef.current;
-    const rect = containerRef.current!.getBoundingClientRect();
-    const canvasX = (e.clientX - rect.left - currentViewport.x) / currentViewport.zoom;
-    const canvasY = (e.clientY - rect.top - currentViewport.y) / currentViewport.zoom;
-    
-    setMousePos(canvasX, canvasY);
 
     if (isPanning.current) {
       publishViewport({
@@ -520,7 +517,16 @@ export const Canvas: React.FC<{ children: React.ReactNode }> = ({ children }) =>
         y: currentViewport.y + e.movementY * PAN_SENSITIVITY,
         zoom: currentViewport.zoom,
       });
-    } else if (isCreatingFrame.current && activeFrame) {
+      return;
+    }
+
+    const rect = containerRef.current!.getBoundingClientRect();
+    const canvasX = (e.clientX - rect.left - currentViewport.x) / currentViewport.zoom;
+    const canvasY = (e.clientY - rect.top - currentViewport.y) / currentViewport.zoom;
+    
+    setMousePos(canvasX, canvasY);
+
+    if (isCreatingFrame.current && activeFrame) {
       setActiveFrame({
         ...activeFrame,
         x2: canvasX,
@@ -722,6 +728,7 @@ export const Canvas: React.FC<{ children: React.ReactNode }> = ({ children }) =>
             width: 0,
             height: 0,
             transform,
+            willChange: 'transform',
           }}
         >
           {children}

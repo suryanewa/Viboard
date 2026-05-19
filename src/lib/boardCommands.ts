@@ -1,8 +1,9 @@
 import { v4 as uuidv4 } from 'uuid';
-import { useBoardStore } from '../store';
+import { MAX_HISTORY, useBoardStore } from '../store';
 import { supabase } from './supabase';
 import { getSavedBoardId, markBoardDraftClean, markBoardImported, markBoardSaved, markBoardUnsaved } from './boardSession';
 import type { Block, DrawingPath, Viewport } from '../types';
+import type { BoardHistory } from '../store';
 
 type BoardSnapshot = {
   version: 1;
@@ -10,6 +11,7 @@ type BoardSnapshot = {
   blocks: Record<string, Block>;
   drawings: DrawingPath[];
   viewport: Viewport;
+  history?: BoardHistory;
 };
 
 type ExportFormat = 'png' | 'jpg' | 'pdf';
@@ -63,14 +65,38 @@ export const downloadBlob = (blob: Blob, filename: string) => {
   window.setTimeout(() => URL.revokeObjectURL(url), 1000);
 };
 
-const getSnapshot = (): BoardSnapshot => {
-  const { canvasTitle, blocks, drawings, viewport } = useBoardStore.getState();
+const normalizeHistory = (history: unknown): BoardHistory => {
+  if (!history || typeof history !== 'object') return { past: [], future: [] };
+  const record = history as Partial<BoardHistory>;
+  return {
+    past: Array.isArray(record.past) ? record.past.slice(-MAX_HISTORY) : [],
+    future: Array.isArray(record.future) ? record.future.slice(0, MAX_HISTORY) : [],
+  };
+};
+
+const snapshotSignature = (snapshot: BoardSnapshot) =>
+  JSON.stringify({
+    title: snapshot.title,
+    blocks: snapshot.blocks,
+    drawings: snapshot.drawings,
+    viewport: snapshot.viewport,
+    history: normalizeHistory(snapshot.history),
+  });
+
+const withNormalizedHistory = (snapshot: BoardSnapshot): BoardSnapshot => ({
+  ...snapshot,
+  history: normalizeHistory(snapshot.history),
+});
+
+export const getBoardSnapshot = (): BoardSnapshot => {
+  const { canvasTitle, blocks, drawings, viewport, history } = useBoardStore.getState();
   return {
     version: 1,
     title: canvasTitle,
     blocks,
     drawings,
     viewport,
+    history: normalizeHistory(history),
   };
 };
 
@@ -154,13 +180,14 @@ const defaultBoardSnapshot = (title = 'Untitled Board'): BoardSnapshot => ({
   },
   drawings: [],
   viewport: centeredViewportForBlock(DEFAULT_LOCKUP_BLOCK),
+  history: { past: [], future: [] },
 });
 
 export const parseSnapshot = (row: Record<string, unknown> | null): BoardSnapshot | null => {
   if (!row) return null;
   const maybeSnapshot = BOARD_CONTENT_COLUMNS.map((column) => row[column]).find(Boolean);
   if (maybeSnapshot && typeof maybeSnapshot === 'object') {
-    return maybeSnapshot as BoardSnapshot;
+    return withNormalizedHistory(maybeSnapshot as BoardSnapshot);
   }
   return null;
 };
@@ -191,6 +218,7 @@ const normalizeSnapshot = (value: unknown): BoardSnapshot => {
       y: typeof viewport?.y === 'number' ? viewport.y : 200,
       zoom: typeof viewport?.zoom === 'number' ? viewport.zoom : DEFAULT_BOARD_VIEWPORT_ZOOM,
     },
+    history: normalizeHistory(record.history),
   };
 };
 
@@ -373,13 +401,13 @@ export const loadDefaultBoard = () => {
     drawingSelection: [],
     canvasTitle: snapshot.title,
     viewport: snapshot.viewport,
-    history: { past: [], future: [] },
+    history: normalizeHistory(snapshot.history),
   });
   markBoardDraftClean();
 };
 
 export const saveBoard = () => {
-  const snapshot = getSnapshot();
+  const snapshot = getBoardSnapshot();
   const savedAutosave = safeSetLocalStorage(AUTOSAVE_KEY, JSON.stringify(snapshot));
   const savedRecent = saveRecentSnapshot(snapshot);
   return savedAutosave || savedRecent;
@@ -406,7 +434,7 @@ const readPendingAuthenticatedSave = (): PendingAuthenticatedSave | null => {
 export const hasPendingAuthenticatedSave = () => Boolean(readPendingAuthenticatedSave());
 
 export const queueAuthenticatedSave = (title: string, boardId?: string | null) => {
-  const snapshot = { ...getSnapshot(), title: title.trim() || 'Untitled Board' };
+  const snapshot = { ...getBoardSnapshot(), title: title.trim() || 'Untitled Board' };
   const queued = safeSetLocalStorage(PENDING_AUTHENTICATED_SAVE_KEY, JSON.stringify({
     boardId: boardId || null,
     snapshot,
@@ -428,8 +456,9 @@ export const savePendingAuthenticatedBoard = async () => {
   return savedId;
 };
 
-export const saveBoardToWeb = async (title: string, boardId?: string | null) => {
-  const snapshot = { ...getSnapshot(), title: title.trim() || 'Untitled Board' };
+export const saveBoardToWeb = async (title: string, boardId?: string | null, snapshotOverride?: BoardSnapshot) => {
+  const snapshot = { ...(snapshotOverride ?? getBoardSnapshot()), title: title.trim() || 'Untitled Board' };
+  const shouldApplySnapshotToStore = !snapshotOverride;
   const { data: sessionData } = await supabase.auth.getSession();
   const userId = sessionData.session?.user.id;
   if (!userId) throw new Error('You must be signed in to save this board.');
@@ -490,6 +519,9 @@ export const saveBoardToWeb = async (title: string, boardId?: string | null) => 
   if (!savedBoard) {
     const lastError = errors[errors.length - 1];
     console.error('Error saving moodboard:', lastError);
+    if (snapshotOverride) {
+      throw lastError instanceof Error ? lastError : new Error('Could not autosave this board to Supabase.');
+    }
     const fallbackId = boardId || crypto.randomUUID();
     useBoardStore.setState({ canvasTitle: snapshot.title });
     saveWebSnapshotCache(fallbackId, snapshot);
@@ -499,16 +531,20 @@ export const saveBoardToWeb = async (title: string, boardId?: string | null) => 
     return fallbackId;
   }
 
-  useBoardStore.setState({ canvasTitle: snapshot.title });
+  if (shouldApplySnapshotToStore) {
+    useBoardStore.setState({ canvasTitle: snapshot.title });
+  }
   saveWebSnapshotCache(savedBoard.id, snapshot);
   safeSetLocalStorage(AUTOSAVE_KEY, JSON.stringify(snapshot));
   saveRecentSnapshot(snapshot);
-  markBoardSaved(savedBoard.id);
+  if (shouldApplySnapshotToStore) {
+    markBoardSaved(savedBoard.id);
+  }
   return savedBoard.id;
 };
 
 export const saveLocalCopy = () => {
-  const snapshot = getSnapshot();
+  const snapshot = getBoardSnapshot();
   saveRecentSnapshot(snapshot);
   downloadBlob(
     new Blob([JSON.stringify(snapshot, null, 2)], { type: 'application/json' }),
@@ -593,7 +629,7 @@ export const setCurrentLoadingBoardId = (id: string | null) => {
 export const loadBoardFromWeb = async (boardId: string, onSnapshotApplied?: () => void) => {
   const cached = localStorage.getItem(`viboard:web:${boardId}`);
   const cachedSnapshot = cached ? safeParseJson<BoardSnapshot | null>(cached, null) : null;
-  const cachedSignature = cachedSnapshot ? JSON.stringify(cachedSnapshot) : null;
+  const cachedSignature = cachedSnapshot ? snapshotSignature(cachedSnapshot) : null;
 
   const fetchAndApplyRemoteSnapshot = async () => {
     const { data, error } = await supabase.from('moodboards').select('*').eq('id', boardId).single();
@@ -605,7 +641,7 @@ export const loadBoardFromWeb = async (boardId: string, onSnapshotApplied?: () =
 
     const snapshot = parseSnapshot(data as Record<string, unknown>);
     if (snapshot) {
-      if (cachedSignature && JSON.stringify(getSnapshot()) !== cachedSignature) {
+      if (cachedSignature && snapshotSignature(getBoardSnapshot()) !== cachedSignature) {
         return;
       }
       loadBoardSnapshot(snapshot);
@@ -644,7 +680,7 @@ const loadBoardSnapshot = (snapshot: BoardSnapshot) => {
     drawingSelection: [],
     canvasTitle: snapshot.title || 'Untitled Board',
     viewport: snapshot.viewport || { x: 300, y: 200, zoom: DEFAULT_BOARD_VIEWPORT_ZOOM },
-    history: { past: [], future: [] },
+    history: normalizeHistory(snapshot.history),
   });
   saveRecentSnapshot(snapshot);
 };
