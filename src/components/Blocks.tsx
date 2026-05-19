@@ -759,8 +759,7 @@ export const AudioBlock: React.FC<BlockContentProps> = ({ block }) => {
         
         {/* Play/Pause Overlay */}
         <div className={clsx(
-          "absolute inset-0 bg-black/40 transition-opacity flex items-center justify-center",
-          isPlaying ? "opacity-0 group-hover:opacity-100" : "opacity-100 group-hover:opacity-100"
+          "absolute inset-0 bg-transparent opacity-0 transition-opacity flex items-center justify-center group-hover:opacity-100"
         )}>
            <div className="w-14 h-14 rounded-full bg-white/20 backdrop-blur-sm flex items-center justify-center shadow-lg border border-white/10 transition-transform group-hover:scale-110">
              {isPlaying ? (

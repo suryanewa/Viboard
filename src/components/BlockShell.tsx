@@ -820,7 +820,7 @@ export const BlockShell: React.FC<BlockShellProps> = ({ block, children }) => {
       scaleY = Math.abs(denom) > 0.01 ? (currentHandleY - originY) / denom : 1;
     }
 
-    if (e.shiftKey) {
+    if (e.shiftKey || block.type === 'audio') {
       const dominantScale = Math.abs(scaleX - 1) > Math.abs(scaleY - 1) ? scaleX : scaleY;
       scaleX = dominantScale;
       scaleY = dominantScale;
