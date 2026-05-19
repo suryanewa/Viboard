@@ -36,6 +36,35 @@ const getInstagramEmbedUrl = (rawUrl?: string) => {
   }
 };
 
+const getSubstackEmbedUrl = (rawUrl?: string) => {
+  if (!rawUrl) return null;
+
+  try {
+    const url = new URL(rawUrl);
+    const parts = url.pathname.split('/').filter(Boolean);
+    const embedUrl = new URL('/embed', url.origin);
+
+    const postIndex = parts.indexOf('p');
+    if (postIndex !== -1 && parts[postIndex + 1]) {
+      embedUrl.pathname = `/embed/p/${parts[postIndex + 1]}`;
+    } else {
+      const commentId = parts.find((part) => part.startsWith('c-'));
+      if (commentId) {
+        embedUrl.pathname = `/embed/c/${commentId.slice(2)}`;
+      }
+    }
+
+    if (typeof window !== 'undefined') {
+      embedUrl.searchParams.set('origin', window.location.origin);
+      embedUrl.searchParams.set('fullURL', window.location.href);
+    }
+
+    return embedUrl.toString();
+  } catch {
+    return null;
+  }
+};
+
 const placeCaretAtEnd = (el: HTMLElement) => {
   el.focus();
   if (typeof window === 'undefined') return;
@@ -804,29 +833,37 @@ export const VideoBlock: React.FC<BlockContentProps> = ({ block }) => {
 };
 
 export const SubstackBlock: React.FC<BlockContentProps> = ({ block }) => {
-  const embedUrl = React.useMemo(() => {
-    try {
-      const url = new URL(block.data.url);
-      url.search = '';
-      if (url.pathname.includes('/p/')) {
-        return `${url.origin}${url.pathname}/embed`;
-      }
-      return `${url.origin}/embed`;
-    } catch {
-      return block.data.url;
-    }
-  }, [block.data.url]);
+  const embedUrl = React.useMemo(() => getSubstackEmbedUrl(block.data.url), [block.data.url]);
 
   return (
     <div className="w-full h-full bg-white rounded-md overflow-hidden shadow-sm pointer-events-auto border border-zinc-200">
-      <iframe
-        src={embedUrl}
-        width="100%"
-        height="100%"
-        frameBorder="0"
-        scrolling="no"
-        style={{ background: 'white' }}
-      />
+      {embedUrl ? (
+        <iframe
+          src={embedUrl}
+          width="100%"
+          height="100%"
+          title="Substack embed"
+          frameBorder="0"
+          scrolling="no"
+          sandbox="allow-scripts allow-same-origin allow-top-navigation allow-popups"
+          allow="clipboard-read; clipboard-write"
+          style={{ background: 'white' }}
+        />
+      ) : (
+        <div className="w-full h-full flex flex-col items-center justify-center gap-2 p-4 text-center text-zinc-500">
+          <span className="text-sm font-medium">Invalid Substack URL</span>
+          {block.data.url && (
+            <a
+              href={block.data.url}
+              target="_blank"
+              rel="noreferrer"
+              className="max-w-full truncate text-xs text-orange-600 underline"
+            >
+              {block.data.url}
+            </a>
+          )}
+        </div>
+      )}
     </div>
   );
 };
