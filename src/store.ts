@@ -211,6 +211,13 @@ const currentHistoryEntry = (state: Pick<BoardState, 'blocks' | 'drawings'>): Hi
 
 const recordsEqual = (first: unknown, second: unknown) => JSON.stringify(first) === JSON.stringify(second);
 
+const snapLinesEqual = (
+  first: { x?: number, y?: number }[],
+  second: { x?: number, y?: number }[],
+) => first.length === second.length && first.every((line, index) => (
+  line.x === second[index]?.x && line.y === second[index]?.y
+));
+
 const pushHistoryEntry = (history: BoardState['history'], entry: HistoryEntry) => ({
   past: [...history.past.slice(-MAX_HISTORY + 1), cloneHistoryEntry(entry)],
   future: [],
@@ -360,9 +367,17 @@ export const useBoardStore = create<BoardState>((set, get) => ({
   setSelection: (ids) => set({ selection: ids }),
   setDrawingSelection: (ids) => set({ drawingSelection: ids }),
 
-  setViewport: (viewportUpdates) => set((state) => ({
-    viewport: { ...state.viewport, ...viewportUpdates }
-  })),
+  setViewport: (viewportUpdates) => set((state) => {
+    const viewport = { ...state.viewport, ...viewportUpdates };
+    if (
+      viewport.x === state.viewport.x &&
+      viewport.y === state.viewport.y &&
+      viewport.zoom === state.viewport.zoom
+    ) {
+      return state;
+    }
+    return { viewport };
+  }),
 
   setSnapping: (snapping) => set((state) => {
     if (snapping) {
@@ -386,7 +401,10 @@ export const useBoardStore = create<BoardState>((set, get) => ({
   setMode: (mode) => set({ mode }),
   setIsSearchOpen: (isSearchOpen) => set({ isSearchOpen }),
   setIsPlusMenuOpen: (isPlusMenuOpen) => set({ isPlusMenuOpen }),
-  setMousePos: (x, y) => set({ mousePos: { x, y } }),
+  setMousePos: (x, y) => set((state) => {
+    if (state.mousePos.x === x && state.mousePos.y === y) return state;
+    return { mousePos: { x, y } };
+  }),
 
   setTool: (tool) => set({ tool }),
   setAnimationState: (animationState) => set({ animationState }),
@@ -398,7 +416,10 @@ export const useBoardStore = create<BoardState>((set, get) => ({
   setTextHue: (textHue) => set({ textHue }),
   setShapeType: (shapeType) => set({ shapeType }),
   setShapeHue: (shapeHue) => set({ shapeHue }),
-  setSnapLines: (snapLines) => set({ snapLines }),
+  setSnapLines: (snapLines) => set((state) => {
+    if (snapLinesEqual(state.snapLines, snapLines)) return state;
+    return { snapLines };
+  }),
   setIsDraggingGroup: (isDraggingGroup) => set({ isDraggingGroup }),
   setIsDuplicatingGroup: (isDuplicatingGroup) => set({ isDuplicatingGroup }),
   setActiveShape: (activeShape) => set({ activeShape }),

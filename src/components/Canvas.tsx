@@ -65,7 +65,7 @@ export const Canvas: React.FC<{ children: React.ReactNode }> = ({ children }) =>
   const lastDragPos = useRef({ x: 0, y: 0 });
   const shiftHeldRef = useRef(false);
   const viewportRef = useRef<Viewport>(viewport);
-  const viewportStoreTimeout = useRef<number | null>(null);
+  const viewportStoreFrame = useRef<number | null>(null);
 
   const captureCanvasPointer = (e: React.PointerEvent) => {
     const target = e.currentTarget;
@@ -106,12 +106,10 @@ export const Canvas: React.FC<{ children: React.ReactNode }> = ({ children }) =>
     myRaw.set(nextViewport.y);
     mZoomRaw.set(nextViewport.zoom);
 
-    if (viewportStoreTimeout.current !== null) {
-      window.clearTimeout(viewportStoreTimeout.current);
-    }
+    if (viewportStoreFrame.current !== null) return;
 
-    viewportStoreTimeout.current = window.setTimeout(() => {
-      viewportStoreTimeout.current = null;
+    viewportStoreFrame.current = window.requestAnimationFrame(() => {
+      viewportStoreFrame.current = null;
 
       const latestViewport = viewportRef.current;
       const storeViewport = useBoardStore.getState().viewport;
@@ -122,13 +120,13 @@ export const Canvas: React.FC<{ children: React.ReactNode }> = ({ children }) =>
       ) {
         useBoardStore.getState().setViewport(latestViewport);
       }
-    }, 120);
+    });
   }, [mZoomRaw, mxRaw, myRaw]);
 
   const flushViewport = useCallback(() => {
-    if (viewportStoreTimeout.current !== null) {
-      window.clearTimeout(viewportStoreTimeout.current);
-      viewportStoreTimeout.current = null;
+    if (viewportStoreFrame.current !== null) {
+      window.cancelAnimationFrame(viewportStoreFrame.current);
+      viewportStoreFrame.current = null;
     }
 
     const latestViewport = viewportRef.current;
@@ -159,8 +157,8 @@ export const Canvas: React.FC<{ children: React.ReactNode }> = ({ children }) =>
 
   useEffect(() => {
     return () => {
-      if (viewportStoreTimeout.current !== null) {
-        window.clearTimeout(viewportStoreTimeout.current);
+      if (viewportStoreFrame.current !== null) {
+        window.cancelAnimationFrame(viewportStoreFrame.current);
       }
     };
   }, []);
@@ -728,7 +726,6 @@ export const Canvas: React.FC<{ children: React.ReactNode }> = ({ children }) =>
             width: 0,
             height: 0,
             transform,
-            willChange: 'transform',
           }}
         >
           {children}
