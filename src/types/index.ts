@@ -29,6 +29,12 @@ export interface Viewport {
   zoom: number;
 }
 
+export const MIN_VIEWPORT_ZOOM = 0.1;
+export const MAX_VIEWPORT_ZOOM = 5;
+
+export const clampViewportZoom = (zoom: number) =>
+  Math.max(MIN_VIEWPORT_ZOOM, Math.min(MAX_VIEWPORT_ZOOM, zoom));
+
 declare global {
   interface Window {
     __handleAddBlock?: (type: BlockType, dataOverride?: BlockData) => void;

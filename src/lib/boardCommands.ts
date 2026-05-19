@@ -2,6 +2,7 @@ import { v4 as uuidv4 } from 'uuid';
 import { MAX_HISTORY, useBoardStore } from '../store';
 import { supabase } from './supabase';
 import { getSavedBoardId, markBoardDraftClean, markBoardImported, markBoardSaved, markBoardUnsaved } from './boardSession';
+import { clampViewportZoom } from '../types';
 import type { Block, DrawingPath, Viewport } from '../types';
 import type { BoardHistory } from '../store';
 
@@ -74,6 +75,14 @@ const normalizeHistory = (history: unknown): BoardHistory => {
   };
 };
 
+const normalizeViewport = (viewport?: Partial<Viewport>): Viewport => ({
+  x: typeof viewport?.x === 'number' ? viewport.x : 300,
+  y: typeof viewport?.y === 'number' ? viewport.y : 200,
+  zoom: clampViewportZoom(
+    typeof viewport?.zoom === 'number' ? viewport.zoom : DEFAULT_BOARD_VIEWPORT_ZOOM
+  ),
+});
+
 const snapshotSignature = (snapshot: BoardSnapshot) =>
   JSON.stringify({
     title: snapshot.title,
@@ -85,6 +94,7 @@ const snapshotSignature = (snapshot: BoardSnapshot) =>
 
 const withNormalizedHistory = (snapshot: BoardSnapshot): BoardSnapshot => ({
   ...snapshot,
+  viewport: normalizeViewport(snapshot.viewport),
   history: normalizeHistory(snapshot.history),
 });
 
@@ -213,11 +223,7 @@ const normalizeSnapshot = (value: unknown): BoardSnapshot => {
     title: typeof record.title === 'string' && record.title.trim() ? record.title : 'Imported Board',
     blocks: blocks as Record<string, Block>,
     drawings: Array.isArray(drawings) ? drawings as DrawingPath[] : [],
-    viewport: {
-      x: typeof viewport?.x === 'number' ? viewport.x : 300,
-      y: typeof viewport?.y === 'number' ? viewport.y : 200,
-      zoom: typeof viewport?.zoom === 'number' ? viewport.zoom : DEFAULT_BOARD_VIEWPORT_ZOOM,
-    },
+    viewport: normalizeViewport(viewport),
     history: normalizeHistory(record.history),
   };
 };
@@ -679,7 +685,7 @@ const loadBoardSnapshot = (snapshot: BoardSnapshot) => {
     selection: [],
     drawingSelection: [],
     canvasTitle: snapshot.title || 'Untitled Board',
-    viewport: snapshot.viewport || { x: 300, y: 200, zoom: DEFAULT_BOARD_VIEWPORT_ZOOM },
+    viewport: normalizeViewport(snapshot.viewport),
     history: normalizeHistory(snapshot.history),
   });
   saveRecentSnapshot(snapshot);

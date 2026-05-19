@@ -1,4 +1,5 @@
 import { create } from 'zustand';
+import { clampViewportZoom } from './types';
 import type { Block, Viewport, DrawingPath } from './types';
 import { v4 as uuidv4 } from 'uuid';
 import { indexBlock, removeBlockFromIndex, syncAllBlocks } from './lib/typesense';
@@ -368,7 +369,11 @@ export const useBoardStore = create<BoardState>((set, get) => ({
   setDrawingSelection: (ids) => set({ drawingSelection: ids }),
 
   setViewport: (viewportUpdates) => set((state) => {
-    const viewport = { ...state.viewport, ...viewportUpdates };
+    const viewport = {
+      ...state.viewport,
+      ...viewportUpdates,
+      zoom: clampViewportZoom(viewportUpdates.zoom ?? state.viewport.zoom),
+    };
     if (
       viewport.x === state.viewport.x &&
       viewport.y === state.viewport.y &&

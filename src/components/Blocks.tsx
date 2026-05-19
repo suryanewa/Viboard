@@ -321,6 +321,7 @@ export const StickyBlock: React.FC<BlockContentProps> = ({ block }) => {
   const textRef = useRef<HTMLParagraphElement>(null);
   const updateBlock = useBoardStore((state) => state.updateBlock);
   const commitBlockEdit = useBoardStore((state) => state.commitBlockEdit);
+  const [isEditing, setIsEditing] = useState(Boolean(block.data.autoFocus));
   const hasFocused = useRef(false);
   const editStartBlock = useRef<Block | null>(null);
   const stickyVerticalPadding = 48;
@@ -344,6 +345,7 @@ export const StickyBlock: React.FC<BlockContentProps> = ({ block }) => {
     if (el) ensureEditableLine(el);
     if (el && block.data.autoFocus && !hasFocused.current) {
       hasFocused.current = true;
+      setIsEditing(true);
       const data = { ...block.data };
       delete data.autoFocus;
       updateBlock(block.id, { data }, true);
@@ -378,6 +380,14 @@ export const StickyBlock: React.FC<BlockContentProps> = ({ block }) => {
     editStartBlock.current = structuredClone(block);
   };
 
+  const handleDoubleClick = (e: React.MouseEvent<HTMLParagraphElement>) => {
+    e.stopPropagation();
+    setIsEditing(true);
+    requestAnimationFrame(() => {
+      if (textRef.current) placeCaretAtEnd(textRef.current);
+    });
+  };
+
   const handleBlur = () => {
     if (textRef.current) {
       const nextText = getEditableText(textRef.current);
@@ -392,6 +402,7 @@ export const StickyBlock: React.FC<BlockContentProps> = ({ block }) => {
       ensureEditableLine(textRef.current);
     }
     editStartBlock.current = null;
+    setIsEditing(false);
     window.getSelection()?.removeAllRanges();
   };
 
@@ -413,9 +424,10 @@ export const StickyBlock: React.FC<BlockContentProps> = ({ block }) => {
       <p
         ref={setRef}
         className="w-full text-zinc-800 font-medium text-lg leading-relaxed outline-none whitespace-pre-wrap break-words"
-        contentEditable
+        contentEditable={isEditing}
         data-viboard-block-id={block.id}
         suppressContentEditableWarning
+        onDoubleClick={handleDoubleClick}
         onFocus={handleFocus}
         onKeyDown={handleKeyDown}
         onInput={handleInput}
@@ -437,7 +449,7 @@ export const TextBlock: React.FC<BlockContentProps> = ({ block }) => {
   const wrapRef = useRef<HTMLDivElement>(null);
   const updateBlock = useBoardStore((state) => state.updateBlock);
   const commitBlockEdit = useBoardStore((state) => state.commitBlockEdit);
-  const zoom = useBoardStore((state) => state.viewport.zoom);
+  const [isEditing, setIsEditing] = useState(Boolean(block.data.autoFocus));
   const hasFocused = useRef(false);
   const editStartBlock = useRef<Block | null>(null);
 
@@ -454,6 +466,7 @@ export const TextBlock: React.FC<BlockContentProps> = ({ block }) => {
     textRef.current = el;
     if (el && block.data.autoFocus && !hasFocused.current) {
       hasFocused.current = true;
+      setIsEditing(true);
       requestAnimationFrame(() => {
         placeCaretAtEnd(el);
         const data = { ...block.data };
@@ -489,7 +502,7 @@ export const TextBlock: React.FC<BlockContentProps> = ({ block }) => {
 
   useLayoutEffect(() => {
     syncShellHeight();
-  }, [syncShellHeight, block.width, fontSize, color, zoom, block.data.text]);
+  }, [syncShellHeight, block.width, fontSize, color, block.data.text]);
 
   const handleInput = () => {
     syncShellHeight();
@@ -501,6 +514,14 @@ export const TextBlock: React.FC<BlockContentProps> = ({ block }) => {
 
   const handleFocus = () => {
     editStartBlock.current = structuredClone(block);
+  };
+
+  const handleDoubleClick = (e: React.MouseEvent<HTMLParagraphElement>) => {
+    e.stopPropagation();
+    setIsEditing(true);
+    requestAnimationFrame(() => {
+      if (textRef.current) placeCaretAtEnd(textRef.current);
+    });
   };
 
   const handleBlur = () => {
@@ -521,6 +542,7 @@ export const TextBlock: React.FC<BlockContentProps> = ({ block }) => {
       }
     }
     editStartBlock.current = null;
+    setIsEditing(false);
     window.getSelection()?.removeAllRanges();
   };
 
@@ -540,9 +562,10 @@ export const TextBlock: React.FC<BlockContentProps> = ({ block }) => {
       <p
         ref={setRef}
         className="font-sans outline-none whitespace-pre-wrap break-words"
-        contentEditable
+        contentEditable={isEditing}
         data-viboard-block-id={block.id}
         suppressContentEditableWarning
+        onDoubleClick={handleDoubleClick}
         onFocus={handleFocus}
         onKeyDown={handleKeyDown}
         onInput={handleInput}

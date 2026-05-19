@@ -4,6 +4,7 @@ import { useBoardStore, VIBOARD_CLIPBOARD_MIME, VIBOARD_CLIPBOARD_TEXT } from '.
 import { v4 as uuidv4 } from 'uuid';
 import { getTextBlockHeight } from '../lib/textBlockMetrics';
 import { createUrlBlock } from '../lib/urlBlocks';
+import { clampViewportZoom } from '../types';
 import type { Viewport } from '../types';
 
 export const Canvas: React.FC<{ children: React.ReactNode }> = ({ children }) => {
@@ -66,6 +67,7 @@ export const Canvas: React.FC<{ children: React.ReactNode }> = ({ children }) =>
   const shiftHeldRef = useRef(false);
   const viewportRef = useRef<Viewport>(viewport);
   const viewportStoreFrame = useRef<number | null>(null);
+  const viewportStoreTimeout = useRef<number | null>(null);
 
   const captureCanvasPointer = (e: React.PointerEvent) => {
     const target = e.currentTarget;
@@ -100,35 +102,7 @@ export const Canvas: React.FC<{ children: React.ReactNode }> = ({ children }) =>
   const myRaw = useMotionValue(viewport.y);
   const mZoomRaw = useMotionValue(viewport.zoom);
 
-  const publishViewport = useCallback((nextViewport: Viewport) => {
-    viewportRef.current = nextViewport;
-    mxRaw.set(nextViewport.x);
-    myRaw.set(nextViewport.y);
-    mZoomRaw.set(nextViewport.zoom);
-
-    if (viewportStoreFrame.current !== null) return;
-
-    viewportStoreFrame.current = window.requestAnimationFrame(() => {
-      viewportStoreFrame.current = null;
-
-      const latestViewport = viewportRef.current;
-      const storeViewport = useBoardStore.getState().viewport;
-      if (
-        storeViewport.x !== latestViewport.x ||
-        storeViewport.y !== latestViewport.y ||
-        storeViewport.zoom !== latestViewport.zoom
-      ) {
-        useBoardStore.getState().setViewport(latestViewport);
-      }
-    });
-  }, [mZoomRaw, mxRaw, myRaw]);
-
-  const flushViewport = useCallback(() => {
-    if (viewportStoreFrame.current !== null) {
-      window.cancelAnimationFrame(viewportStoreFrame.current);
-      viewportStoreFrame.current = null;
-    }
-
+  const commitViewportToStore = useCallback(() => {
     const latestViewport = viewportRef.current;
     const storeViewport = useBoardStore.getState().viewport;
     if (
@@ -139,6 +113,52 @@ export const Canvas: React.FC<{ children: React.ReactNode }> = ({ children }) =>
       useBoardStore.getState().setViewport(latestViewport);
     }
   }, []);
+
+  const publishViewport = useCallback((nextViewport: Viewport, commitMode: 'frame' | 'idle' = 'frame') => {
+    viewportRef.current = nextViewport;
+    mxRaw.set(nextViewport.x);
+    myRaw.set(nextViewport.y);
+    mZoomRaw.set(nextViewport.zoom);
+
+    if (commitMode === 'idle') {
+      if (viewportStoreFrame.current !== null) {
+        window.cancelAnimationFrame(viewportStoreFrame.current);
+        viewportStoreFrame.current = null;
+      }
+      if (viewportStoreTimeout.current !== null) {
+        window.clearTimeout(viewportStoreTimeout.current);
+      }
+      viewportStoreTimeout.current = window.setTimeout(() => {
+        viewportStoreTimeout.current = null;
+        commitViewportToStore();
+      }, 80);
+      return;
+    }
+
+    if (viewportStoreTimeout.current !== null) {
+      window.clearTimeout(viewportStoreTimeout.current);
+      viewportStoreTimeout.current = null;
+    }
+    if (viewportStoreFrame.current !== null) return;
+
+    viewportStoreFrame.current = window.requestAnimationFrame(() => {
+      viewportStoreFrame.current = null;
+      commitViewportToStore();
+    });
+  }, [commitViewportToStore, mZoomRaw, mxRaw, myRaw]);
+
+  const flushViewport = useCallback(() => {
+    if (viewportStoreFrame.current !== null) {
+      window.cancelAnimationFrame(viewportStoreFrame.current);
+      viewportStoreFrame.current = null;
+    }
+    if (viewportStoreTimeout.current !== null) {
+      window.clearTimeout(viewportStoreTimeout.current);
+      viewportStoreTimeout.current = null;
+    }
+
+    commitViewportToStore();
+  }, [commitViewportToStore]);
 
   useEffect(() => {
     if (
@@ -159,6 +179,9 @@ export const Canvas: React.FC<{ children: React.ReactNode }> = ({ children }) =>
     return () => {
       if (viewportStoreFrame.current !== null) {
         window.cancelAnimationFrame(viewportStoreFrame.current);
+      }
+      if (viewportStoreTimeout.current !== null) {
+        window.clearTimeout(viewportStoreTimeout.current);
       }
     };
   }, []);
@@ -320,22 +343,21 @@ export const Canvas: React.FC<{ children: React.ReactNode }> = ({ children }) =>
       const currentViewport = viewportRef.current;
 
       if (e.ctrlKey || e.metaKey) {
-        const rect = container.getBoundingClientRect();
-        const cursorX = e.clientX - rect.left;
-        const cursorY = e.clientY - rect.top;
+        const cursorX = e.clientX;
+        const cursorY = e.clientY;
 
         let delta = e.deltaY;
         if (e.deltaMode === 1) delta *= 20;
         else if (e.deltaMode === 2) delta *= 50;
 
         const zoomFactor = Math.exp(-delta * 0.012);
-        const newZoom = Math.max(0.1, Math.min(20, currentViewport.zoom * zoomFactor));
+        const newZoom = clampViewportZoom(currentViewport.zoom * zoomFactor);
 
         const scaleRatio = newZoom / currentViewport.zoom;
         const newX = cursorX - (cursorX - currentViewport.x) * scaleRatio;
         const newY = cursorY - (cursorY - currentViewport.y) * scaleRatio;
 
-        publishViewport({ x: newX, y: newY, zoom: newZoom });
+        publishViewport({ x: newX, y: newY, zoom: newZoom }, 'idle');
       } else {
         publishViewport({
           x: currentViewport.x - e.deltaX,
@@ -353,6 +375,8 @@ export const Canvas: React.FC<{ children: React.ReactNode }> = ({ children }) =>
   }, [publishViewport]);
 
   const handlePointerDown = useCallback((e: React.PointerEvent) => {
+    flushViewport();
+
     if (e.button === 1 || e.button === 2 || tool === 'pan') {
       e.preventDefault();
       captureCanvasPointer(e);
@@ -502,7 +526,7 @@ export const Canvas: React.FC<{ children: React.ReactNode }> = ({ children }) =>
       useBoardStore.getState().setSelection([]);
       useBoardStore.getState().setDrawingSelection([]);
     }
-  }, [tool, markerType, markerColor, markerThickness, removeDrawings, setCurrentPath, setActiveShape, drawings, drawingSelection, setDrawingSelection, setSelection, addBlock]);
+  }, [tool, markerType, markerColor, markerThickness, removeDrawings, setCurrentPath, setActiveShape, drawings, drawingSelection, setDrawingSelection, setSelection, addBlock, flushViewport]);
 
   const PAN_SENSITIVITY = 2;
 
