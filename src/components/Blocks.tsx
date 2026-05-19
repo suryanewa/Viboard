@@ -2,7 +2,7 @@ import React, { useRef, useState, useEffect, useCallback, useLayoutEffect } from
 import type { Block, DrawingPath } from '../types';
 import { useBoardStore } from '../store';
 import clsx from 'clsx';
-import { ArrowUpRight } from 'lucide-react';
+import { ArrowBigUp, ArrowUpRight, BookOpen, MessageCircle } from 'lucide-react';
 import { getTextBlockHeight, getTextBlockLineHeight } from '../lib/textBlockMetrics';
 
 interface BlockContentProps {
@@ -17,6 +17,28 @@ type LinkMetadata = {
   author?: string;
   publisher?: string;
   date?: string;
+};
+
+type RedditPostData = {
+  title?: string;
+  body?: string;
+  subreddit?: string;
+  author?: string;
+  score?: number;
+  comments?: number;
+  createdAt?: number;
+  flair?: string;
+  image?: string;
+  permalink?: string;
+};
+
+type WikipediaSummaryData = {
+  title?: string;
+  extract?: string;
+  description?: string;
+  image?: string;
+  pageUrl?: string;
+  language?: string;
 };
 
 const getInstagramEmbedUrl = (rawUrl?: string) => {
@@ -63,6 +85,62 @@ const getSubstackEmbedUrl = (rawUrl?: string) => {
   } catch {
     return null;
   }
+};
+
+const getRedditJsonUrl = (rawUrl?: string) => {
+  if (!rawUrl) return null;
+
+  try {
+    const url = new URL(rawUrl);
+    const host = url.hostname.replace(/^www\./, '').replace(/^old\./, '');
+    if (host !== 'reddit.com') return null;
+
+    const pathname = url.pathname.replace(/\/$/, '');
+    if (!pathname.includes('/comments/')) return null;
+
+    return `https://www.reddit.com${pathname}.json?raw_json=1`;
+  } catch {
+    return null;
+  }
+};
+
+const getWikipediaSummaryUrl = (rawUrl?: string) => {
+  if (!rawUrl) return null;
+
+  try {
+    const url = new URL(rawUrl);
+    const hostParts = url.hostname.split('.');
+    const wikipediaIndex = hostParts.indexOf('wikipedia');
+    if (wikipediaIndex <= 0 || url.pathname.split('/').filter(Boolean)[0] !== 'wiki') return null;
+
+    const language = hostParts[wikipediaIndex - 1];
+    const title = url.pathname.split('/wiki/')[1];
+    if (!language || !title) return null;
+
+    return {
+      language,
+      url: `https://${language}.wikipedia.org/api/rest_v1/page/summary/${title}`,
+    };
+  } catch {
+    return null;
+  }
+};
+
+const formatCompactCount = (value?: number) => {
+  if (typeof value !== 'number') return '0';
+  return new Intl.NumberFormat('en-US', { notation: 'compact', maximumFractionDigits: 1 }).format(value);
+};
+
+const formatRelativeDate = (epochSeconds?: number) => {
+  if (!epochSeconds) return '';
+
+  const diffMs = Date.now() - epochSeconds * 1000;
+  const diffDays = Math.max(0, Math.floor(diffMs / 86400000));
+  if (diffDays === 0) return 'today';
+  if (diffDays === 1) return 'yesterday';
+  if (diffDays < 30) return `${diffDays}d ago`;
+  if (diffDays < 365) return `${Math.floor(diffDays / 30)}mo ago`;
+  return `${Math.floor(diffDays / 365)}y ago`;
 };
 
 const placeCaretAtEnd = (el: HTMLElement) => {
@@ -969,6 +1047,275 @@ export const CodepenBlock: React.FC<BlockContentProps> = ({ block }) => {
   );
 };
 
+export const RedditBlock: React.FC<BlockContentProps> = ({ block }) => {
+  const [post, setPost] = useState<RedditPostData | null>(block.data.redditPost || null);
+  const [isLoading, setIsLoading] = useState(!block.data.redditPost);
+  const [hasError, setHasError] = useState(false);
+  const updateBlock = useBoardStore((state) => state.updateBlock);
+
+  useEffect(() => {
+    if (block.data.redditPost) {
+      setPost(block.data.redditPost);
+      setIsLoading(false);
+      return;
+    }
+
+    const jsonUrl = getRedditJsonUrl(block.data.url);
+    if (!jsonUrl) {
+      setHasError(true);
+      setIsLoading(false);
+      return;
+    }
+
+    let isMounted = true;
+    const fetchPost = async () => {
+      setIsLoading(true);
+      setHasError(false);
+      try {
+        const res = await fetch(jsonUrl);
+        if (!res.ok) throw new Error('Reddit request failed');
+        const json = await res.json();
+        const data = json?.[0]?.data?.children?.[0]?.data;
+        if (!data) throw new Error('Reddit post missing');
+
+        const nextPost: RedditPostData = {
+          title: data.title,
+          body: data.selftext,
+          subreddit: data.subreddit_name_prefixed || (data.subreddit ? `r/${data.subreddit}` : undefined),
+          author: data.author,
+          score: data.score,
+          comments: data.num_comments,
+          createdAt: data.created_utc,
+          flair: data.link_flair_text,
+          image: data.preview?.images?.[0]?.source?.url || (data.post_hint === 'image' ? data.url : undefined),
+          permalink: data.permalink ? `https://www.reddit.com${data.permalink}` : block.data.url,
+        };
+
+        if (isMounted) {
+          setPost(nextPost);
+          updateBlock(block.id, { data: { ...block.data, redditPost: nextPost } }, true);
+        }
+      } catch {
+        if (isMounted) setHasError(true);
+      } finally {
+        if (isMounted) setIsLoading(false);
+      }
+    };
+
+    fetchPost();
+    return () => { isMounted = false; };
+  }, [block.data, block.id, updateBlock]);
+
+  const displayUrl = post?.permalink || block.data.url;
+  const bodyText = post?.body?.trim();
+
+  return (
+    <a
+      href={displayUrl}
+      target="_blank"
+      rel="noreferrer"
+      className="group w-full h-full bg-[#fff7f0] border border-[#ff6a1a]/25 rounded-[10px] overflow-hidden shadow-sm pointer-events-auto flex flex-col text-[#24110a]"
+    >
+      {isLoading ? (
+        <div className="flex-1 p-5 flex flex-col gap-4">
+          <div className="h-4 w-28 bg-[#ff6a1a]/20 rounded-full animate-pulse" />
+          <div className="space-y-2">
+            <div className="h-6 w-full bg-[#24110a]/10 rounded animate-pulse" />
+            <div className="h-6 w-4/5 bg-[#24110a]/10 rounded animate-pulse" />
+          </div>
+          <div className="mt-auto h-16 bg-white/60 rounded animate-pulse" />
+        </div>
+      ) : hasError ? (
+        <div className="flex-1 p-5 flex flex-col justify-between">
+          <div>
+            <div className="text-[11px] font-black uppercase tracking-[0.22em] text-[#ff4500]">Reddit</div>
+            <h3 className="mt-3 text-xl font-black leading-none">Could not load this thread</h3>
+          </div>
+          <span className="text-xs text-[#8a3212] truncate">{block.data.url}</span>
+        </div>
+      ) : (
+        <>
+          <div className="px-4 pt-4 pb-3 flex items-center justify-between gap-3">
+            <div className="min-w-0">
+              <div className="text-[11px] font-black uppercase tracking-[0.2em] text-[#ff4500] truncate">
+                {post?.subreddit || 'Reddit'}
+              </div>
+              <div className="mt-1 text-xs text-[#8a3212] truncate">
+                {post?.author ? `u/${post.author}` : 'Reddit thread'} {formatRelativeDate(post?.createdAt)}
+              </div>
+            </div>
+            {post?.flair && (
+              <span className="max-w-[42%] truncate rounded-full bg-[#ff4500] px-2 py-1 text-[10px] font-bold uppercase tracking-wide text-white">
+                {post.flair}
+              </span>
+            )}
+          </div>
+
+          <div className="px-4 flex-1 overflow-hidden">
+            <h3 className="text-[22px] font-black leading-[0.98] tracking-normal line-clamp-4">
+              {post?.title || 'Reddit thread'}
+            </h3>
+            {post?.image ? (
+              <div className="mt-3 h-28 rounded-md overflow-hidden border border-[#ff6a1a]/20 bg-white">
+                <img src={post.image} alt="" className="w-full h-full object-cover" />
+              </div>
+            ) : bodyText ? (
+              <p className="mt-3 text-sm leading-snug text-[#5a2815] line-clamp-6 whitespace-pre-line">
+                {bodyText}
+              </p>
+            ) : (
+              <div className="mt-4 border-l-4 border-[#ff4500] pl-3 text-sm font-semibold text-[#6f3218] line-clamp-4">
+                Open the thread to read the discussion and source context.
+              </div>
+            )}
+          </div>
+
+          <div className="mt-auto grid grid-cols-2 border-t border-[#ff6a1a]/20 bg-white/70">
+            <div className="flex items-center gap-2 px-4 py-3 text-sm font-black">
+              <ArrowBigUp className="w-4 h-4 text-[#ff4500]" />
+              {formatCompactCount(post?.score)}
+            </div>
+            <div className="flex items-center justify-end gap-2 px-4 py-3 text-sm font-black">
+              <MessageCircle className="w-4 h-4 text-[#ff4500]" />
+              {formatCompactCount(post?.comments)}
+            </div>
+          </div>
+        </>
+      )}
+    </a>
+  );
+};
+
+export const WikipediaBlock: React.FC<BlockContentProps> = ({ block }) => {
+  const [summary, setSummary] = useState<WikipediaSummaryData | null>(block.data.wikipediaSummary || null);
+  const [isLoading, setIsLoading] = useState(!block.data.wikipediaSummary);
+  const [hasError, setHasError] = useState(false);
+  const updateBlock = useBoardStore((state) => state.updateBlock);
+
+  useEffect(() => {
+    if (block.data.wikipediaSummary) {
+      setSummary(block.data.wikipediaSummary);
+      setIsLoading(false);
+      return;
+    }
+
+    const summaryTarget = getWikipediaSummaryUrl(block.data.url);
+    if (!summaryTarget) {
+      setHasError(true);
+      setIsLoading(false);
+      return;
+    }
+
+    let isMounted = true;
+    const fetchSummary = async () => {
+      setIsLoading(true);
+      setHasError(false);
+      try {
+        const res = await fetch(summaryTarget.url);
+        if (!res.ok) throw new Error('Wikipedia request failed');
+        const json = await res.json();
+        const nextSummary: WikipediaSummaryData = {
+          title: json.title,
+          extract: json.extract,
+          description: json.description,
+          image: json.thumbnail?.source,
+          pageUrl: json.content_urls?.desktop?.page || block.data.url,
+          language: summaryTarget.language,
+        };
+
+        if (isMounted) {
+          setSummary(nextSummary);
+          updateBlock(block.id, { data: { ...block.data, wikipediaSummary: nextSummary } }, true);
+        }
+      } catch {
+        if (isMounted) setHasError(true);
+      } finally {
+        if (isMounted) setIsLoading(false);
+      }
+    };
+
+    fetchSummary();
+    return () => { isMounted = false; };
+  }, [block.data, block.id, updateBlock]);
+
+  const displayUrl = summary?.pageUrl || block.data.url;
+
+  return (
+    <a
+      href={displayUrl}
+      target="_blank"
+      rel="noreferrer"
+      className="group relative w-full h-full bg-[#f8f7f2] border border-stone-300 rounded-[10px] overflow-hidden shadow-sm pointer-events-auto flex flex-col text-stone-950"
+    >
+      <div className="absolute inset-y-0 left-0 w-1.5 bg-stone-950" />
+      {summary?.image && (
+        <div className="absolute right-0 top-0 h-full w-[42%] opacity-15 group-hover:opacity-25 transition-opacity">
+          <img src={summary.image} alt="" className="w-full h-full object-cover grayscale" />
+        </div>
+      )}
+
+      {isLoading ? (
+        <div className="relative flex-1 p-5 pl-6 flex flex-col gap-4">
+          <div className="h-4 w-32 bg-stone-300 rounded-full animate-pulse" />
+          <div className="space-y-2">
+            <div className="h-7 w-4/5 bg-stone-300 rounded animate-pulse" />
+            <div className="h-7 w-2/3 bg-stone-300 rounded animate-pulse" />
+          </div>
+          <div className="space-y-2 mt-2">
+            <div className="h-3 w-full bg-stone-200 rounded animate-pulse" />
+            <div className="h-3 w-11/12 bg-stone-200 rounded animate-pulse" />
+            <div className="h-3 w-3/4 bg-stone-200 rounded animate-pulse" />
+          </div>
+        </div>
+      ) : hasError ? (
+        <div className="relative flex-1 p-5 pl-6 flex flex-col justify-between">
+          <div>
+            <div className="flex items-center gap-2 text-[11px] font-black uppercase tracking-[0.22em] text-stone-500">
+              <BookOpen className="w-3.5 h-3.5" />
+              Wikipedia
+            </div>
+            <h3 className="mt-4 text-2xl font-serif font-bold leading-none">Could not load this article</h3>
+          </div>
+          <span className="text-xs text-stone-500 truncate">{block.data.url}</span>
+        </div>
+      ) : (
+        <div className="relative flex-1 p-5 pl-6 flex flex-col min-h-0">
+          <div className="flex items-start justify-between gap-3">
+            <div className="min-w-0">
+              <div className="flex items-center gap-2 text-[11px] font-black uppercase tracking-[0.22em] text-stone-500">
+                <BookOpen className="w-3.5 h-3.5" />
+                Wikipedia
+              </div>
+              {summary?.description && (
+                <p className="mt-2 text-xs font-bold uppercase tracking-wide text-stone-500 line-clamp-1">
+                  {summary.description}
+                </p>
+              )}
+            </div>
+            {summary?.language && (
+              <span className="shrink-0 border border-stone-400 bg-[#f8f7f2] px-2 py-1 text-[10px] font-black uppercase">
+                {summary.language}
+              </span>
+            )}
+          </div>
+
+          <h3 className="mt-4 text-[28px] font-serif font-bold leading-[0.95] tracking-normal line-clamp-3">
+            {summary?.title || 'Wikipedia article'}
+          </h3>
+          <p className="mt-4 text-[14px] leading-snug text-stone-700 line-clamp-7">
+            {summary?.extract || 'Open the article to read the full encyclopedia entry.'}
+          </p>
+
+          <div className="mt-auto pt-4 flex items-center justify-between text-[11px] font-black uppercase tracking-[0.18em] text-stone-500">
+            <span>Read article</span>
+            <ArrowUpRight className="w-4 h-4" />
+          </div>
+        </div>
+      )}
+    </a>
+  );
+};
+
 export const SmartCardBlock: React.FC<BlockContentProps & { platform: string }> = ({ block, platform }) => {
   const [metadata, setMetadata] = useState<LinkMetadata | null>(null);
   const [isLoading, setIsLoading] = useState(!block.data.fetched);
@@ -1183,8 +1530,8 @@ export const BlockRenderer: React.FC<BlockContentProps> = ({ block }) => {
     case 'figma': return <FigmaBlock block={block} />;
     case 'codepen': return <CodepenBlock block={block} />;
     case 'github': return <SmartCardBlock block={block} platform="github" />;
-    case 'wikipedia': return <SmartCardBlock block={block} platform="wikipedia" />;
-    case 'reddit': return <SmartCardBlock block={block} platform="reddit" />;
+    case 'wikipedia': return <WikipediaBlock block={block} />;
+    case 'reddit': return <RedditBlock block={block} />;
     case 'arena': return <SmartCardBlock block={block} platform="are.na" />;
     case 'tiktok': return <TiktokBlock block={block} />;
     case 'pdf': return <PdfBlock block={block} />;
