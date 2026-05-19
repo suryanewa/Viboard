@@ -2,7 +2,7 @@ import React, { useRef, useState, useEffect, useCallback, useLayoutEffect } from
 import type { Block, DrawingPath } from '../types';
 import { useBoardStore } from '../store';
 import clsx from 'clsx';
-import { ArrowBigUp, ArrowUpRight, BookOpen, MessageCircle } from 'lucide-react';
+import { ArrowUpRight, BookOpen } from 'lucide-react';
 import { getTextBlockHeight, getTextBlockLineHeight } from '../lib/textBlockMetrics';
 
 interface BlockContentProps {
@@ -17,19 +17,6 @@ type LinkMetadata = {
   author?: string;
   publisher?: string;
   date?: string;
-};
-
-type RedditPostData = {
-  title?: string;
-  body?: string;
-  subreddit?: string;
-  author?: string;
-  score?: number;
-  comments?: number;
-  createdAt?: number;
-  flair?: string;
-  image?: string;
-  permalink?: string;
 };
 
 type WikipediaSummaryData = {
@@ -87,18 +74,16 @@ const getSubstackEmbedUrl = (rawUrl?: string) => {
   }
 };
 
-const getRedditJsonUrl = (rawUrl?: string) => {
+const getRedditEmbedUrl = (rawUrl?: string) => {
   if (!rawUrl) return null;
 
   try {
     const url = new URL(rawUrl);
-    const host = url.hostname.replace(/^www\./, '').replace(/^old\./, '');
-    if (host !== 'reddit.com') return null;
+    const host = url.hostname.replace(/^www\./, '').replace(/^old\./, '').replace(/^new\./, '');
+    if (host !== 'reddit.com' || !url.pathname.includes('/comments/')) return null;
 
-    const pathname = url.pathname.replace(/\/$/, '');
-    if (!pathname.includes('/comments/')) return null;
-
-    return `https://www.reddit.com${pathname}.json?raw_json=1`;
+    const permalink = new URL(url.pathname, 'https://www.reddit.com');
+    return `https://publish.reddit.com/embed?url=${encodeURIComponent(permalink.toString())}`;
   } catch {
     return null;
   }
@@ -124,23 +109,6 @@ const getWikipediaSummaryUrl = (rawUrl?: string) => {
   } catch {
     return null;
   }
-};
-
-const formatCompactCount = (value?: number) => {
-  if (typeof value !== 'number') return '0';
-  return new Intl.NumberFormat('en-US', { notation: 'compact', maximumFractionDigits: 1 }).format(value);
-};
-
-const formatRelativeDate = (epochSeconds?: number) => {
-  if (!epochSeconds) return '';
-
-  const diffMs = Date.now() - epochSeconds * 1000;
-  const diffDays = Math.max(0, Math.floor(diffMs / 86400000));
-  if (diffDays === 0) return 'today';
-  if (diffDays === 1) return 'yesterday';
-  if (diffDays < 30) return `${diffDays}d ago`;
-  if (diffDays < 365) return `${Math.floor(diffDays / 30)}mo ago`;
-  return `${Math.floor(diffDays / 365)}y ago`;
 };
 
 const placeCaretAtEnd = (el: HTMLElement) => {
@@ -1048,141 +1016,40 @@ export const CodepenBlock: React.FC<BlockContentProps> = ({ block }) => {
 };
 
 export const RedditBlock: React.FC<BlockContentProps> = ({ block }) => {
-  const [post, setPost] = useState<RedditPostData | null>(block.data.redditPost || null);
-  const [isLoading, setIsLoading] = useState(!block.data.redditPost);
-  const [hasError, setHasError] = useState(false);
-  const updateBlock = useBoardStore((state) => state.updateBlock);
-
-  useEffect(() => {
-    if (block.data.redditPost) {
-      setPost(block.data.redditPost);
-      setIsLoading(false);
-      return;
-    }
-
-    const jsonUrl = getRedditJsonUrl(block.data.url);
-    if (!jsonUrl) {
-      setHasError(true);
-      setIsLoading(false);
-      return;
-    }
-
-    let isMounted = true;
-    const fetchPost = async () => {
-      setIsLoading(true);
-      setHasError(false);
-      try {
-        const res = await fetch(jsonUrl);
-        if (!res.ok) throw new Error('Reddit request failed');
-        const json = await res.json();
-        const data = json?.[0]?.data?.children?.[0]?.data;
-        if (!data) throw new Error('Reddit post missing');
-
-        const nextPost: RedditPostData = {
-          title: data.title,
-          body: data.selftext,
-          subreddit: data.subreddit_name_prefixed || (data.subreddit ? `r/${data.subreddit}` : undefined),
-          author: data.author,
-          score: data.score,
-          comments: data.num_comments,
-          createdAt: data.created_utc,
-          flair: data.link_flair_text,
-          image: data.preview?.images?.[0]?.source?.url || (data.post_hint === 'image' ? data.url : undefined),
-          permalink: data.permalink ? `https://www.reddit.com${data.permalink}` : block.data.url,
-        };
-
-        if (isMounted) {
-          setPost(nextPost);
-          updateBlock(block.id, { data: { ...block.data, redditPost: nextPost } }, true);
-        }
-      } catch {
-        if (isMounted) setHasError(true);
-      } finally {
-        if (isMounted) setIsLoading(false);
-      }
-    };
-
-    fetchPost();
-    return () => { isMounted = false; };
-  }, [block.data, block.id, updateBlock]);
-
-  const displayUrl = post?.permalink || block.data.url;
-  const bodyText = post?.body?.trim();
+  const embedUrl = React.useMemo(() => getRedditEmbedUrl(block.data.url), [block.data.url]);
 
   return (
-    <a
-      href={displayUrl}
-      target="_blank"
-      rel="noreferrer"
-      className="group w-full h-full bg-[#fff7f0] border border-[#ff6a1a]/25 rounded-[10px] overflow-hidden shadow-sm pointer-events-auto flex flex-col text-[#24110a]"
-    >
-      {isLoading ? (
-        <div className="flex-1 p-5 flex flex-col gap-4">
-          <div className="h-4 w-28 bg-[#ff6a1a]/20 rounded-full animate-pulse" />
-          <div className="space-y-2">
-            <div className="h-6 w-full bg-[#24110a]/10 rounded animate-pulse" />
-            <div className="h-6 w-4/5 bg-[#24110a]/10 rounded animate-pulse" />
-          </div>
-          <div className="mt-auto h-16 bg-white/60 rounded animate-pulse" />
-        </div>
-      ) : hasError ? (
-        <div className="flex-1 p-5 flex flex-col justify-between">
-          <div>
-            <div className="text-[11px] font-black uppercase tracking-[0.22em] text-[#ff4500]">Reddit</div>
-            <h3 className="mt-3 text-xl font-black leading-none">Could not load this thread</h3>
-          </div>
-          <span className="text-xs text-[#8a3212] truncate">{block.data.url}</span>
-        </div>
+    <div className="w-full h-full bg-white rounded-[10px] overflow-hidden shadow-sm pointer-events-auto border border-[#ff4500]/25">
+      {embedUrl ? (
+        <iframe
+          src={embedUrl}
+          title="Reddit embed"
+          className="w-full h-full"
+          frameBorder="0"
+          scrolling="yes"
+          sandbox="allow-scripts allow-same-origin allow-popups allow-popups-to-escape-sandbox"
+        />
       ) : (
-        <>
-          <div className="px-4 pt-4 pb-3 flex items-center justify-between gap-3">
-            <div className="min-w-0">
-              <div className="text-[11px] font-black uppercase tracking-[0.2em] text-[#ff4500] truncate">
-                {post?.subreddit || 'Reddit'}
-              </div>
-              <div className="mt-1 text-xs text-[#8a3212] truncate">
-                {post?.author ? `u/${post.author}` : 'Reddit thread'} {formatRelativeDate(post?.createdAt)}
-              </div>
+        <div className="w-full h-full bg-[#fff7f0] p-5 flex flex-col justify-between text-[#24110a]">
+          <div>
+            <div className="text-[11px] font-black uppercase tracking-[0.22em] text-[#ff4500]">
+              Reddit
             </div>
-            {post?.flair && (
-              <span className="max-w-[42%] truncate rounded-full bg-[#ff4500] px-2 py-1 text-[10px] font-bold uppercase tracking-wide text-white">
-                {post.flair}
-              </span>
-            )}
+            <h3 className="mt-3 text-xl font-black leading-tight">Invalid Reddit URL</h3>
           </div>
-
-          <div className="px-4 flex-1 overflow-hidden">
-            <h3 className="text-[22px] font-black leading-[0.98] tracking-normal line-clamp-4">
-              {post?.title || 'Reddit thread'}
-            </h3>
-            {post?.image ? (
-              <div className="mt-3 h-28 rounded-md overflow-hidden border border-[#ff6a1a]/20 bg-white">
-                <img src={post.image} alt="" className="w-full h-full object-cover" />
-              </div>
-            ) : bodyText ? (
-              <p className="mt-3 text-sm leading-snug text-[#5a2815] line-clamp-6 whitespace-pre-line">
-                {bodyText}
-              </p>
-            ) : (
-              <div className="mt-4 border-l-4 border-[#ff4500] pl-3 text-sm font-semibold text-[#6f3218] line-clamp-4">
-                Open the thread to read the discussion and source context.
-              </div>
-            )}
-          </div>
-
-          <div className="mt-auto grid grid-cols-2 border-t border-[#ff6a1a]/20 bg-white/70">
-            <div className="flex items-center gap-2 px-4 py-3 text-sm font-black">
-              <ArrowBigUp className="w-4 h-4 text-[#ff4500]" />
-              {formatCompactCount(post?.score)}
-            </div>
-            <div className="flex items-center justify-end gap-2 px-4 py-3 text-sm font-black">
-              <MessageCircle className="w-4 h-4 text-[#ff4500]" />
-              {formatCompactCount(post?.comments)}
-            </div>
-          </div>
-        </>
+          {block.data.url && (
+            <a
+              href={block.data.url}
+              target="_blank"
+              rel="noreferrer"
+              className="truncate text-xs text-[#8a3212] underline"
+            >
+              {block.data.url}
+            </a>
+          )}
+        </div>
       )}
-    </a>
+    </div>
   );
 };
 
@@ -1239,6 +1106,7 @@ export const WikipediaBlock: React.FC<BlockContentProps> = ({ block }) => {
   }, [block.data, block.id, updateBlock]);
 
   const displayUrl = summary?.pageUrl || block.data.url;
+  const hasImage = Boolean(summary?.image);
 
   return (
     <a
@@ -1249,7 +1117,7 @@ export const WikipediaBlock: React.FC<BlockContentProps> = ({ block }) => {
     >
       <div className="absolute inset-y-0 left-0 w-1.5 bg-stone-950" />
       {summary?.image && (
-        <div className="absolute right-0 top-0 h-full w-[42%] opacity-15 group-hover:opacity-25 transition-opacity">
+        <div className="absolute right-0 top-0 h-full w-[40%] border-l border-stone-200 opacity-20 group-hover:opacity-30 transition-opacity">
           <img src={summary.image} alt="" className="w-full h-full object-cover grayscale" />
         </div>
       )}
@@ -1279,7 +1147,10 @@ export const WikipediaBlock: React.FC<BlockContentProps> = ({ block }) => {
           <span className="text-xs text-stone-500 truncate">{block.data.url}</span>
         </div>
       ) : (
-        <div className="relative flex-1 p-5 pl-6 flex flex-col min-h-0">
+        <div className={clsx(
+          "relative flex-1 p-5 pl-6 flex flex-col min-h-0",
+          hasImage ? "w-[60%]" : "w-full"
+        )}>
           <div className="flex items-start justify-between gap-3">
             <div className="min-w-0">
               <div className="flex items-center gap-2 text-[11px] font-black uppercase tracking-[0.22em] text-stone-500">
@@ -1299,10 +1170,10 @@ export const WikipediaBlock: React.FC<BlockContentProps> = ({ block }) => {
             )}
           </div>
 
-          <h3 className="mt-4 text-[28px] font-serif font-bold leading-[0.95] tracking-normal line-clamp-3">
+          <h3 className="mt-4 pb-1 text-[26px] font-serif font-bold leading-[1.12] tracking-normal line-clamp-3">
             {summary?.title || 'Wikipedia article'}
           </h3>
-          <p className="mt-4 text-[14px] leading-snug text-stone-700 line-clamp-7">
+          <p className="mt-3 text-[14px] leading-snug text-stone-700 line-clamp-6">
             {summary?.extract || 'Open the article to read the full encyclopedia entry.'}
           </p>
 
