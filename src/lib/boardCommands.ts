@@ -111,11 +111,15 @@ export const getBoardSnapshot = (): BoardSnapshot => {
   };
 };
 
-const boardContentPayloads = (snapshot: BoardSnapshot) => ({
-  snapshot,
-  data: snapshot,
-  content: snapshot,
-});
+const boardContentColumnPayloads = (snapshot: BoardSnapshot) =>
+  BOARD_CONTENT_COLUMNS.map((column) => ({ [column]: snapshot }));
+
+const errorMessage = (error: unknown) =>
+  error instanceof Error
+    ? error.message
+    : typeof error === 'object' && error && 'message' in error && typeof error.message === 'string'
+      ? error.message
+      : null;
 
 const isQuotaExceededError = (error: unknown) =>
   error instanceof DOMException &&
@@ -529,24 +533,15 @@ export const saveBoardToWeb = async (title: string, boardId?: string | null, sna
     title: snapshot.title,
     user_id: userId,
   };
-  const payloadWithContent = {
-    ...timestampedPayload,
-    ...boardContentPayloads(snapshot),
-  };
-
-  const savePayloads = [
-    { ...timestampedPayload, snapshot },
-    { ...basePayload, snapshot },
-    payloadWithContent,
-    { ...basePayload, ...boardContentPayloads(snapshot) },
-    timestampedPayload,
-    basePayload,
-  ];
+  const contentPayloads = boardContentColumnPayloads(snapshot).flatMap((contentPayload) => [
+    { ...timestampedPayload, ...contentPayload },
+    { ...basePayload, ...contentPayload },
+  ]);
   let data: { id: string } | null = null;
   const errors: unknown[] = [];
 
   const trySave = async (mode: 'update' | 'insert', options: { includeRouteId?: boolean } = {}) => {
-    for (const payload of savePayloads) {
+    for (const payload of contentPayloads) {
       const query = mode === 'update' && boardId
         ? supabase.from('moodboards').update(payload).eq('id', boardId).select('id').single()
         : supabase
@@ -564,11 +559,10 @@ export const saveBoardToWeb = async (title: string, boardId?: string | null, sna
 
   if (boardId) {
     await trySave('update');
-  }
-  if (!data) {
-    await trySave('insert', { includeRouteId: true });
-  }
-  if (!data) {
+    if (!data) {
+      await trySave('insert', { includeRouteId: true });
+    }
+  } else {
     await trySave('insert');
   }
 
@@ -576,16 +570,7 @@ export const saveBoardToWeb = async (title: string, boardId?: string | null, sna
   if (!savedBoard) {
     const lastError = errors[errors.length - 1];
     console.error('Error saving moodboard:', lastError);
-    if (snapshotOverride) {
-      throw lastError instanceof Error ? lastError : new Error('Could not autosave this board to Supabase.');
-    }
-    const fallbackId = boardId || crypto.randomUUID();
-    useBoardStore.setState({ canvasTitle: snapshot.title });
-    saveWebSnapshotCache(fallbackId, snapshot);
-    safeSetSnapshotStorage(AUTOSAVE_KEY, snapshot);
-    saveRecentSnapshot(snapshot);
-    markBoardSaved(fallbackId);
-    return fallbackId;
+    throw new Error(errorMessage(lastError) || 'Could not save this board content to Supabase.');
   }
 
   if (shouldApplySnapshotToStore) {
