@@ -1,9 +1,10 @@
 import React, { useRef, useEffect, useCallback, useState } from 'react';
-import { motion, useMotionValue, useTransform, useMotionTemplate, useSpring, AnimatePresence } from 'framer-motion';
-import { useBoardStore } from '../store';
+import { motion, useMotionValue, useTransform, useMotionTemplate, AnimatePresence } from 'framer-motion';
+import { useBoardStore, VIBOARD_CLIPBOARD_MIME, VIBOARD_CLIPBOARD_TEXT } from '../store';
 import { v4 as uuidv4 } from 'uuid';
 import { getTextBlockHeight } from '../lib/textBlockMetrics';
 import { createUrlBlock } from '../lib/urlBlocks';
+import type { Viewport } from '../types';
 
 export const Canvas: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const containerRef = useRef<HTMLButtonElement>(null);
@@ -63,6 +64,22 @@ export const Canvas: React.FC<{ children: React.ReactNode }> = ({ children }) =>
         : 'crosshair';
   const lastDragPos = useRef({ x: 0, y: 0 });
   const shiftHeldRef = useRef(false);
+  const viewportRef = useRef<Viewport>(viewport);
+  const viewportStoreFrame = useRef<number | null>(null);
+
+  const captureCanvasPointer = (e: React.PointerEvent) => {
+    const target = e.currentTarget;
+    if (!target.hasPointerCapture(e.pointerId)) {
+      target.setPointerCapture(e.pointerId);
+    }
+  };
+
+  const releaseCanvasPointer = (e: React.PointerEvent) => {
+    const target = e.currentTarget;
+    if (target.hasPointerCapture(e.pointerId)) {
+      target.releasePointerCapture(e.pointerId);
+    }
+  };
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -79,35 +96,77 @@ export const Canvas: React.FC<{ children: React.ReactNode }> = ({ children }) =>
     };
   }, []);
 
-  const springConfig = { damping: 30, stiffness: 300, mass: 0.5 };
-  
   const mxRaw = useMotionValue(viewport.x);
   const myRaw = useMotionValue(viewport.y);
   const mZoomRaw = useMotionValue(viewport.zoom);
 
-  const mx = useSpring(mxRaw, springConfig);
-  const my = useSpring(myRaw, springConfig);
-  const mZoom = useSpring(mZoomRaw, springConfig);
+  const publishViewport = useCallback((nextViewport: Viewport) => {
+    viewportRef.current = nextViewport;
+    mxRaw.set(nextViewport.x);
+    myRaw.set(nextViewport.y);
+    mZoomRaw.set(nextViewport.zoom);
+
+    if (viewportStoreFrame.current !== null) return;
+
+    viewportStoreFrame.current = window.requestAnimationFrame(() => {
+      viewportStoreFrame.current = null;
+
+      const latestViewport = viewportRef.current;
+      const storeViewport = useBoardStore.getState().viewport;
+      if (
+        storeViewport.x !== latestViewport.x ||
+        storeViewport.y !== latestViewport.y ||
+        storeViewport.zoom !== latestViewport.zoom
+      ) {
+        useBoardStore.getState().setViewport(latestViewport);
+      }
+    });
+  }, [mZoomRaw, mxRaw, myRaw]);
+
+  const flushViewport = useCallback(() => {
+    if (viewportStoreFrame.current !== null) {
+      window.cancelAnimationFrame(viewportStoreFrame.current);
+      viewportStoreFrame.current = null;
+    }
+
+    const latestViewport = viewportRef.current;
+    const storeViewport = useBoardStore.getState().viewport;
+    if (
+      storeViewport.x !== latestViewport.x ||
+      storeViewport.y !== latestViewport.y ||
+      storeViewport.zoom !== latestViewport.zoom
+    ) {
+      useBoardStore.getState().setViewport(latestViewport);
+    }
+  }, []);
 
   useEffect(() => {
-    if (isPanning.current) {
-      mx.set(viewport.x);
-      my.set(viewport.y);
-      mZoom.set(viewport.zoom);
-      mxRaw.set(viewport.x);
-      myRaw.set(viewport.y);
-      mZoomRaw.set(viewport.zoom);
-    } else {
-      mxRaw.set(viewport.x);
-      myRaw.set(viewport.y);
-      mZoomRaw.set(viewport.zoom);
+    if (
+      viewportRef.current.x === viewport.x &&
+      viewportRef.current.y === viewport.y &&
+      viewportRef.current.zoom === viewport.zoom
+    ) {
+      return;
     }
-  }, [viewport.x, viewport.y, viewport.zoom, mxRaw, myRaw, mZoomRaw, mx, my, mZoom]);
 
-  const bgSize = useTransform(mZoom, (z) => `${24 * z}px ${24 * z}px`);
-  const dotSize = useTransform(mZoom, (z) => `${24 * z}px ${24 * z}px`);
-  const bgPos = useMotionTemplate`${mx}px ${my}px`;
-  const transform = useMotionTemplate`translate(${mx}px, ${my}px) scale(${mZoom})`;
+    viewportRef.current = viewport;
+    mxRaw.set(viewport.x);
+    myRaw.set(viewport.y);
+    mZoomRaw.set(viewport.zoom);
+  }, [viewport, viewport.x, viewport.y, viewport.zoom, mxRaw, myRaw, mZoomRaw]);
+
+  useEffect(() => {
+    return () => {
+      if (viewportStoreFrame.current !== null) {
+        window.cancelAnimationFrame(viewportStoreFrame.current);
+      }
+    };
+  }, []);
+
+  const bgSize = useTransform(mZoomRaw, (z) => `${24 * z}px ${24 * z}px`);
+  const dotSize = useTransform(mZoomRaw, (z) => `${24 * z}px ${24 * z}px`);
+  const bgPos = useMotionTemplate`${mxRaw}px ${myRaw}px`;
+  const transform = useMotionTemplate`translate(${mxRaw}px, ${myRaw}px) scale(${mZoomRaw})`;
 
   useEffect(() => {
     const handlePaste = async (e: ClipboardEvent) => {
@@ -117,7 +176,7 @@ export const Canvas: React.FC<{ children: React.ReactNode }> = ({ children }) =>
       if (isInput) return;
 
       e.preventDefault();
-      const { viewport, mousePos, blocks, addBlock, setSelection } = useBoardStore.getState();
+      const { viewport, mousePos, blocks, addBlock, setSelection, paste } = useBoardStore.getState();
 
       const targetX = mousePos.x !== 0 || mousePos.y !== 0
         ? mousePos.x
@@ -127,6 +186,13 @@ export const Canvas: React.FC<{ children: React.ReactNode }> = ({ children }) =>
         : -viewport.y / viewport.zoom + window.innerHeight / 2 / viewport.zoom;
 
       const highestZ = Math.max(0, ...Object.values(blocks).map((b) => b.zIndex));
+      const clipboardTypes = Array.from(e.clipboardData?.types ?? []);
+      const text = e.clipboardData?.getData('text/plain');
+
+      if (clipboardTypes.includes(VIBOARD_CLIPBOARD_MIME) || text === VIBOARD_CLIPBOARD_TEXT) {
+        paste(targetX, targetY);
+        return;
+      }
 
       const files = e.clipboardData?.files;
       if (files && files.length > 0) {
@@ -148,7 +214,7 @@ export const Canvas: React.FC<{ children: React.ReactNode }> = ({ children }) =>
                 width: 240,
                 height: 240,
                 zIndex: highestZ + 1 + i,
-                data: { url: reader.result as string }
+                data: { url: reader.result as string, autoSizeOnLoad: true }
               });
               newSelection.push(id);
               if (newSelection.length === imageFiles.length) {
@@ -205,10 +271,11 @@ export const Canvas: React.FC<{ children: React.ReactNode }> = ({ children }) =>
           });
           return;
         }
+
+        return;
       }
 
-      const text = e.clipboardData?.getData('text/plain');
-      if (text) {
+      if (text?.trim()) {
         const lines = text.split('\n').filter(line => line.trim() !== '');
         const newSelection: string[] = [];
 
@@ -233,7 +300,10 @@ export const Canvas: React.FC<{ children: React.ReactNode }> = ({ children }) =>
           return;
         }
 
+        return;
       }
+
+      paste(targetX, targetY);
     };
 
     window.addEventListener('paste', handlePaste);
@@ -247,7 +317,7 @@ export const Canvas: React.FC<{ children: React.ReactNode }> = ({ children }) =>
     const handleWheel = (e: WheelEvent) => {
       e.preventDefault();
       
-      const { viewport: currentViewport, setViewport } = useBoardStore.getState();
+      const currentViewport = viewportRef.current;
 
       if (e.ctrlKey || e.metaKey) {
         const rect = container.getBoundingClientRect();
@@ -259,17 +329,18 @@ export const Canvas: React.FC<{ children: React.ReactNode }> = ({ children }) =>
         else if (e.deltaMode === 2) delta *= 50;
 
         const zoomFactor = Math.exp(-delta * 0.012);
-        const newZoom = Math.max(0, Math.min(20, currentViewport.zoom * zoomFactor));
+        const newZoom = Math.max(0.1, Math.min(20, currentViewport.zoom * zoomFactor));
 
         const scaleRatio = newZoom / currentViewport.zoom;
         const newX = cursorX - (cursorX - currentViewport.x) * scaleRatio;
         const newY = cursorY - (cursorY - currentViewport.y) * scaleRatio;
 
-        setViewport({ x: newX, y: newY, zoom: newZoom });
+        publishViewport({ x: newX, y: newY, zoom: newZoom });
       } else {
-        setViewport({
+        publishViewport({
           x: currentViewport.x - e.deltaX,
           y: currentViewport.y - e.deltaY,
+          zoom: currentViewport.zoom,
         });
       }
     };
@@ -279,11 +350,12 @@ export const Canvas: React.FC<{ children: React.ReactNode }> = ({ children }) =>
     return () => {
       container.removeEventListener('wheel', handleWheel);
     };
-  }, []);
+  }, [publishViewport]);
 
   const handlePointerDown = useCallback((e: React.PointerEvent) => {
     if (e.button === 1 || e.button === 2 || tool === 'pan') {
       e.preventDefault();
+      captureCanvasPointer(e);
       isPanning.current = true;
       setIsGrabbing(true);
       return;
@@ -317,6 +389,7 @@ export const Canvas: React.FC<{ children: React.ReactNode }> = ({ children }) =>
 
     if (tool === 'marker') {
       if (markerType === 'eraser') {
+        captureCanvasPointer(e);
         isErasing.current = true;
         const drawingsToRemove = drawings
           .filter(d => d.points.some(p => 
@@ -331,6 +404,7 @@ export const Canvas: React.FC<{ children: React.ReactNode }> = ({ children }) =>
         return;
       }
       
+      captureCanvasPointer(e);
       isDrawing.current = true;
       const startPoint = { x: canvasX, y: canvasY };
       setCurrentPath({
@@ -344,6 +418,7 @@ export const Canvas: React.FC<{ children: React.ReactNode }> = ({ children }) =>
     }
 
     if (tool === 'frame') {
+      captureCanvasPointer(e);
       isCreatingFrame.current = true;
       setActiveFrame({
         x1: canvasX,
@@ -356,6 +431,7 @@ export const Canvas: React.FC<{ children: React.ReactNode }> = ({ children }) =>
 
     if (tool === 'shape') {
       const { shapeType } = useBoardStore.getState();
+      captureCanvasPointer(e);
       isCreatingShape.current = true;
       setActiveShape({
         type: shapeType,
@@ -404,6 +480,7 @@ export const Canvas: React.FC<{ children: React.ReactNode }> = ({ children }) =>
           setSelection([]);
         }
         useBoardStore.getState().pushHistory();
+        captureCanvasPointer(e);
         isDraggingDrawing.current = true;
         lastDragPos.current = { x: canvasX, y: canvasY };
       }
@@ -413,6 +490,7 @@ export const Canvas: React.FC<{ children: React.ReactNode }> = ({ children }) =>
     if (e.target !== containerRef.current) return;
 
     isMarquee.current = true;
+    captureCanvasPointer(e);
     setMarquee({ x1: canvasX, y1: canvasY, x2: canvasX, y2: canvasY });
     
     if (e.shiftKey || shiftHeldRef.current) {
@@ -429,7 +507,7 @@ export const Canvas: React.FC<{ children: React.ReactNode }> = ({ children }) =>
   const PAN_SENSITIVITY = 2;
 
   const handlePointerMove = useCallback((e: React.PointerEvent) => {
-    const { viewport: currentViewport, setViewport } = useBoardStore.getState();
+    const currentViewport = viewportRef.current;
     const rect = containerRef.current!.getBoundingClientRect();
     const canvasX = (e.clientX - rect.left - currentViewport.x) / currentViewport.zoom;
     const canvasY = (e.clientY - rect.top - currentViewport.y) / currentViewport.zoom;
@@ -437,9 +515,10 @@ export const Canvas: React.FC<{ children: React.ReactNode }> = ({ children }) =>
     setMousePos(canvasX, canvasY);
 
     if (isPanning.current) {
-      setViewport({
+      publishViewport({
         x: currentViewport.x + e.movementX * PAN_SENSITIVITY,
         y: currentViewport.y + e.movementY * PAN_SENSITIVITY,
+        zoom: currentViewport.zoom,
       });
     } else if (isCreatingFrame.current && activeFrame) {
       setActiveFrame({
@@ -513,11 +592,14 @@ export const Canvas: React.FC<{ children: React.ReactNode }> = ({ children }) =>
         useBoardStore.getState().setDrawingSelection(selectedDrawingIds);
       }
     }
-  }, [marquee, blocks, drawings, setMousePos, currentPath, setCurrentPath, drawingSelection, updateDrawings, activeShape, setActiveShape, markerThickness, activeFrame]);
+  }, [marquee, blocks, drawings, setMousePos, currentPath, setCurrentPath, drawingSelection, updateDrawings, activeShape, setActiveShape, markerThickness, activeFrame, publishViewport]);
 
-  const handlePointerUp = useCallback(() => {
+  const handlePointerUp = useCallback((e: React.PointerEvent) => {
+    releaseCanvasPointer(e);
+
     if (isPanning.current) {
       isPanning.current = false;
+      flushViewport();
       setIsGrabbing(false);
     }
     if (isDraggingDrawing.current) {
@@ -586,7 +668,7 @@ export const Canvas: React.FC<{ children: React.ReactNode }> = ({ children }) =>
 
       setActiveShape(null);
     }
-  }, [currentPath, activeShape, activeFrame, addDrawing, addBlock, blocks, setCurrentPath, setActiveShape]);
+  }, [currentPath, activeShape, activeFrame, addDrawing, addBlock, blocks, setCurrentPath, setActiveShape, flushViewport]);
 
   return (
     <main className="absolute inset-0 w-full h-full overflow-hidden touch-none pointer-events-none">
@@ -628,7 +710,7 @@ export const Canvas: React.FC<{ children: React.ReactNode }> = ({ children }) =>
               style={{
                 backgroundImage: `radial-gradient(circle, var(--grid-color) 2px, transparent 2px)`,
                 backgroundSize: dotSize,
-                backgroundPosition: `${mx}px ${my}px`,
+                backgroundPosition: bgPos,
               }}
             />
           )}

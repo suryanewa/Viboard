@@ -72,7 +72,7 @@ export const createUrlBlock = ({
   if (isTiktok) return block('tiktok', 328, 560, { url: trimmed });
   if (isVideoFile) return block('video', 480, 270, { url: trimmed });
   if (isPdfFile) return block('pdf', 600, 800, { url: trimmed });
-  if (isImageFile) return block('image', 240, 240, { url: trimmed });
+  if (isImageFile) return block('image', 240, 240, { url: trimmed, autoSizeOnLoad: true });
 
   if (isSpotify || isSoundCloud || isAppleMusic || isAudioFile) {
     const platform = isSpotify

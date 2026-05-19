@@ -268,7 +268,7 @@ export const Toolbar: React.FC = () => {
       newBlock.height = 240;
       newBlock.data = { url: dataOverride.url || '', title: dataOverride.title || '', description: dataOverride.description || '' };
     } else if (type === 'image') {
-      newBlock.data = { url: dataOverride.url || 'https://images.unsplash.com/photo-1579546929518-9e396f3cc809' };
+      newBlock.data = { url: dataOverride.url || 'https://images.unsplash.com/photo-1579546929518-9e396f3cc809', autoSizeOnLoad: true };
       newBlock.width = 240;
       newBlock.height = 240;
     }

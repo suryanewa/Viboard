@@ -4,6 +4,30 @@ import { v4 as uuidv4 } from 'uuid';
 import { indexBlock, removeBlockFromIndex, syncAllBlocks } from './lib/typesense';
 
 type HistoryEntry = { blocks: Record<string, Block>; drawings: DrawingPath[] };
+export const VIBOARD_CLIPBOARD_MIME = 'web application/x-viboard-blocks';
+const VIBOARD_CLIPBOARD_BLOB_MIME = 'application/x-viboard-blocks';
+export const VIBOARD_CLIPBOARD_TEXT = 'Viboard canvas selection';
+
+const writeBlocksToSystemClipboard = async (blocks: Block[]) => {
+  if (!navigator.clipboard) return;
+
+  const payload = JSON.stringify({ blocks });
+  if (navigator.clipboard.write && typeof ClipboardItem !== 'undefined') {
+    try {
+      await navigator.clipboard.write([
+        new ClipboardItem({
+          [VIBOARD_CLIPBOARD_MIME]: new Blob([payload], { type: VIBOARD_CLIPBOARD_BLOB_MIME }),
+          'text/plain': new Blob([VIBOARD_CLIPBOARD_TEXT], { type: 'text/plain' }),
+        }),
+      ]);
+      return;
+    } catch (error) {
+      console.warn('Could not write custom Viboard clipboard data:', error);
+    }
+  }
+
+  await navigator.clipboard.writeText(VIBOARD_CLIPBOARD_TEXT);
+};
 
 const createDefaultBrutalistImageBlocks = (): Record<string, Block> => {
   const blocks: Record<string, Block> = {};
@@ -518,7 +542,11 @@ export const useBoardStore = create<BoardState>((set, get) => ({
     const { blocks, selection } = get();
     const selectedBlocks = selection.map(id => blocks[id]).filter(Boolean);
     if (selectedBlocks.length > 0) {
-      set({ clipboard: JSON.parse(JSON.stringify(selectedBlocks)) });
+      const nextClipboard = JSON.parse(JSON.stringify(selectedBlocks));
+      set({ clipboard: nextClipboard });
+      void writeBlocksToSystemClipboard(nextClipboard).catch((error) => {
+        console.warn('Could not write Viboard selection to system clipboard:', error);
+      });
     }
   },
 
@@ -526,15 +554,19 @@ export const useBoardStore = create<BoardState>((set, get) => ({
     const { blocks, selection, history } = get();
     const selectedBlocks = selection.map(id => blocks[id]).filter(Boolean);
     if (selectedBlocks.length > 0) {
+      const nextClipboard = JSON.parse(JSON.stringify(selectedBlocks));
       const newBlocks = { ...blocks };
       selection.forEach(id => {
         delete newBlocks[id];
       });
       set({ 
-        clipboard: JSON.parse(JSON.stringify(selectedBlocks)),
+        clipboard: nextClipboard,
         blocks: newBlocks,
         selection: [],
         history: pushHistoryEntry(history, currentHistoryEntry(get()))
+      });
+      void writeBlocksToSystemClipboard(nextClipboard).catch((error) => {
+        console.warn('Could not write Viboard selection to system clipboard:', error);
       });
     }
   },

@@ -365,7 +365,7 @@ export const newBoard = () => {
 };
 
 export const loadDefaultBoard = () => {
-  const snapshot = defaultBoardSnapshot();
+  const snapshot = safeParseJson<BoardSnapshot | null>(localStorage.getItem(AUTOSAVE_KEY), null) ?? defaultBoardSnapshot();
   useBoardStore.setState({
     blocks: snapshot.blocks,
     drawings: snapshot.drawings,
@@ -590,30 +590,49 @@ export const setCurrentLoadingBoardId = (id: string | null) => {
   currentLoadingBoardId = id;
 };
 
-export const loadBoardFromWeb = async (boardId: string) => {
+export const loadBoardFromWeb = async (boardId: string, onSnapshotApplied?: () => void) => {
   const cached = localStorage.getItem(`viboard:web:${boardId}`);
-  const { data, error } = await supabase.from('moodboards').select('*').eq('id', boardId).single();
-  
-  if (currentLoadingBoardId !== boardId) return;
+  const cachedSnapshot = cached ? safeParseJson<BoardSnapshot | null>(cached, null) : null;
+  const cachedSignature = cachedSnapshot ? JSON.stringify(cachedSnapshot) : null;
 
-  if (error && cached) {
-    loadBoardSnapshot(safeParseJson<BoardSnapshot>(cached, blankSnapshotForRow(null)));
-    return;
-  }
-  if (error) throw error;
-  const snapshot = parseSnapshot(data as Record<string, unknown>);
-  if (snapshot) {
-    loadBoardSnapshot(snapshot);
-    saveWebSnapshotCache(boardId, snapshot);
+  const fetchAndApplyRemoteSnapshot = async () => {
+    const { data, error } = await supabase.from('moodboards').select('*').eq('id', boardId).single();
+    
+    if (currentLoadingBoardId !== boardId) return;
+
+    if (error && cachedSnapshot) return;
+    if (error) throw error;
+
+    const snapshot = parseSnapshot(data as Record<string, unknown>);
+    if (snapshot) {
+      if (cachedSignature && JSON.stringify(getSnapshot()) !== cachedSignature) {
+        return;
+      }
+      loadBoardSnapshot(snapshot);
+      onSnapshotApplied?.();
+      saveWebSnapshotCache(boardId, snapshot);
+      markBoardSaved(boardId);
+      return;
+    }
+    if (cachedSnapshot) {
+      markBoardSaved(boardId);
+      return;
+    }
+    loadBoardSnapshot(blankSnapshotForRow(data as Record<string, unknown>));
+    onSnapshotApplied?.();
     markBoardSaved(boardId);
-    return;
-  }
-  if (cached) {
-    loadBoardSnapshot(safeParseJson<BoardSnapshot>(cached, blankSnapshotForRow(data as Record<string, unknown>)));
+  };
+
+  if (cachedSnapshot) {
+    loadBoardSnapshot(cachedSnapshot);
     markBoardSaved(boardId);
+    void fetchAndApplyRemoteSnapshot().catch((error) => {
+      console.error('Error refreshing cached moodboard:', error);
+    });
     return;
   }
-  loadBoardSnapshot(blankSnapshotForRow(data as Record<string, unknown>));
+
+  await fetchAndApplyRemoteSnapshot();
   markBoardSaved(boardId);
 };
 

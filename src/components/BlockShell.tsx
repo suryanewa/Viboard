@@ -122,6 +122,7 @@ const getGroupedIds = (block: Block, blocks: Record<string, Block>) => {
 };
 
 const INTERACTIVE_EMBED_TYPES = new Set<Block['type']>([
+  'instagram',
   'x',
   'youtube',
   'video',
@@ -133,6 +134,32 @@ const INTERACTIVE_EMBED_TYPES = new Set<Block['type']>([
   'tiktok',
   'pdf',
 ]);
+
+const UNIFORM_SCALE_TYPES = new Set<Block['type']>([
+  'link',
+  'audio',
+  'instagram',
+  'x',
+  'youtube',
+  'video',
+  'substack',
+  'medium',
+  'figma',
+  'arena',
+  'github',
+  'wikipedia',
+  'codepen',
+  'reddit',
+  'tiktok',
+  'pdf',
+]);
+
+const withoutImageAutoSizeOnLoad = (block: Block): Block['data'] | undefined => {
+  if (block.type !== 'image' || block.data.autoSizeOnLoad !== true) return undefined;
+  const data = { ...block.data };
+  delete data.autoSizeOnLoad;
+  return data;
+};
 
 interface ResizeHandleProps {
   direction: string;
@@ -185,7 +212,7 @@ export const BlockShell: React.FC<BlockShellProps> = ({ block, children }) => {
     selection.length > 0 &&
     selection.every((id) => blocks[id]?.type === 'text') &&
     selection.includes(block.id);
-  const showEmbedDragShield = isSelected && tool === 'select' && INTERACTIVE_EMBED_TYPES.has(block.type);
+  const showEmbedDragShield = tool === 'select' && INTERACTIVE_EMBED_TYPES.has(block.type);
   const skipPlacementAnimation = block.type === 'shape' || block.data.skipPlacementAnimation;
   
   const clickPoint = useRef({ x: 0, y: 0, edge: 'top' });
@@ -820,7 +847,8 @@ export const BlockShell: React.FC<BlockShellProps> = ({ block, children }) => {
       scaleY = Math.abs(denom) > 0.01 ? (currentHandleY - originY) / denom : 1;
     }
 
-    if (e.shiftKey || block.type === 'audio') {
+    const shouldScaleUniformly = selectedBlocks.length > 0 && selectedBlocks.every((selectedBlock) => UNIFORM_SCALE_TYPES.has(selectedBlock.type));
+    if (e.shiftKey || shouldScaleUniformly) {
       const dominantScale = Math.abs(scaleX - 1) > Math.abs(scaleY - 1) ? scaleX : scaleY;
       scaleX = dominantScale;
       scaleY = dominantScale;
@@ -840,8 +868,15 @@ export const BlockShell: React.FC<BlockShellProps> = ({ block, children }) => {
       if (b.height > 0) minScaleY = Math.max(minScaleY, Math.min(1, 10 / b.height));
     });
 
-    scaleX = Math.max(minScaleX, scaleX);
-    scaleY = Math.max(minScaleY, scaleY);
+    if (shouldScaleUniformly) {
+      const minUniformScale = Math.max(minScaleX, minScaleY);
+      const nextScale = Math.max(minUniformScale, scaleX);
+      scaleX = nextScale;
+      scaleY = nextScale;
+    } else {
+      scaleX = Math.max(minScaleX, scaleX);
+      scaleY = Math.max(minScaleY, scaleY);
+    }
 
     const updates = selectedBlocks.map(b => {
       const bx = originX + (b.x - originX) * scaleX;
@@ -849,7 +884,8 @@ export const BlockShell: React.FC<BlockShellProps> = ({ block, children }) => {
       const bw = Math.max(10, b.width * scaleX);
       const bh = Math.max(10, b.height * scaleY);
 
-      return { id: b.id, updates: { x: bx, y: by, width: bw, height: bh } };
+      const data = withoutImageAutoSizeOnLoad(b);
+      return { id: b.id, updates: { x: bx, y: by, width: bw, height: bh, ...(data ? { data } : {}) } };
     });
 
     const draggedUpdate = updates.find((update) => update.id === block.id)?.updates;

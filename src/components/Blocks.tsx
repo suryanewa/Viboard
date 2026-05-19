@@ -28,6 +28,75 @@ type WikipediaSummaryData = {
   language?: string;
 };
 
+const useScaledEmbedFrame = (block: Block, embedWidth: number, embedHeight: number) => {
+  const containerRef = useRef<HTMLDivElement>(null);
+  const [containerSize, setContainerSize] = useState({ width: block.width, height: block.height });
+  const containerWidth = Math.max(1, containerSize.width);
+  const containerHeight = Math.max(1, containerSize.height);
+  const scale = Math.min(containerWidth / embedWidth, containerHeight / embedHeight);
+  const scaledWidth = embedWidth * scale;
+  const scaledHeight = embedHeight * scale;
+
+  useLayoutEffect(() => {
+    const container = containerRef.current;
+    if (!container) return;
+
+    const observer = new ResizeObserver(([entry]) => {
+      const { width, height } = entry.contentRect;
+      setContainerSize({ width, height });
+    });
+
+    observer.observe(container);
+    return () => observer.disconnect();
+  }, []);
+
+  return {
+    containerRef,
+    iframeStyle: {
+      width: embedWidth,
+      height: embedHeight,
+      left: (containerWidth - scaledWidth) / 2,
+      top: (containerHeight - scaledHeight) / 2,
+      transform: `scale(${scale})`,
+      transformOrigin: 'top left',
+    } satisfies React.CSSProperties,
+  };
+};
+
+type ScaledEmbedFrameProps = React.HTMLAttributes<HTMLDivElement> & {
+  block: Block;
+  nativeWidth: number;
+  nativeHeight: number;
+  className: string;
+  frameClassName?: string;
+  frameStyle?: React.CSSProperties;
+  children: React.ReactNode;
+};
+
+const ScaledEmbedFrame = ({
+  block,
+  nativeWidth,
+  nativeHeight,
+  className,
+  frameClassName,
+  frameStyle,
+  children,
+  ...props
+}: ScaledEmbedFrameProps) => {
+  const { containerRef, iframeStyle } = useScaledEmbedFrame(block, nativeWidth, nativeHeight);
+
+  return (
+    <div ref={containerRef} className={clsx('relative w-full h-full overflow-hidden', className)} {...props}>
+      <div
+        className={clsx('absolute', frameClassName)}
+        style={{ ...iframeStyle, ...frameStyle }}
+      >
+        {children}
+      </div>
+    </div>
+  );
+};
+
 const getInstagramEmbedUrl = (rawUrl?: string) => {
   if (!rawUrl) return null;
 
@@ -569,13 +638,22 @@ export const ImageBlock: React.FC<BlockContentProps> = ({ block }) => {
   const handleImageLoad = useCallback((e: React.SyntheticEvent<HTMLImageElement>) => {
     const img = e.currentTarget;
     if (!img.naturalWidth || !img.naturalHeight) return;
+    if (block.data.autoSizeOnLoad !== true) return;
     
     const newDims = calculateNativeRatioDimensions(img.naturalWidth, img.naturalHeight);
+    const data = {
+      ...block.data,
+      autoSizeOnLoad: false,
+      naturalWidth: img.naturalWidth,
+      naturalHeight: img.naturalHeight,
+    };
     
     if (block.width !== newDims.width || block.height !== newDims.height) {
-      updateBlock(block.id, { width: newDims.width, height: newDims.height }, true);
+      updateBlock(block.id, { width: newDims.width, height: newDims.height, data }, true);
+      return;
     }
-  }, [block.id, block.width, block.height, updateBlock, calculateNativeRatioDimensions]);
+    updateBlock(block.id, { data }, true);
+  }, [block.data, block.id, block.width, block.height, updateBlock, calculateNativeRatioDimensions]);
 
   return (
     <div className="w-full h-full flex items-center justify-center overflow-hidden">
@@ -631,7 +709,13 @@ export const LinkBlock: React.FC<BlockContentProps> = ({ block }) => {
   }, [block.data.url]);
 
   return (
-    <div className="w-full h-full flex flex-col border border-zinc-200 overflow-hidden pointer-events-none">
+    <ScaledEmbedFrame
+      block={block}
+      nativeWidth={480}
+      nativeHeight={240}
+      className="pointer-events-none"
+      frameClassName="flex flex-col border border-zinc-200 overflow-hidden"
+    >
       <div className="h-10 bg-zinc-50 border-b border-zinc-200 flex items-center justify-center px-3 relative flex-shrink-0">
         <div className="absolute left-3 flex gap-1.5">
           <div className="w-2.5 h-2.5 rounded-full bg-[#ff5f56] border border-[#e0443e]/50" />
@@ -672,7 +756,7 @@ export const LinkBlock: React.FC<BlockContentProps> = ({ block }) => {
           </div>
         )}
       </div>
-    </div>
+    </ScaledEmbedFrame>
   );
 };
 
@@ -712,7 +796,13 @@ export const AudioBlock: React.FC<BlockContentProps> = ({ block }) => {
     'bg-red-500';
 
   return (
-    <div className="relative w-full h-full flex items-center bg-transparent">
+    <ScaledEmbedFrame
+      block={block}
+      nativeWidth={240}
+      nativeHeight={240}
+      className="overflow-visible"
+      frameClassName="flex items-center bg-transparent"
+    >
       {/* Spinning Vinyl Record */}
       <div 
         className={clsx(
@@ -769,10 +859,10 @@ export const AudioBlock: React.FC<BlockContentProps> = ({ block }) => {
              ) : (
                <div className="w-0 h-0 border-t-[10px] border-t-transparent border-l-[16px] border-l-white border-b-[10px] border-b-transparent ml-1" />
              )}
-           </div>
+          </div>
         </div>
       </div>
-    </div>
+    </ScaledEmbedFrame>
   );
 };
 
@@ -783,8 +873,12 @@ export const XBlock: React.FC<BlockContentProps> = ({ block }) => {
   const tweetId = match ? match[1] : null;
 
   return (
-    <div 
-      className="w-full h-full bg-[#0a0a0a] rounded-[16px] overflow-hidden shadow-2xl"
+    <ScaledEmbedFrame
+      block={block}
+      nativeWidth={320}
+      nativeHeight={480}
+      className="bg-[#0a0a0a] rounded-[16px] shadow-2xl"
+      frameClassName="bg-[#0a0a0a]"
       data-theme="dark"
     >
       {tweetId ? (
@@ -796,7 +890,7 @@ export const XBlock: React.FC<BlockContentProps> = ({ block }) => {
           Invalid Tweet URL
         </div>
       )}
-    </div>
+    </ScaledEmbedFrame>
   );
 };
 
@@ -804,12 +898,17 @@ export const InstagramBlock: React.FC<BlockContentProps> = ({ block }) => {
   const embedUrl = getInstagramEmbedUrl(block.data.url);
 
   return (
-    <div className="w-full h-full bg-white rounded-md overflow-hidden shadow-sm pointer-events-auto border border-zinc-200">
+    <ScaledEmbedFrame
+      block={block}
+      nativeWidth={328}
+      nativeHeight={480}
+      className="bg-white rounded-md shadow-sm pointer-events-auto border border-zinc-200"
+    >
       {embedUrl ? (
         <iframe
           src={embedUrl}
           title="Instagram embed"
-          className="w-full h-full"
+          className="w-full h-full border-0"
           frameBorder="0"
           scrolling="no"
           allowTransparency={true}
@@ -830,7 +929,7 @@ export const InstagramBlock: React.FC<BlockContentProps> = ({ block }) => {
           )}
         </div>
       )}
-    </div>
+    </ScaledEmbedFrame>
   );
 };
 
@@ -838,11 +937,15 @@ export const YoutubeBlock: React.FC<BlockContentProps> = ({ block }) => {
   const videoId = block.data.videoId;
 
   return (
-    <div className="w-full h-full bg-black rounded-md overflow-hidden shadow-sm pointer-events-auto border border-zinc-800">
+    <ScaledEmbedFrame
+      block={block}
+      nativeWidth={480}
+      nativeHeight={270}
+      className="bg-black rounded-md shadow-sm pointer-events-auto border border-zinc-800"
+    >
       {videoId ? (
         <iframe
-          width="100%"
-          height="100%"
+          className="w-full h-full border-0"
           src={`https://www.youtube.com/embed/${videoId}`}
           title="YouTube video player"
           frameBorder="0"
@@ -854,13 +957,19 @@ export const YoutubeBlock: React.FC<BlockContentProps> = ({ block }) => {
           Invalid YouTube URL
         </div>
       )}
-    </div>
+    </ScaledEmbedFrame>
   );
 };
 
 export const VideoBlock: React.FC<BlockContentProps> = ({ block }) => {
   return (
-    <div className="w-full h-full bg-black rounded-md overflow-hidden shadow-sm pointer-events-auto border border-zinc-800 flex items-center justify-center">
+    <ScaledEmbedFrame
+      block={block}
+      nativeWidth={480}
+      nativeHeight={270}
+      className="bg-black rounded-md shadow-sm pointer-events-auto border border-zinc-800"
+      frameClassName="flex items-center justify-center bg-black"
+    >
       {block.data.url ? (
         <video
           src={block.data.url}
@@ -871,7 +980,7 @@ export const VideoBlock: React.FC<BlockContentProps> = ({ block }) => {
       ) : (
         <div className="text-zinc-500">No Video</div>
       )}
-    </div>
+    </ScaledEmbedFrame>
   );
 };
 
@@ -879,12 +988,16 @@ export const SubstackBlock: React.FC<BlockContentProps> = ({ block }) => {
   const embedUrl = React.useMemo(() => getSubstackEmbedUrl(block.data.url), [block.data.url]);
 
   return (
-    <div className="w-full h-full bg-white rounded-md overflow-hidden shadow-sm pointer-events-auto border border-zinc-200">
+    <ScaledEmbedFrame
+      block={block}
+      nativeWidth={400}
+      nativeHeight={480}
+      className="bg-white rounded-md shadow-sm pointer-events-auto border border-zinc-200"
+    >
       {embedUrl ? (
         <iframe
           src={embedUrl}
-          width="100%"
-          height="100%"
+          className="w-full h-full border-0"
           title="Substack embed"
           frameBorder="0"
           scrolling="no"
@@ -907,7 +1020,7 @@ export const SubstackBlock: React.FC<BlockContentProps> = ({ block }) => {
           )}
         </div>
       )}
-    </div>
+    </ScaledEmbedFrame>
   );
 };
 
@@ -951,7 +1064,13 @@ export const MediumBlock: React.FC<BlockContentProps> = ({ block }) => {
   }, [block.data, block.id, updateBlock]);
 
   return (
-    <div className="w-full h-full bg-white border border-zinc-200 rounded-[12px] overflow-hidden font-sans flex flex-col shadow-sm">
+    <ScaledEmbedFrame
+      block={block}
+      nativeWidth={320}
+      nativeHeight={360}
+      className="bg-white border border-zinc-200 rounded-[12px] shadow-sm"
+      frameClassName="bg-white font-sans flex flex-col"
+    >
       {isLoading ? (
         <div className="flex-1 flex items-center justify-center bg-zinc-50">
           <div className="w-6 h-6 border-2 border-zinc-200 border-t-zinc-800 rounded-full animate-spin" />
@@ -979,36 +1098,44 @@ export const MediumBlock: React.FC<BlockContentProps> = ({ block }) => {
           </div>
         </>
       )}
-    </div>
+    </ScaledEmbedFrame>
   );
 };
 
 export const FigmaBlock: React.FC<BlockContentProps> = ({ block }) => {
   return (
-    <div className="w-full h-full bg-zinc-900 rounded-md overflow-hidden shadow-sm pointer-events-auto border border-zinc-800">
+    <ScaledEmbedFrame
+      block={block}
+      nativeWidth={640}
+      nativeHeight={360}
+      className="bg-zinc-900 rounded-md shadow-sm pointer-events-auto border border-zinc-800"
+    >
       <iframe
-        width="100%"
-        height="100%"
+        className="w-full h-full border-0"
         src={`https://www.figma.com/embed?embed_host=share&url=${encodeURIComponent(block.data.url)}`}
         allowFullScreen
       />
-    </div>
+    </ScaledEmbedFrame>
   );
 };
 
 export const CodepenBlock: React.FC<BlockContentProps> = ({ block }) => {
   const embedUrl = block.data.url.replace('/pen/', '/embed/');
   return (
-    <div className="w-full h-full bg-zinc-900 rounded-md overflow-hidden shadow-sm pointer-events-auto border border-zinc-800">
+    <ScaledEmbedFrame
+      block={block}
+      nativeWidth={600}
+      nativeHeight={400}
+      className="bg-zinc-900 rounded-md shadow-sm pointer-events-auto border border-zinc-800"
+    >
       <iframe
-        width="100%"
-        height="100%"
+        className="w-full h-full border-0"
         src={`${embedUrl}?default-tab=result&theme-id=dark`}
         frameBorder="no"
         allowTransparency={true}
         allowFullScreen
       />
-    </div>
+    </ScaledEmbedFrame>
   );
 };
 
@@ -1045,7 +1172,12 @@ export const RedditBlock: React.FC<BlockContentProps> = ({ block }) => {
   }, [permalink]);
 
   return (
-    <div className="w-full h-full bg-white rounded-[10px] overflow-hidden shadow-sm pointer-events-auto border border-[#ff4500]/25">
+    <ScaledEmbedFrame
+      block={block}
+      nativeWidth={400}
+      nativeHeight={300}
+      className="bg-white rounded-[10px] shadow-sm pointer-events-auto border border-[#ff4500]/25"
+    >
       {permalink ? (
         <div
           ref={embedRef}
@@ -1071,7 +1203,7 @@ export const RedditBlock: React.FC<BlockContentProps> = ({ block }) => {
           )}
         </div>
       )}
-    </div>
+    </ScaledEmbedFrame>
   );
 };
 
@@ -1131,11 +1263,17 @@ export const WikipediaBlock: React.FC<BlockContentProps> = ({ block }) => {
   const hasImage = Boolean(summary?.image);
 
   return (
+    <ScaledEmbedFrame
+      block={block}
+      nativeWidth={400}
+      nativeHeight={240}
+      className="bg-[#f8f7f2] border border-stone-300 rounded-[10px] shadow-sm pointer-events-auto"
+    >
     <a
       href={displayUrl}
       target="_blank"
       rel="noreferrer"
-      className="group relative w-full h-full bg-[#f8f7f2] border border-stone-300 rounded-[10px] overflow-hidden shadow-sm pointer-events-auto flex flex-col text-stone-950"
+      className="group relative w-full h-full bg-[#f8f7f2] overflow-hidden flex flex-col text-stone-950"
     >
       <div className="absolute inset-y-0 left-0 w-1.5 bg-stone-950" />
       {summary?.image && (
@@ -1210,6 +1348,7 @@ export const WikipediaBlock: React.FC<BlockContentProps> = ({ block }) => {
         </div>
       )}
     </a>
+    </ScaledEmbedFrame>
   );
 };
 
@@ -1252,12 +1391,25 @@ export const SmartCardBlock: React.FC<BlockContentProps & { platform: string }> 
   }, [block.data, block.id, updateBlock]);
 
   const isDark = platform === 'github' || platform === 'codepen' || platform === 'reddit';
+  const nativeFrame =
+    platform === 'github' ? { width: 400, height: 200 } :
+    platform === 'are.na' ? { width: 400, height: 400 } :
+    { width: 400, height: 240 };
   
   return (
-    <div className={clsx(
-      "w-full h-full border rounded-[12px] overflow-hidden font-sans flex flex-col shadow-sm",
-      isDark ? "bg-zinc-900 border-zinc-800 text-zinc-100" : "bg-white border-zinc-200 text-zinc-900"
-    )}>
+    <ScaledEmbedFrame
+      block={block}
+      nativeWidth={nativeFrame.width}
+      nativeHeight={nativeFrame.height}
+      className={clsx(
+        "rounded-[12px] shadow-sm",
+        isDark ? "bg-zinc-900 border border-zinc-800" : "bg-white border border-zinc-200"
+      )}
+      frameClassName={clsx(
+        "font-sans flex flex-col border rounded-[12px] overflow-hidden shadow-sm",
+        isDark ? "bg-zinc-900 border-zinc-800 text-zinc-100" : "bg-white border-zinc-200 text-zinc-900"
+      )}
+    >
       {isLoading ? (
         <div className="flex-1 flex items-center justify-center">
           <div className={clsx("w-6 h-6 border-2 rounded-full animate-spin", isDark ? "border-zinc-800 border-t-zinc-400" : "border-zinc-200 border-t-zinc-800")} />
@@ -1285,20 +1437,22 @@ export const SmartCardBlock: React.FC<BlockContentProps & { platform: string }> 
           </div>
         </>
       )}
-    </div>
+    </ScaledEmbedFrame>
   );
 };
 
 export const TiktokBlock: React.FC<BlockContentProps> = ({ block }) => {
   const match = block.data.url.match(/video\/(\d+)/);
   const videoId = match ? match[1] : null;
+  const { containerRef, iframeStyle } = useScaledEmbedFrame(block, 328, 560);
 
   return (
-    <div className="w-full h-full bg-black rounded-md overflow-hidden shadow-sm pointer-events-auto border border-zinc-800">
+    <div ref={containerRef} className="relative w-full h-full bg-black rounded-md overflow-hidden shadow-sm pointer-events-auto border border-zinc-800">
       {videoId ? (
         <iframe
           src={`https://www.tiktok.com/embed/v2/${videoId}`}
-          className="w-full h-full"
+          className="absolute border-0"
+          style={iframeStyle}
           frameBorder="0"
           allow="encrypted-media;"
           allowFullScreen
@@ -1313,23 +1467,27 @@ export const TiktokBlock: React.FC<BlockContentProps> = ({ block }) => {
 };
 
 export const PdfBlock: React.FC<BlockContentProps> = ({ block }) => {
+  const { containerRef, iframeStyle } = useScaledEmbedFrame(block, 600, 800);
+
   return (
-    <div className="w-full h-full bg-zinc-100 rounded-md overflow-hidden shadow-sm pointer-events-auto border border-zinc-200 flex flex-col">
-      <div className="h-8 bg-zinc-800 border-b border-zinc-900 flex items-center px-3 flex-shrink-0">
-        <div className="flex gap-1.5">
-          <div className="w-2.5 h-2.5 rounded-full bg-[#ff5f56] border border-[#e0443e]/50" />
-          <div className="w-2.5 h-2.5 rounded-full bg-[#ffbd2e] border border-[#dea123]/50" />
-          <div className="w-2.5 h-2.5 rounded-full bg-[#27c93f] border border-[#1aab29]/50" />
+    <div ref={containerRef} className="relative w-full h-full bg-zinc-100 rounded-md overflow-hidden shadow-sm pointer-events-auto border border-zinc-200">
+      <div className="absolute flex flex-col bg-zinc-100" style={iframeStyle}>
+        <div className="h-8 bg-zinc-800 border-b border-zinc-900 flex items-center px-3 flex-shrink-0">
+          <div className="flex gap-1.5">
+            <div className="w-2.5 h-2.5 rounded-full bg-[#ff5f56] border border-[#e0443e]/50" />
+            <div className="w-2.5 h-2.5 rounded-full bg-[#ffbd2e] border border-[#dea123]/50" />
+            <div className="w-2.5 h-2.5 rounded-full bg-[#27c93f] border border-[#1aab29]/50" />
+          </div>
+          <div className="ml-3 text-xs font-medium text-zinc-400 truncate">
+            PDF Document
+          </div>
         </div>
-        <div className="ml-3 text-xs font-medium text-zinc-400 truncate">
-          PDF Document
-        </div>
+        <iframe
+          src={`${block.data.url}#toolbar=0&navpanes=0`}
+          className="w-full flex-1 border-0"
+          frameBorder="0"
+        />
       </div>
-      <iframe
-        src={`${block.data.url}#toolbar=0&navpanes=0`}
-        className="w-full flex-1"
-        frameBorder="0"
-      />
     </div>
   );
 };

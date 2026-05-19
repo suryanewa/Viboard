@@ -39,6 +39,7 @@ function Board() {
   const autosaveReadyRef = useRef(false);
   const lastSavedSignatureRef = useRef('');
   const autosaveTimerRef = useRef<number | null>(null);
+  const searchSyncTimerRef = useRef<number | null>(null);
   const importedSnapshotBoardIdRef = useRef<string | null>(null);
 
   useEffect(() => {
@@ -80,12 +81,16 @@ function Board() {
 
     let cancelled = false;
 
-    void loadBoardFromWeb(boardId)
+    const markLoadedSnapshotClean = () => {
+      lastSavedSignatureRef.current = boardSignature();
+      markBoardClean();
+    };
+
+    void loadBoardFromWeb(boardId, markLoadedSnapshotClean)
       .then(() => {
         if (cancelled) return;
-        lastSavedSignatureRef.current = boardSignature();
+        markLoadedSnapshotClean();
         autosaveReadyRef.current = true;
-        markBoardClean();
       })
       .catch((error) => {
         if (cancelled) return;
@@ -106,6 +111,14 @@ function Board() {
 
     markBoardDirty();
     const savedBoardId = getSavedBoardId();
+    const signatureAtLocalSave = signature;
+    const savedLocally = saveBoard();
+    if (savedLocally && boardSignature() === signatureAtLocalSave) {
+      lastSavedSignatureRef.current = signatureAtLocalSave;
+      markBoardClean();
+    }
+
+    if (!savedBoardId || savedBoardId !== params.id) return;
 
     if (autosaveTimerRef.current !== null) {
       window.clearTimeout(autosaveTimerRef.current);
@@ -113,15 +126,6 @@ function Board() {
 
     autosaveTimerRef.current = window.setTimeout(() => {
       const signatureAtSave = boardSignature();
-      if (!savedBoardId || savedBoardId !== params.id) {
-        saveBoard();
-        if (boardSignature() === signatureAtSave) {
-          lastSavedSignatureRef.current = signatureAtSave;
-        }
-        autosaveTimerRef.current = null;
-        return;
-      }
-
       void saveBoardToWeb(useBoardStore.getState().canvasTitle, savedBoardId)
         .then(() => {
           if (boardSignature() === signatureAtSave) {
@@ -156,11 +160,25 @@ function Board() {
   }, []);
 
   useEffect(() => {
-    const syncInitialBlocks = async () => {
-      await initializeCollection();
-      syncAllBlocks(blocks);
+    void initializeCollection();
+  }, []);
+
+  useEffect(() => {
+    if (searchSyncTimerRef.current !== null) {
+      window.clearTimeout(searchSyncTimerRef.current);
+    }
+
+    searchSyncTimerRef.current = window.setTimeout(() => {
+      syncAllBlocks(useBoardStore.getState().blocks);
+      searchSyncTimerRef.current = null;
+    }, 150);
+
+    return () => {
+      if (searchSyncTimerRef.current !== null) {
+        window.clearTimeout(searchSyncTimerRef.current);
+        searchSyncTimerRef.current = null;
+      }
     };
-    syncInitialBlocks();
   }, [blocks]);
 
   useEffect(() => {
