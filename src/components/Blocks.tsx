@@ -489,7 +489,9 @@ export const StickyBlock: React.FC<BlockContentProps> = ({ block }) => {
           textDecoration: [block.data.underline ? 'underline' : '', block.data.strikethrough ? 'line-through' : ''].filter(Boolean).join(' ') || undefined,
           textAlign: block.data.textAlign ?? 'center',
         }}
-      />
+      >
+        {isEditing ? null : block.data.text}
+      </p>
     </div>
   );
 };
@@ -679,7 +681,9 @@ export const TextBlock: React.FC<BlockContentProps> = ({ block }) => {
           textDecoration: [block.data.underline ? 'underline' : '', block.data.strikethrough ? 'line-through' : ''].filter(Boolean).join(' ') || undefined,
           textAlign: block.data.textAlign || undefined,
         }}
-      />
+      >
+        {isEditing ? null : block.data.text}
+      </p>
     </div>
   );
 };
