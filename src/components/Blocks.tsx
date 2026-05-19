@@ -390,6 +390,8 @@ export const StickyBlock: React.FC<BlockContentProps> = ({ block }) => {
   }, [beginEditing, block.id]);
 
   useLayoutEffect(() => {
+    if (!isEditing && !block.data.autoFocus) return;
+
     const el = textRef.current;
     if (!el) return;
     if (document.activeElement !== el) {
@@ -400,7 +402,7 @@ export const StickyBlock: React.FC<BlockContentProps> = ({ block }) => {
       }
     }
     syncStickyHeight(true);
-  }, [block.data.text, block.id, block.width, syncStickyHeight]);
+  }, [block.data.text, block.id, block.width, block.data.autoFocus, isEditing, syncStickyHeight]);
 
   const handleInput = (e: React.FormEvent<HTMLParagraphElement>) => {
     const el = e.currentTarget;
@@ -568,6 +570,8 @@ export const TextBlock: React.FC<BlockContentProps> = ({ block }) => {
   }, [block.id, block.height, minShellHeight, updateBlock]);
 
   useLayoutEffect(() => {
+    if (!isEditing && !block.data.autoFocus) return;
+
     const el = textRef.current;
     if (!el) return;
     if (document.activeElement !== el) {
@@ -576,11 +580,12 @@ export const TextBlock: React.FC<BlockContentProps> = ({ block }) => {
         el.textContent = t;
       }
     }
-  }, [block.data.text, block.id]);
+  }, [block.data.text, block.id, block.data.autoFocus, isEditing]);
 
   useLayoutEffect(() => {
+    if (!isEditing && !block.data.autoFocus) return;
     syncShellHeight();
-  }, [syncShellHeight, block.width, fontSize, color, block.data.text]);
+  }, [syncShellHeight, block.width, fontSize, color, block.data.text, block.data.autoFocus, isEditing]);
 
   const handleInput = () => {
     syncShellHeight();

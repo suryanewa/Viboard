@@ -4,6 +4,7 @@ import { useBoardStore, VIBOARD_CLIPBOARD_MIME, VIBOARD_CLIPBOARD_TEXT } from '.
 import { v4 as uuidv4 } from 'uuid';
 import { getTextBlockHeight } from '../lib/textBlockMetrics';
 import { createUrlBlock } from '../lib/urlBlocks';
+import { fileToBoardImageDataUrl } from '../lib/imageData';
 import { clampViewportZoom } from '../types';
 import type { Viewport } from '../types';
 
@@ -226,8 +227,7 @@ export const Canvas: React.FC<{ children: React.ReactNode }> = ({ children }) =>
         if (imageFiles.length > 0) {
           const newSelection: string[] = [];
           imageFiles.forEach((file, i) => {
-            const reader = new FileReader();
-            reader.onload = () => {
+            void fileToBoardImageDataUrl(file).then((url) => {
               const id = uuidv4();
               addBlock({
                 id,
@@ -237,14 +237,15 @@ export const Canvas: React.FC<{ children: React.ReactNode }> = ({ children }) =>
                 width: 240,
                 height: 240,
                 zIndex: highestZ + 1 + i,
-                data: { url: reader.result as string, autoSizeOnLoad: true }
+                data: { url, autoSizeOnLoad: true }
               });
               newSelection.push(id);
               if (newSelection.length === imageFiles.length) {
                 setSelection(newSelection);
               }
-            };
-            reader.readAsDataURL(file);
+            }).catch((error) => {
+              console.error('Could not process pasted image:', error);
+            });
           });
           return;
         }

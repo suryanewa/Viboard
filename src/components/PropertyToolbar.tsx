@@ -3,6 +3,7 @@ import { useBoardStore } from '../store';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Pencil, Highlighter, Eraser, Circle, Square, Triangle, Upload, CornerDownLeft, Minus, Plus } from 'lucide-react';
 import clsx from 'clsx';
+import { fileToBoardImageDataUrl } from '../lib/imageData';
 
 import { ColorSlider } from './ColorSlider';
 import { ThicknessSlider } from './ThicknessSlider';
@@ -182,14 +183,15 @@ export const PropertyToolbar: React.FC = () => {
     const file = e.target.files?.[0];
     if (!file) return;
 
-    const reader = new FileReader();
-    reader.onload = (event) => {
-      const url = event.target?.result as string;
-      if (window.__handleAddBlock) {
-        window.__handleAddBlock('image', { url });
-      }
-    };
-    reader.readAsDataURL(file);
+    void fileToBoardImageDataUrl(file)
+      .then((url) => {
+        if (window.__handleAddBlock) {
+          window.__handleAddBlock('image', { url });
+        }
+      })
+      .catch((error) => {
+        console.error('Could not process uploaded image:', error);
+      });
   };
 
   return (

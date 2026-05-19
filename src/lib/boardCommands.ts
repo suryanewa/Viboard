@@ -199,6 +199,19 @@ const safeSetSnapshotStorage = (key: string, snapshot: BoardSnapshot) => {
   return safeSetLocalStorage(key, JSON.stringify(snapshot));
 };
 
+const readSnapshotStorage = (key: string): BoardSnapshot | null => {
+  const raw = localStorage.getItem(key);
+  if (!raw) return null;
+
+  if (raw.length > MAX_BROWSER_SNAPSHOT_CHARS) {
+    localStorage.removeItem(key);
+    console.warn(`Ignoring oversized browser cache entry for ${key}.`);
+    return null;
+  }
+
+  return safeParseJson<BoardSnapshot | null>(raw, null);
+};
+
 const centeredViewportForBlock = (block: Block): Viewport => {
   if (typeof window === 'undefined') {
     return { x: 300, y: 200, zoom: DEFAULT_BOARD_VIEWPORT_ZOOM };
@@ -433,7 +446,7 @@ export const newBoard = () => {
 };
 
 export const loadDefaultBoard = () => {
-  const snapshot = safeParseJson<BoardSnapshot | null>(localStorage.getItem(AUTOSAVE_KEY), null) ?? defaultBoardSnapshot();
+  const snapshot = readSnapshotStorage(AUTOSAVE_KEY) ?? defaultBoardSnapshot();
   useBoardStore.setState({
     blocks: snapshot.blocks,
     drawings: snapshot.drawings,

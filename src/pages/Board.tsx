@@ -20,15 +20,12 @@ import {
 import { initializeCollection, syncAllBlocks } from '../lib/typesense';
 import { AnimatePresence, motion } from 'framer-motion';
 import { UploadCloud } from 'lucide-react';
+import { fileToBoardImageDataUrl } from '../lib/imageData';
 import type { Block, Viewport } from '../types';
 
-const boardSignature = () => {
-  const { blocks, drawings, canvasTitle } = useBoardStore.getState();
-  return JSON.stringify({ blocks, drawings, canvasTitle });
-};
-
 const LOCAL_DEFAULT_BOARD_ID = 'local-default-board';
-const BOARD_RENDER_OVERSCAN_PX = 4000;
+const BOARD_RENDER_OVERSCAN_PX = 1000;
+const AUTOSAVE_DEBOUNCE_MS = 1200;
 
 const isBlockInRenderViewport = (block: Block, viewport: Viewport) => {
   if (typeof window === 'undefined') return true;
@@ -66,9 +63,9 @@ function Board() {
   const [isDraggingOver, setIsDraggingOver] = useState(false);
   const [renderViewport, setRenderViewport] = useState<Viewport>(() => useBoardStore.getState().viewport);
   const autosaveReadyRef = useRef(false);
-  const lastSavedSignatureRef = useRef('');
+  const changeVersionRef = useRef(0);
+  const autosaveTimerRef = useRef<number | null>(null);
   const autosaveQueueRef = useRef(Promise.resolve());
-  const searchSyncTimerRef = useRef<number | null>(null);
   const importedSnapshotBoardIdRef = useRef<string | null>(null);
 
   const renderedBlocks = useMemo(() => {
@@ -80,6 +77,9 @@ function Board() {
 
   useEffect(() => {
     return () => {
+      if (autosaveTimerRef.current !== null) {
+        window.clearTimeout(autosaveTimerRef.current);
+      }
       setCurrentLoadingBoardId(null);
       useBoardStore.getState().clearBoard();
     };
@@ -115,7 +115,8 @@ function Board() {
       setCurrentLoadingBoardId(null);
       importedSnapshotBoardIdRef.current = null;
       loadDefaultBoard();
-      lastSavedSignatureRef.current = boardSignature();
+      syncAllBlocks(useBoardStore.getState().blocks);
+      changeVersionRef.current = 0;
       autosaveReadyRef.current = true;
       return;
     }
@@ -127,7 +128,7 @@ function Board() {
     if (consumeImportedLocalSnapshotFlag()) {
       importedSnapshotBoardIdRef.current = boardId;
       autosaveReadyRef.current = true;
-      lastSavedSignatureRef.current = boardSignature();
+      changeVersionRef.current = 0;
       return;
     }
 
@@ -143,7 +144,8 @@ function Board() {
     let cancelled = false;
 
     const markLoadedSnapshotClean = () => {
-      lastSavedSignatureRef.current = boardSignature();
+      changeVersionRef.current = 0;
+      syncAllBlocks(useBoardStore.getState().blocks);
       markBoardClean();
     };
 
@@ -167,39 +169,51 @@ function Board() {
 
   useEffect(() => {
     if (!autosaveReadyRef.current) return;
-    const signature = boardSignature();
-    if (signature === lastSavedSignatureRef.current) return;
 
+    const changeVersion = changeVersionRef.current + 1;
+    changeVersionRef.current = changeVersion;
     markBoardDirty();
-    const savedBoardId = getSavedBoardId();
-    const signatureAtLocalSave = signature;
-    const savedLocally = saveBoard();
-    if (savedLocally && !savedBoardId && boardSignature() === signatureAtLocalSave) {
-      lastSavedSignatureRef.current = signatureAtLocalSave;
-      markBoardClean();
+
+    if (autosaveTimerRef.current !== null) {
+      window.clearTimeout(autosaveTimerRef.current);
     }
 
-    if (!savedBoardId || savedBoardId !== params.id) return;
+    autosaveTimerRef.current = window.setTimeout(() => {
+      autosaveTimerRef.current = null;
 
-    const snapshotAtSave = getBoardSnapshot();
-    autosaveQueueRef.current = autosaveQueueRef.current
-      .catch(() => undefined)
-      .then(() => {
-        const signatureAtSave = signatureAtLocalSave;
-        return saveBoardToWeb(snapshotAtSave.title, savedBoardId, snapshotAtSave)
-          .then(() => {
-            if (boardSignature() === signatureAtSave) {
-              lastSavedSignatureRef.current = signatureAtSave;
-              markBoardClean();
-            } else {
-              markBoardDirty();
-            }
-          })
-          .catch((error) => {
+      const savedBoardId = getSavedBoardId();
+      const versionAtSave = changeVersionRef.current;
+      const snapshotAtSave = getBoardSnapshot();
+      const savedLocally = saveBoard();
+
+      if (savedLocally && !savedBoardId && changeVersionRef.current === versionAtSave) {
+        markBoardClean();
+      }
+
+      if (!savedBoardId || savedBoardId !== params.id) return;
+
+      autosaveQueueRef.current = autosaveQueueRef.current
+        .catch(() => undefined)
+        .then(() => saveBoardToWeb(snapshotAtSave.title, savedBoardId, snapshotAtSave))
+        .then(() => {
+          if (changeVersionRef.current === versionAtSave) {
+            markBoardClean();
+          } else {
             markBoardDirty();
-            console.error('Error autosaving moodboard:', error);
-          });
-      });
+          }
+        })
+        .catch((error) => {
+          markBoardDirty();
+          console.error('Error autosaving moodboard:', error);
+        });
+    }, AUTOSAVE_DEBOUNCE_MS);
+
+    return () => {
+      if (autosaveTimerRef.current !== null) {
+        window.clearTimeout(autosaveTimerRef.current);
+        autosaveTimerRef.current = null;
+      }
+    };
   }, [blocks, drawings, canvasTitle, params.id]);
 
   useEffect(() => {
@@ -216,24 +230,6 @@ function Board() {
   useEffect(() => {
     void initializeCollection();
   }, []);
-
-  useEffect(() => {
-    if (searchSyncTimerRef.current !== null) {
-      window.clearTimeout(searchSyncTimerRef.current);
-    }
-
-    searchSyncTimerRef.current = window.setTimeout(() => {
-      syncAllBlocks(useBoardStore.getState().blocks);
-      searchSyncTimerRef.current = null;
-    }, 150);
-
-    return () => {
-      if (searchSyncTimerRef.current !== null) {
-        window.clearTimeout(searchSyncTimerRef.current);
-        searchSyncTimerRef.current = null;
-      }
-    };
-  }, [blocks]);
 
   useEffect(() => {
     const handleDragOver = (e: DragEvent) => {
@@ -258,14 +254,15 @@ function Board() {
       files.forEach((file) => {
         if (!file.type.startsWith('image/')) return;
 
-        const reader = new FileReader();
-        reader.onload = (event) => {
-          const url = event.target?.result as string;
-          if (window.__handleAddBlock) {
-            window.__handleAddBlock('image', { url });
-          }
-        };
-        reader.readAsDataURL(file);
+        void fileToBoardImageDataUrl(file)
+          .then((url) => {
+            if (window.__handleAddBlock) {
+              window.__handleAddBlock('image', { url });
+            }
+          })
+          .catch((error) => {
+            console.error('Could not process dropped image:', error);
+          });
       });
     };
 

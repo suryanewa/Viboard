@@ -192,7 +192,8 @@ interface BoardState {
   clearBoard: () => void;
 }
 
-export const MAX_HISTORY = 25;
+export const MAX_HISTORY = 10;
+const MAX_HISTORY_BLOCKS = 300;
 let historyAnimationSequence = 0;
 
 const cloneBlockForHistory = (block: Block): Block => {
@@ -213,6 +214,9 @@ const cloneHistoryEntry = (entry: HistoryEntry): HistoryEntry => ({
 
 const currentHistoryEntry = (state: Pick<BoardState, 'blocks' | 'drawings'>): HistoryEntry =>
   cloneHistoryEntry({ blocks: state.blocks, drawings: state.drawings });
+
+const shouldKeepHistory = (state: Pick<BoardState, 'blocks'>) =>
+  Object.keys(state.blocks).length <= MAX_HISTORY_BLOCKS;
 
 const recordsEqual = (first: unknown, second: unknown) => {
   if (first === second) return true;
@@ -254,6 +258,11 @@ const pushHistoryEntry = (history: BoardState['history'], entry: HistoryEntry) =
   past: [...history.past.slice(-MAX_HISTORY + 1), cloneHistoryEntry(entry)],
   future: [],
 });
+
+const nextHistory = (
+  state: Pick<BoardState, 'blocks' | 'drawings'>,
+  history: BoardState['history'],
+) => shouldKeepHistory(state) ? pushHistoryEntry(history, currentHistoryEntry(state)) : { past: [], future: [] };
 
 const reindexSearch = (blocks: Record<string, Block>) => {
   syncAllBlocks(blocks);
@@ -303,6 +312,7 @@ export const useBoardStore = create<BoardState>((set, get) => ({
 
   pushHistory: () => {
     const { history } = get();
+    if (!shouldKeepHistory(get())) return;
     set({
       history: pushHistoryEntry(history, currentHistoryEntry(get()))
     });
@@ -313,10 +323,12 @@ export const useBoardStore = create<BoardState>((set, get) => ({
     const currentBlock = blocks[beforeBlock.id];
     if (!currentBlock || blocksEqual(currentBlock, beforeBlock)) return;
     set({
-      history: pushHistoryEntry(history, {
-        blocks: { ...blocks, [beforeBlock.id]: beforeBlock },
-        drawings,
-      }),
+      history: shouldKeepHistory({ blocks })
+        ? pushHistoryEntry(history, {
+            blocks: { ...blocks, [beforeBlock.id]: beforeBlock },
+            drawings,
+          })
+        : { past: [], future: [] },
     });
     if (currentBlock.type === 'sticky' || currentBlock.type === 'text' || currentBlock.type === 'link') {
       indexBlock(currentBlock);
@@ -327,7 +339,7 @@ export const useBoardStore = create<BoardState>((set, get) => ({
     const { blocks, history } = get();
     set({
       blocks: { ...blocks, [block.id]: block },
-      history: pushHistoryEntry(history, currentHistoryEntry(get()))
+      history: nextHistory(get(), history)
     });
     if (block.type === 'sticky' || block.type === 'text' || block.type === 'link') {
       indexBlock(block);
@@ -354,7 +366,7 @@ export const useBoardStore = create<BoardState>((set, get) => ({
         ...blocks,
         [id]: updatedBlock
       },
-      history: noHistory ? history : pushHistoryEntry(history, currentHistoryEntry(get()))
+      history: noHistory ? history : nextHistory(get(), history)
     });
   },
 
@@ -376,7 +388,7 @@ export const useBoardStore = create<BoardState>((set, get) => ({
     if (hasChanges) {
       set({
         blocks: newBlocks,
-        history: noHistory ? history : pushHistoryEntry(history, currentHistoryEntry(get()))
+        history: noHistory ? history : nextHistory(get(), history)
       });
     }
   },
@@ -392,7 +404,7 @@ export const useBoardStore = create<BoardState>((set, get) => ({
     set({
       blocks: newBlocks,
       selection: selection.filter((id) => !ids.includes(id)),
-      history: pushHistoryEntry(history, currentHistoryEntry(get()))
+      history: nextHistory(get(), history)
     });
   },
 
@@ -465,7 +477,7 @@ export const useBoardStore = create<BoardState>((set, get) => ({
     const { drawings, history } = get();
     set({
       drawings: [...drawings, path],
-      history: pushHistoryEntry(history, currentHistoryEntry(get()))
+      history: nextHistory(get(), history)
     });
   },
 
@@ -477,7 +489,7 @@ export const useBoardStore = create<BoardState>((set, get) => ({
     set({
       drawings: newDrawings,
       drawingSelection: drawingSelection.filter(id => !ids.includes(id)),
-      history: noHistory ? history : pushHistoryEntry(history, currentHistoryEntry(get()))
+      history: noHistory ? history : nextHistory(get(), history)
     });
   },
 
@@ -503,7 +515,7 @@ export const useBoardStore = create<BoardState>((set, get) => ({
     if (hasChanges) {
       set({
         drawings: newDrawings,
-        history: noHistory ? history : pushHistoryEntry(history, currentHistoryEntry(get()))
+        history: noHistory ? history : nextHistory(get(), history)
       });
     }
   },
@@ -521,7 +533,7 @@ export const useBoardStore = create<BoardState>((set, get) => ({
         ...state.blocks,
         [id]: { ...block, zIndex: highestZ + 1 }
       },
-      history: noHistory ? state.history : pushHistoryEntry(state.history, currentHistoryEntry(state)),
+      history: noHistory ? state.history : nextHistory(state, state.history),
     };
   }),
 
@@ -545,7 +557,7 @@ export const useBoardStore = create<BoardState>((set, get) => ({
     
     return {
       blocks: newBlocks,
-      history: pushHistoryEntry(state.history, currentHistoryEntry(state)),
+      history: nextHistory(state, state.history),
     };
   }),
 
@@ -569,7 +581,7 @@ export const useBoardStore = create<BoardState>((set, get) => ({
     
     return {
       blocks: newBlocks,
-      history: pushHistoryEntry(state.history, currentHistoryEntry(state)),
+      history: nextHistory(state, state.history),
     };
   }),
 
@@ -592,7 +604,7 @@ export const useBoardStore = create<BoardState>((set, get) => ({
     
     return {
       blocks: newBlocks,
-      history: pushHistoryEntry(state.history, currentHistoryEntry(state)),
+      history: nextHistory(state, state.history),
     };
   }),
 
@@ -621,7 +633,7 @@ export const useBoardStore = create<BoardState>((set, get) => ({
         clipboard: nextClipboard,
         blocks: newBlocks,
         selection: [],
-        history: pushHistoryEntry(history, currentHistoryEntry(get()))
+        history: nextHistory(get(), history)
       });
       void writeBlocksToSystemClipboard(nextClipboard).catch((error) => {
         console.warn('Could not write Viboard selection to system clipboard:', error);
@@ -674,7 +686,7 @@ export const useBoardStore = create<BoardState>((set, get) => ({
     set({
       blocks: newBlocks,
       selection: newSelection,
-      history: pushHistoryEntry(history, currentHistoryEntry(get()))
+      history: nextHistory(get(), history)
     });
   },
 
@@ -706,7 +718,7 @@ export const useBoardStore = create<BoardState>((set, get) => ({
     set({
       blocks: newBlocks,
       selection: newSelection,
-      history: pushHistoryEntry(history, currentHistoryEntry(get()))
+      history: nextHistory(get(), history)
     });
   },
 
