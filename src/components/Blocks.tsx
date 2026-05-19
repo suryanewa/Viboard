@@ -125,11 +125,11 @@ const handleListEnter = (
   const lineStart = text.lastIndexOf('\n', Math.max(0, caretOffset - 1)) + 1;
   const nextLineBreak = text.indexOf('\n', caretOffset);
   const lineEnd = nextLineBreak === -1 ? text.length : nextLineBreak;
-  if (caretOffset !== lineEnd) return false;
 
   const currentLine = text.slice(lineStart, lineEnd);
   const currentPrefix = getListPrefix(currentLine, block.data.listStyle);
   if (!currentPrefix || !currentLine.startsWith(currentPrefix.prefix)) return false;
+  if (caretOffset < lineStart + currentPrefix.prefix.length) return false;
 
   event.preventDefault();
 
@@ -162,6 +162,22 @@ export const StickyBlock: React.FC<BlockContentProps> = ({ block }) => {
   const commitBlockEdit = useBoardStore((state) => state.commitBlockEdit);
   const hasFocused = useRef(false);
   const editStartBlock = useRef<Block | null>(null);
+  const minStickyHeight = 240;
+  const stickyVerticalPadding = 48;
+
+  const syncStickyHeight = useCallback(() => {
+    const el = textRef.current;
+    if (!el) return block.height;
+
+    el.style.height = 'auto';
+    el.style.height = `${el.scrollHeight}px`;
+
+    const nextHeight = Math.max(minStickyHeight, Math.ceil(el.scrollHeight + stickyVerticalPadding));
+    if (Math.abs(nextHeight - block.height) >= 0.5) {
+      updateBlock(block.id, { height: nextHeight }, true);
+    }
+    return nextHeight;
+  }, [block.height, block.id, updateBlock]);
 
   const setRef = (el: HTMLParagraphElement | null) => {
     textRef.current = el;
@@ -189,12 +205,12 @@ export const StickyBlock: React.FC<BlockContentProps> = ({ block }) => {
         ensureEditableLine(el);
       }
     }
-  }, [block.data.text, block.id]);
+    syncStickyHeight();
+  }, [block.data.text, block.id, syncStickyHeight]);
 
   const handleInput = (e: React.FormEvent<HTMLParagraphElement>) => {
     const el = e.currentTarget;
-    el.style.height = 'auto';
-    el.style.height = `${el.scrollHeight}px`;
+    syncStickyHeight();
     updateBlock(block.id, { data: { ...block.data, text: getEditableText(el) } }, true);
   };
 
@@ -205,7 +221,11 @@ export const StickyBlock: React.FC<BlockContentProps> = ({ block }) => {
   const handleBlur = () => {
     if (textRef.current) {
       const nextText = getEditableText(textRef.current);
-      updateBlock(block.id, { data: { ...block.data, text: nextText } }, true);
+      const nextHeight = syncStickyHeight();
+      updateBlock(block.id, {
+        height: nextHeight,
+        data: { ...block.data, text: nextText },
+      }, true);
       if (editStartBlock.current) {
         commitBlockEdit(editStartBlock.current);
       }
@@ -217,6 +237,7 @@ export const StickyBlock: React.FC<BlockContentProps> = ({ block }) => {
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLParagraphElement>) => {
     handleListEnter(e, block, (text) => {
+      syncStickyHeight();
       updateBlock(block.id, { data: { ...block.data, text } }, true);
     });
   };
@@ -226,12 +247,12 @@ export const StickyBlock: React.FC<BlockContentProps> = ({ block }) => {
 
   return (
     <div 
-      className="w-full min-h-full p-6 flex flex-col shadow-none"
+      className="w-full min-h-full p-6 flex flex-col justify-center shadow-none"
       style={{ backgroundColor: bgColor }}
     >
       <p
         ref={setRef}
-        className="text-zinc-800 font-medium text-lg leading-relaxed outline-none whitespace-pre-wrap break-words"
+        className="w-full text-zinc-800 font-medium text-lg leading-relaxed outline-none whitespace-pre-wrap break-words"
         contentEditable
         data-viboard-block-id={block.id}
         suppressContentEditableWarning
@@ -244,7 +265,7 @@ export const StickyBlock: React.FC<BlockContentProps> = ({ block }) => {
           fontWeight: block.data.bold ? 700 : undefined,
           fontStyle: block.data.italic ? 'italic' : undefined,
           textDecoration: [block.data.underline ? 'underline' : '', block.data.strikethrough ? 'line-through' : ''].filter(Boolean).join(' ') || undefined,
-          textAlign: block.data.textAlign || undefined,
+          textAlign: block.data.textAlign ?? 'center',
         }}
       />
     </div>

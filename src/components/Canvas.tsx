@@ -42,6 +42,7 @@ export const Canvas: React.FC<{ children: React.ReactNode }> = ({ children }) =>
   const markerType = useBoardStore((state) => state.markerType);
   const markerColor = useBoardStore((state) => state.markerColor);
   const markerThickness = useBoardStore((state) => state.markerThickness);
+  const shapeHue = useBoardStore((state) => state.shapeHue);
   const removeDrawings = useBoardStore((state) => state.removeDrawings);
 
   const markerCursor = `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24'%3E%3Cpath fill='%23333' d='M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z'/%3E%3C/svg%3E") 0 24, auto`;
@@ -537,7 +538,7 @@ export const Canvas: React.FC<{ children: React.ReactNode }> = ({ children }) =>
         width: 240,
         height: 240,
         zIndex: highestZ + 1,
-        data: { text: '', hue: useBoardStore.getState().stickyHue, autoFocus: true }
+        data: { text: '', hue: useBoardStore.getState().stickyHue, textAlign: 'center', autoFocus: true }
       });
       setSelection([id]);
       return;
@@ -911,12 +912,14 @@ export const Canvas: React.FC<{ children: React.ReactNode }> = ({ children }) =>
 
           {activeShape && (
             <div
-              className="absolute border-2 border-red-500 bg-red-500/10 pointer-events-none z-[1002]"
+              className="absolute border-2 pointer-events-none z-[1002]"
               style={{
                 left: Math.min(activeShape.x1, activeShape.x2),
                 top: Math.min(activeShape.y1, activeShape.y2),
                 width: Math.abs(activeShape.x2 - activeShape.x1),
                 height: Math.abs(activeShape.y2 - activeShape.y1),
+                borderColor: `hsl(${shapeHue}, 90%, 65%)`,
+                backgroundColor: `hsla(${shapeHue}, 90%, 65%, 0.1)`,
                 borderRadius: activeShape.type === 'circle' ? '9999px' : '0px'
               }}
             />

@@ -164,16 +164,24 @@ export const BlockShell: React.FC<BlockShellProps> = ({ block, children }) => {
     selection.length > 0 &&
     selection.every((id) => blocks[id]?.type === 'text') &&
     selection.includes(block.id);
-  const skipPlacementAnimation = block.type === 'shape';
+  const skipPlacementAnimation = block.type === 'shape' || block.data.skipPlacementAnimation;
   
   const clickPoint = useRef({ x: 0, y: 0, edge: 'top' });
   const wasSelected = useRef(isSelected);
-  const shouldDelayInitialSelectionRef = useRef(Boolean(isSelected && block.data.deferSelectionOverlay));
+  const shouldDelayInitialSelectionRef = useRef(Boolean(isSelected && block.data.deferSelectionOverlay && !block.data.skipPlacementAnimation));
   const shellRef = useRef<HTMLDivElement>(null);
   const [overlayElement, setOverlayElement] = useState<HTMLElement | null>(null);
-  const [showSelectionOverlay, setShowSelectionOverlay] = useState(!(isSelected && block.data.deferSelectionOverlay));
+  const [showSelectionOverlay, setShowSelectionOverlay] = useState(!(isSelected && block.data.deferSelectionOverlay && !block.data.skipPlacementAnimation));
 
   useEffect(() => {
+    if (block.data.skipPlacementAnimation) {
+      const data = { ...block.data };
+      delete data.skipPlacementAnimation;
+      updateBlock(block.id, { data }, true);
+      setShowSelectionOverlay(true);
+      return;
+    }
+
     if (!shouldDelayInitialSelectionRef.current) {
       setShowSelectionOverlay(true);
       return;

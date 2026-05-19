@@ -240,7 +240,7 @@ export const Toolbar: React.FC = () => {
         color: dataOverride.color || `hsl(${dataOverride.hue ?? shapeHue}, 90%, 65%)`,
       };
     } else if (type === 'sticky') {
-      newBlock.data = { text: 'New sticky', color: 'yellow', hue: 55, autoFocus: true };
+      newBlock.data = { text: 'New sticky', color: 'yellow', hue: 55, textAlign: 'center', autoFocus: true };
     } else if (type === 'text') {
       const { textFontSize, textHue } = useBoardStore.getState();
       const color = `hsl(${textHue}, 75%, 28%)`;

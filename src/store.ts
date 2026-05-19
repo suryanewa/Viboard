@@ -606,7 +606,9 @@ export const useBoardStore = create<BoardState>((set, get) => ({
         x: b.x + (noOffset ? 0 : 20),
         y: b.y + (noOffset ? 0 : 20),
         zIndex: highestZ + 1 + i,
-        data: { ...b.data, deferSelectionOverlay: true },
+        data: noOffset
+          ? { ...b.data, skipPlacementAnimation: true }
+          : { ...b.data, deferSelectionOverlay: true },
       };
       newSelection.push(newId);
     });
