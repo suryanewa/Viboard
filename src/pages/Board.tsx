@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { memo, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { useParams } from 'react-router-dom';
 import { Canvas } from '../components/Canvas';
 import { BlockShell } from '../components/BlockShell';
@@ -20,6 +20,7 @@ import {
 import { initializeCollection, syncAllBlocks } from '../lib/typesense';
 import { AnimatePresence, motion } from 'framer-motion';
 import { UploadCloud } from 'lucide-react';
+import type { Block, Viewport } from '../types';
 
 const boardSignature = () => {
   const { blocks, drawings, canvasTitle, history } = useBoardStore.getState();
@@ -27,6 +28,32 @@ const boardSignature = () => {
 };
 
 const LOCAL_DEFAULT_BOARD_ID = 'local-default-board';
+const BOARD_RENDER_OVERSCAN_PX = 4000;
+
+const isBlockInRenderViewport = (block: Block, viewport: Viewport) => {
+  if (typeof window === 'undefined') return true;
+
+  const zoom = Math.max(viewport.zoom, 0.1);
+  const margin = BOARD_RENDER_OVERSCAN_PX / Math.max(zoom, 0.25);
+  const minX = -viewport.x / zoom - margin;
+  const minY = -viewport.y / zoom - margin;
+  const maxX = (-viewport.x + window.innerWidth) / zoom + margin;
+  const maxY = (-viewport.y + window.innerHeight) / zoom + margin;
+
+  return (
+    block.x < maxX &&
+    block.x + block.width > minX &&
+    block.y < maxY &&
+    block.y + block.height > minY
+  );
+};
+
+const BoardBlock = memo(({ block }: { block: Block }) => (
+  <BlockShell block={block}>
+    <BlockRenderer block={block} />
+  </BlockShell>
+));
+BoardBlock.displayName = 'BoardBlock';
 
 function Board() {
   const params = useParams();
@@ -35,18 +62,52 @@ function Board() {
   const drawings = useBoardStore((state) => state.drawings);
   const canvasTitle = useBoardStore((state) => state.canvasTitle);
   const history = useBoardStore((state) => state.history);
+  const selection = useBoardStore((state) => state.selection);
   const mode = useBoardStore((state) => state.mode);
   const [isDraggingOver, setIsDraggingOver] = useState(false);
+  const [renderViewport, setRenderViewport] = useState<Viewport>(() => useBoardStore.getState().viewport);
   const autosaveReadyRef = useRef(false);
   const lastSavedSignatureRef = useRef('');
   const autosaveQueueRef = useRef(Promise.resolve());
   const searchSyncTimerRef = useRef<number | null>(null);
   const importedSnapshotBoardIdRef = useRef<string | null>(null);
 
+  const renderedBlocks = useMemo(() => {
+    const selectedIds = new Set(selection);
+    return Object.values(blocks).filter((block) =>
+      selectedIds.has(block.id) || isBlockInRenderViewport(block, renderViewport)
+    );
+  }, [blocks, renderViewport, selection]);
+
   useEffect(() => {
     return () => {
       setCurrentLoadingBoardId(null);
       useBoardStore.getState().clearBoard();
+    };
+  }, []);
+
+  useEffect(() => {
+    let viewportTimer: number | null = null;
+    const unsubscribe = useBoardStore.subscribe((state, previousState) => {
+      const next = state.viewport;
+      const previous = previousState.viewport;
+      if (next.x === previous.x && next.y === previous.y && next.zoom === previous.zoom) return;
+
+      if (viewportTimer !== null) {
+        window.clearTimeout(viewportTimer);
+      }
+
+      viewportTimer = window.setTimeout(() => {
+        viewportTimer = null;
+        setRenderViewport(useBoardStore.getState().viewport);
+      }, 120);
+    });
+
+    return () => {
+      if (viewportTimer !== null) {
+        window.clearTimeout(viewportTimer);
+      }
+      unsubscribe();
     };
   }, []);
 
@@ -223,9 +284,9 @@ function Board() {
   return (
     <motion.div 
       className="relative w-screen h-screen overflow-hidden bg-zinc-50"
-      initial={{ opacity: 0, scale: 1.02, filter: 'blur(4px)' }}
-      animate={{ opacity: 1, scale: 1, filter: 'blur(0px)' }}
-      exit={{ opacity: 0, scale: 0.98, filter: 'blur(4px)', transition: { duration: 0.3, ease: 'easeIn' } }}
+      initial={{ opacity: 0, scale: 1.02 }}
+      animate={{ opacity: 1, scale: 1 }}
+      exit={{ opacity: 0, scale: 0.98, transition: { duration: 0.3, ease: 'easeIn' } }}
       transition={{ duration: 0.4, ease: 'easeOut' }}
     >
       <AnimatePresence>
@@ -257,10 +318,8 @@ function Board() {
       <ContextMenu />
       <Canvas>
         <AnimatePresence initial={false} key={activeBoardId}>
-          {Object.values(blocks).map((block) => (
-            <BlockShell key={block.id} block={block}>
-              <BlockRenderer block={block} />
-            </BlockShell>
+          {renderedBlocks.map((block) => (
+            <BoardBlock key={block.id} block={block} />
           ))}
         </AnimatePresence>
       </Canvas>

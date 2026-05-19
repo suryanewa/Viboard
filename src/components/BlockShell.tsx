@@ -154,36 +154,11 @@ const UNIFORM_SCALE_TYPES = new Set<Block['type']>([
   'pdf',
 ]);
 
-const SNAP_CANDIDATE_MARGIN = 1200;
-
 const withoutImageAutoSizeOnLoad = (block: Block): Block['data'] | undefined => {
   if (block.type !== 'image' || block.data.autoSizeOnLoad !== true) return undefined;
   const data = { ...block.data };
   delete data.autoSizeOnLoad;
   return data;
-};
-
-const getSnapCandidates = (
-  blocks: Record<string, Block>,
-  ignoredIds: Set<string>,
-  bounds: { x: number; y: number; width: number; height: number },
-  zoom: number,
-) => {
-  const margin = SNAP_CANDIDATE_MARGIN / Math.max(zoom, 0.25);
-  const minX = bounds.x - margin;
-  const minY = bounds.y - margin;
-  const maxX = bounds.x + bounds.width + margin;
-  const maxY = bounds.y + bounds.height + margin;
-
-  return Object.values(blocks).filter((candidate) => {
-    if (ignoredIds.has(candidate.id)) return false;
-    return (
-      candidate.x < maxX &&
-      candidate.x + candidate.width > minX &&
-      candidate.y < maxY &&
-      candidate.y + candidate.height > minY
-    );
-  });
 };
 
 interface ResizeHandleProps {
@@ -223,20 +198,19 @@ const ResizeHandle = ({ direction, cursor, styles, delay = 0, onPointerDown, onP
   />
 );
 
-export const BlockShell: React.FC<BlockShellProps> = ({ block, children }) => {
+const BlockShellComponent: React.FC<BlockShellProps> = ({ block, children }) => {
   const isSelected = useBoardStore((state) => state.selection.includes(block.id));
-  const selection = useBoardStore((state) => state.selection);
-  const blocks = useBoardStore((state) => state.blocks);
+  const textOnlyResize = useBoardStore((state) =>
+    block.type === 'text' &&
+    state.selection.length > 0 &&
+    state.selection.includes(block.id) &&
+    state.selection.every((id) => state.blocks[id]?.type === 'text')
+  );
   const tool = useBoardStore((state) => state.tool);
   const updateBlock = useBoardStore((state) => state.updateBlock);
   const bringToFront = useBoardStore((state) => state.bringToFront);
   const historyAnimationKey = useBoardStore((state) => state.historyAnimationKey);
 
-  const textOnlyResize =
-    block.type === 'text' &&
-    selection.length > 0 &&
-    selection.every((id) => blocks[id]?.type === 'text') &&
-    selection.includes(block.id);
   const showEmbedDragShield = tool === 'select' && INTERACTIVE_EMBED_TYPES.has(block.type);
   const skipPlacementAnimation = block.type === 'shape' || block.data.skipPlacementAnimation;
   
@@ -437,11 +411,6 @@ export const BlockShell: React.FC<BlockShellProps> = ({ block, children }) => {
     const groupedIds = getGroupedIds(block, storeBlocks);
     const isCurrentlySelected = groupedIds.every((id) => selection.includes(id));
 
-    // Frames should keep their stacking position when selected/dragged.
-    // They only move in z-order via explicit arrange actions.
-    if (block.type !== 'frame') {
-      bringToFront(block.id, true);
-    }
     let nextSelection = selection;
     if (e.shiftKey || e.metaKey) {
       nextSelection = isCurrentlySelected
@@ -511,7 +480,7 @@ export const BlockShell: React.FC<BlockShellProps> = ({ block, children }) => {
     if (!isDragging.current) return;
     e.stopPropagation();
 
-    const { viewport, selection, blocks, updateBlocks, snapping, setSnapLines } = useBoardStore.getState();
+    const { viewport, updateBlocks, snapping, setSnapLines } = useBoardStore.getState();
     const zoom = viewport.zoom;
     const deltaX = (e.clientX - dragStartPos.current.pointerX) / zoom;
     const deltaY = (e.clientY - dragStartPos.current.pointerY) / zoom;
@@ -528,82 +497,10 @@ export const BlockShell: React.FC<BlockShellProps> = ({ block, children }) => {
 
     let snapX = rawX;
     let snapY = rawY;
-    const activeSnapLines: { x?: number, y?: number }[] = [];
 
     if (snapping) {
       snapX = Math.round(rawX / GRID_SIZE) * GRID_SIZE;
       snapY = Math.round(rawY / GRID_SIZE) * GRID_SIZE;
-    } else {
-      const SNAP_THRESHOLD = 5 / zoom;
-      const currentW = width.get();
-      const currentH = height.get();
-
-      let bestDistX = SNAP_THRESHOLD;
-      let bestDistY = SNAP_THRESHOLD;
-
-      const myEdgesX = [rawX, rawX + currentW / 2, rawX + currentW];
-      const myEdgesY = [rawY, rawY + currentH / 2, rawY + currentH];
-      
-      const draggedIdsForSnap = altDupeIds.current.length > 0 ? altDupeIds.current : dragStartGroupPos.current.map(s => s.id);
-      const ignoredSnapIds = new Set([...draggedIdsForSnap, ...selection]);
-      const snapCandidates = getSnapCandidates(blocks, ignoredSnapIds, { x: rawX, y: rawY, width: currentW, height: currentH }, zoom);
-
-      snapCandidates.forEach(other => {
-        const otherEdgesX = [other.x, other.x + other.width / 2, other.x + other.width];
-        const otherEdgesY = [other.y, other.y + other.height / 2, other.y + other.height];
-        
-        myEdgesX.forEach((myEx, i) => {
-          otherEdgesX.forEach(otherEx => {
-            const dist = Math.abs(myEx - otherEx);
-            if (dist < bestDistX) {
-              bestDistX = dist;
-              snapX = otherEx - (i === 0 ? 0 : i === 1 ? currentW / 2 : currentW);
-            }
-          });
-        });
-        
-        myEdgesY.forEach((myEy, i) => {
-          otherEdgesY.forEach(otherEy => {
-            const dist = Math.abs(myEy - otherEy);
-            if (dist < bestDistY) {
-              bestDistY = dist;
-              snapY = otherEy - (i === 0 ? 0 : i === 1 ? currentH / 2 : currentH);
-            }
-          });
-        });
-      });
-      
-      if (bestDistX < SNAP_THRESHOLD) {
-        const snappedEdgesX = [snapX, snapX + currentW / 2, snapX + currentW];
-        snapCandidates.forEach(other => {
-          const otherEdgesX = [other.x, other.x + other.width / 2, other.x + other.width];
-          snappedEdgesX.forEach(myEx => {
-            otherEdgesX.forEach(otherEx => {
-              if (Math.abs(myEx - otherEx) < 0.1) {
-                if (!activeSnapLines.some(l => l.x !== undefined && Math.abs(l.x - otherEx) < 0.1)) {
-                  activeSnapLines.push({ x: otherEx });
-                }
-              }
-            });
-          });
-        });
-      }
-
-      if (bestDistY < SNAP_THRESHOLD) {
-        const snappedEdgesY = [snapY, snapY + currentH / 2, snapY + currentH];
-        snapCandidates.forEach(other => {
-          const otherEdgesY = [other.y, other.y + other.height / 2, other.y + other.height];
-          snappedEdgesY.forEach(myEy => {
-            otherEdgesY.forEach(otherEy => {
-              if (Math.abs(myEy - otherEy) < 0.1) {
-                if (!activeSnapLines.some(l => l.y !== undefined && Math.abs(l.y - otherEy) < 0.1)) {
-                  activeSnapLines.push({ y: otherEy });
-                }
-              }
-            });
-          });
-        });
-      }
     }
 
     const snapOffsetX = snapX - dragStartPos.current.x;
@@ -634,7 +531,7 @@ export const BlockShell: React.FC<BlockShellProps> = ({ block, children }) => {
       y.set(snapY);
     }
 
-    setSnapLines(activeSnapLines);
+    setSnapLines([]);
   };
 
   const handlePointerUp = (e: React.PointerEvent) => {
@@ -653,6 +550,9 @@ export const BlockShell: React.FC<BlockShellProps> = ({ block, children }) => {
     const draggedIds = dragStartGroupPos.current.map(s => s.id);
     if (!(draggedIds.length > 1 && draggedIds.includes(block.id)) && altDupeIds.current.length === 0) {
       updateBlock(block.id, { x: x.get(), y: y.get(), width: width.get(), height: height.get() }, true);
+    }
+    if (block.type !== 'frame') {
+      bringToFront(block.id, true);
     }
 
     window.getSelection()?.removeAllRanges();
@@ -959,9 +859,9 @@ export const BlockShell: React.FC<BlockShellProps> = ({ block, children }) => {
 
   return (
     <motion.div
-      initial={skipPlacementAnimation ? false : { opacity: 0, marginTop: 30, filter: 'blur(8px)' }}
-      animate={skipPlacementAnimation ? { opacity: 1, marginTop: 0, filter: 'blur(0px)' } : { opacity: 1, marginTop: 0, filter: 'blur(0px)' }}
-      exit={{ opacity: 0, scale: 0.96, filter: 'blur(4px)', transition: { duration: 0.14, ease: 'easeOut' } }}
+      initial={skipPlacementAnimation ? false : { opacity: 0, marginTop: 30 }}
+      animate={{ opacity: 1, marginTop: 0 }}
+      exit={{ opacity: 0, scale: 0.96, transition: { duration: 0.14, ease: 'easeOut' } }}
       transition={skipPlacementAnimation
         ? undefined
         : {
@@ -1024,3 +924,5 @@ export const BlockShell: React.FC<BlockShellProps> = ({ block, children }) => {
     </motion.div>
   );
 };
+
+export const BlockShell = React.memo(BlockShellComponent);
