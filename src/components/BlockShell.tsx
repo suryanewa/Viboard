@@ -216,6 +216,7 @@ const BlockShellComponent: React.FC<BlockShellProps> = ({ block, children }) => 
 
   const showEmbedDragShield = tool === 'select' && (INTERACTIVE_EMBED_TYPES.has(block.type) || isOpenableEmbed(block));
   const skipPlacementAnimation = block.type === 'shape' || block.data.skipPlacementAnimation;
+  const shouldAnimatePlacement = Boolean(block.data.deferSelectionOverlay) && !skipPlacementAnimation;
   
   const clickPoint = useRef({ x: 0, y: 0, edge: 'top' });
   const wasSelected = useRef(isSelected);
@@ -868,10 +869,10 @@ const BlockShellComponent: React.FC<BlockShellProps> = ({ block, children }) => 
 
   return (
     <motion.div
-      initial={skipPlacementAnimation ? false : { opacity: 0, marginTop: 30 }}
+      initial={shouldAnimatePlacement ? { opacity: 0, marginTop: 30 } : false}
       animate={{ opacity: 1, marginTop: 0 }}
       exit={{ opacity: 0, scale: 0.96, transition: { duration: 0.14, ease: 'easeOut' } }}
-      transition={skipPlacementAnimation
+      transition={!shouldAnimatePlacement
         ? undefined
         : {
             type: "spring",
