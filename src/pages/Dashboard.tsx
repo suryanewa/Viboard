@@ -1,11 +1,9 @@
 import { useEffect, useState, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { supabase } from '../lib/supabase';
-import { getCachedWebBoards, downloadBlob, safeFilename, BOARD_FILE_EXTENSION, parseSnapshot, generateBoardPreview } from '../lib/boardCommands';
+import { getCachedWebBoards, downloadBlob, safeFilename, BOARD_FILE_EXTENSION, parseSnapshot, generateBoardPreview, createBoardOnWeb } from '../lib/boardCommands';
 import { motion, AnimatePresence } from 'framer-motion';
 import { MoreVertical, Edit2, Trash2, Download, Plus, LogOut } from 'lucide-react';
-
-import type { Session } from '@supabase/supabase-js';
 
 interface Moodboard {
   id: string;
@@ -14,7 +12,7 @@ interface Moodboard {
   title: string;
 }
 
-export default function Dashboard({ session }: { session: Session }) {
+export default function Dashboard() {
   const [moodboards, setMoodboards] = useState<Moodboard[]>([]);
   const [loading, setLoading] = useState(true);
   const [menuOpenId, setMenuOpenId] = useState<string | null>(null);
@@ -151,18 +149,12 @@ export default function Dashboard({ session }: { session: Session }) {
   }, []);
 
   const createMoodboard = async () => {
-    const { data, error } = await supabase
-      .from('moodboards')
-      .insert([{ title: 'Untitled Board', user_id: session.user.id }])
-      .select()
-      .single();
-
-    if (!error && data) {
-      navigate(`/board/${data.id}`);
-    } else {
+    try {
+      const boardId = await createBoardOnWeb();
+      navigate(`/board/${boardId}`);
+    } catch (error) {
       console.error('Error creating board:', error);
-      const randomId = crypto.randomUUID();
-      navigate(`/board/${randomId}`);
+      window.alert(error instanceof Error ? error.message : 'Could not create a board.');
     }
   };
 

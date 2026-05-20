@@ -21,7 +21,7 @@ function AnimatedRoutes({ session }: { session: Session | null }) {
         />
         <Route 
           path="/" 
-          element={session ? <Dashboard session={session} /> : <Board />}
+          element={session ? <Dashboard /> : <Board />}
         />
         <Route 
           path="/board/:id" 

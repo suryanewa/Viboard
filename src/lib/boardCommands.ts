@@ -93,12 +93,6 @@ const snapshotSignature = (snapshot: BoardSnapshot) =>
     history: normalizeHistory(snapshot.history),
   });
 
-const withNormalizedHistory = (snapshot: BoardSnapshot): BoardSnapshot => ({
-  ...snapshot,
-  viewport: normalizeViewport(snapshot.viewport),
-  history: normalizeHistory(snapshot.history),
-});
-
 export const getBoardSnapshot = (): BoardSnapshot => {
   const { canvasTitle, blocks, drawings, viewport } = useBoardStore.getState();
   return {
@@ -239,12 +233,31 @@ const defaultBoardSnapshot = (title = 'Untitled Board'): BoardSnapshot => ({
   history: { past: [], future: [] },
 });
 
+const isClearedBoardSnapshot = (snapshot: BoardSnapshot) =>
+  Object.keys(snapshot.blocks || {}).length === 0 &&
+  (snapshot.drawings || []).length === 0 &&
+  snapshot.viewport.x === 0 &&
+  snapshot.viewport.y === 0 &&
+  snapshot.viewport.zoom === DEFAULT_BOARD_VIEWPORT_ZOOM;
+
 export const parseSnapshot = (row: Record<string, unknown> | null): BoardSnapshot | null => {
   if (!row) return null;
   const maybeSnapshot = BOARD_CONTENT_COLUMNS.map((column) => row[column]).find(Boolean);
-  if (maybeSnapshot && typeof maybeSnapshot === 'object') {
-    return withNormalizedHistory(maybeSnapshot as BoardSnapshot);
+  if (!maybeSnapshot) return null;
+
+  const snapshot = typeof maybeSnapshot === 'string'
+    ? safeParseJson<unknown>(maybeSnapshot, null)
+    : maybeSnapshot;
+
+  if (snapshot && typeof snapshot === 'object') {
+    try {
+      const normalized = normalizeSnapshot(snapshot);
+      return isClearedBoardSnapshot(normalized) ? null : normalized;
+    } catch {
+      return null;
+    }
   }
+
   return null;
 };
 
@@ -518,7 +531,11 @@ export const savePendingAuthenticatedBoard = async () => {
 };
 
 export const saveBoardToWeb = async (title: string, boardId?: string | null, snapshotOverride?: BoardSnapshot) => {
-  const snapshot = { ...(snapshotOverride ?? getBoardSnapshot()), title: title.trim() || 'Untitled Board' };
+  const snapshotTitle = title.trim() || 'Untitled Board';
+  const currentSnapshot = { ...(snapshotOverride ?? getBoardSnapshot()), title: snapshotTitle };
+  const snapshot = isClearedBoardSnapshot(currentSnapshot)
+    ? defaultBoardSnapshot(snapshotTitle)
+    : currentSnapshot;
   const shouldApplySnapshotToStore = !snapshotOverride;
   const { data: sessionData } = await supabase.auth.getSession();
   const userId = sessionData.session?.user.id;
@@ -573,6 +590,16 @@ export const saveBoardToWeb = async (title: string, boardId?: string | null, sna
     throw new Error(errorMessage(lastError) || 'Could not save this board content to Supabase.');
   }
 
+  const { data: verifiedRow, error: verifyError } = await supabase
+    .from('moodboards')
+    .select('*')
+    .eq('id', savedBoard.id)
+    .single();
+  if (verifyError || !parseSnapshot(verifiedRow as Record<string, unknown> | null)) {
+    console.error('Error verifying saved moodboard:', verifyError, verifiedRow);
+    throw new Error(errorMessage(verifyError) || 'Supabase saved the board row, but the board content could not be read back.');
+  }
+
   if (shouldApplySnapshotToStore) {
     useBoardStore.setState({ canvasTitle: snapshot.title });
   }
@@ -584,6 +611,9 @@ export const saveBoardToWeb = async (title: string, boardId?: string | null, sna
   }
   return savedBoard.id;
 };
+
+export const createBoardOnWeb = (title = 'Untitled Board') =>
+  saveBoardToWeb(title, null, defaultBoardSnapshot(title));
 
 export const saveLocalCopy = () => {
   const snapshot = getBoardSnapshot();
@@ -679,7 +709,11 @@ export const loadBoardFromWeb = async (boardId: string, onSnapshotApplied?: () =
     if (currentLoadingBoardId !== boardId) return;
 
     if (error && cachedSnapshot) return;
-    if (error) throw error;
+    if (error) {
+      loadBoardSnapshot(defaultBoardSnapshot());
+      markBoardUnsaved();
+      throw error;
+    }
 
     const snapshot = parseSnapshot(data as Record<string, unknown>);
     if (snapshot) {
