@@ -55,10 +55,10 @@ import {
   deleteCurrentBoard,
   distributeSelection,
   exportBoard,
-  fetchRecentBoards,
   flipSelection,
   groupSelection,
   importBoardFile,
+  getRecentWebBoards,
   getBoardSnapshot,
   queueAuthenticatedSave,
   type BoardSnapshot,
@@ -338,7 +338,7 @@ export const BoardMenu: React.FC = () => {
 
   React.useEffect(() => {
     if (!open) return;
-    void fetchRecentBoards(10).then(setRecentBoards);
+    setRecentBoards(getRecentWebBoards(10));
   }, [open]);
 
   React.useEffect(() => {
@@ -360,6 +360,15 @@ export const BoardMenu: React.FC = () => {
     if (!action) return;
     void action();
     setOpen(false);
+  };
+
+  const openBoardsHome = async () => {
+    const { data: sessionData, error } = await supabase.auth.getSession();
+    if (error) {
+      console.error('Error checking session before opening boards:', error);
+    }
+
+    navigate(sessionData.session ? '/' : '/login');
   };
 
   const runAfterUnsavedCheck = (action: () => void | Promise<void>) => {
@@ -482,7 +491,7 @@ export const BoardMenu: React.FC = () => {
       icon: FileDown,
       children: [
         { id: 'new', label: 'New', icon: FilePlus, action: () => runAfterUnsavedCheck(newBoard) },
-        { id: 'open', label: 'Open', icon: FolderOpen, action: () => runAfterUnsavedCheck(() => navigate('/')) },
+        { id: 'open', label: 'Open', icon: FolderOpen, action: () => runAfterUnsavedCheck(openBoardsHome) },
         { id: 'openRecent', label: 'Open recent', icon: RotateCcw, children: recentBoardItems },
         { id: 'save', label: 'Save', icon: Save, action: openSaveDialog },
         { id: 'saveLocal', label: 'Save local copy', icon: Download, action: saveLocalCopy },

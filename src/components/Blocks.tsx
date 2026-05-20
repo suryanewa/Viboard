@@ -794,6 +794,8 @@ export const ImageBlock: React.FC<BlockContentProps> = ({ block }) => {
           alt={block.data.alt || "User content"}
           title="User content"
           className="w-full h-full object-contain"
+          loading="lazy"
+          decoding="async"
           draggable={false}
           onLoad={handleImageLoad}
         />
@@ -868,6 +870,8 @@ export const LinkBlock: React.FC<BlockContentProps> = ({ block }) => {
             src={previewUrl} 
             alt="Website preview"
             className="w-full h-full object-cover object-top"
+            loading="lazy"
+            decoding="async"
             onLoad={() => setPreviewState('preview')}
             onError={() => setPreviewState('error')}
           />
@@ -915,6 +919,7 @@ export const AudioBlock: React.FC<BlockContentProps> = ({ block }) => {
   }, [url, coverUrl]);
 
   const displayImage = coverUrl || metadata?.image;
+  const displayTitle = metadata?.title || block.data.title || platform || 'Audio';
   const discCenterClass =
     platform === 'Spotify' ? 'bg-[#1DB954]' :
     platform === 'SoundCloud' ? 'bg-[#FF5500]' :
@@ -954,7 +959,7 @@ export const AudioBlock: React.FC<BlockContentProps> = ({ block }) => {
 
       {/* Album Cover (Square) */}
       <div 
-        className="relative z-10 w-full h-full bg-zinc-800 rounded-md shadow-2xl overflow-hidden cursor-pointer group"
+        className="group/audio-cover relative z-10 w-full h-full bg-zinc-800 rounded-md shadow-2xl overflow-hidden cursor-pointer"
         onClick={() => setIsPlaying(!isPlaying)}
       >
         {displayImage ? (
@@ -971,12 +976,25 @@ export const AudioBlock: React.FC<BlockContentProps> = ({ block }) => {
             <span className="text-zinc-400 text-xs text-center truncate w-full">{url}</span>
           </div>
         )}
+
+        <div className="absolute inset-x-0 bottom-0 z-10 flex min-h-20 items-end bg-gradient-to-t from-black/85 via-black/45 to-transparent px-4 pb-3 pt-8 opacity-0 translate-y-3 transition-[opacity,transform] duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] group-hover/audio-cover:opacity-100 group-hover/audio-cover:translate-y-0">
+          <div className="min-w-0">
+            <div className="truncate text-[15px] font-semibold leading-tight text-white drop-shadow">
+              {displayTitle}
+            </div>
+            {platform && (
+              <div className="mt-1 text-[11px] font-medium uppercase tracking-wide text-white/65">
+                {platform}
+              </div>
+            )}
+          </div>
+        </div>
         
         {/* Play/Pause Overlay */}
         <div className={clsx(
-          "absolute inset-0 bg-transparent opacity-0 transition-opacity flex items-center justify-center group-hover:opacity-100"
+          "absolute inset-0 z-20 flex items-center justify-center bg-black/0 opacity-0 transition-[opacity,background-color] duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] group-hover/audio-cover:bg-black/10 group-hover/audio-cover:opacity-100"
         )}>
-           <div className="w-14 h-14 rounded-full bg-white/20 backdrop-blur-sm flex items-center justify-center shadow-lg border border-white/10 transition-transform group-hover:scale-110">
+           <div className="w-14 h-14 rounded-full bg-white/20 backdrop-blur-sm flex items-center justify-center shadow-lg border border-white/10 scale-95 transition-[transform,background-color,box-shadow] duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] group-hover/audio-cover:scale-110 group-hover/audio-cover:bg-white/25 group-hover/audio-cover:shadow-xl">
              {isPlaying ? (
                <div className="flex gap-1.5">
                  <div className="w-1.5 h-5 bg-white rounded-sm" />
@@ -1036,6 +1054,7 @@ export const InstagramBlock: React.FC<BlockContentProps> = ({ block }) => {
           title="Instagram embed"
           className="w-full h-full border-0"
           frameBorder="0"
+          loading="lazy"
           scrolling="no"
           allowTransparency={true}
           allow="encrypted-media; picture-in-picture"
@@ -1075,6 +1094,7 @@ export const YoutubeBlock: React.FC<BlockContentProps> = ({ block }) => {
           src={`https://www.youtube.com/embed/${videoId}`}
           title="YouTube video player"
           frameBorder="0"
+          loading="lazy"
           allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
           allowFullScreen
         ></iframe>
@@ -1102,6 +1122,7 @@ export const VideoBlock: React.FC<BlockContentProps> = ({ block }) => {
           controls
           className="w-full h-full object-contain"
           controlsList="nodownload"
+          preload="metadata"
         />
       ) : (
         <div className="text-zinc-500">No Video</div>
@@ -1126,6 +1147,7 @@ export const SubstackBlock: React.FC<BlockContentProps> = ({ block }) => {
           className="w-full h-full border-0"
           title="Substack embed"
           frameBorder="0"
+          loading="lazy"
           scrolling="no"
           sandbox="allow-scripts allow-same-origin allow-top-navigation allow-popups"
           allow="clipboard-read; clipboard-write"
@@ -1239,6 +1261,7 @@ export const FigmaBlock: React.FC<BlockContentProps> = ({ block }) => {
       <iframe
         className="w-full h-full border-0"
         src={`https://www.figma.com/embed?embed_host=share&url=${encodeURIComponent(block.data.url)}`}
+        loading="lazy"
         allowFullScreen
       />
     </ScaledEmbedFrame>
@@ -1258,6 +1281,7 @@ export const CodepenBlock: React.FC<BlockContentProps> = ({ block }) => {
         className="w-full h-full border-0"
         src={`${embedUrl}?default-tab=result&theme-id=dark`}
         frameBorder="no"
+        loading="lazy"
         allowTransparency={true}
         allowFullScreen
       />
@@ -1580,6 +1604,7 @@ export const TiktokBlock: React.FC<BlockContentProps> = ({ block }) => {
           className="absolute border-0"
           style={iframeStyle}
           frameBorder="0"
+          loading="lazy"
           allow="encrypted-media;"
           allowFullScreen
         ></iframe>
@@ -1612,6 +1637,7 @@ export const PdfBlock: React.FC<BlockContentProps> = ({ block }) => {
           src={`${block.data.url}#toolbar=0&navpanes=0`}
           className="w-full flex-1 border-0"
           frameBorder="0"
+          loading="lazy"
         />
       </div>
     </div>

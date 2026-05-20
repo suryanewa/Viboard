@@ -5,11 +5,12 @@ import { v4 as uuidv4 } from 'uuid';
 import { getTextBlockHeight } from '../lib/textBlockMetrics';
 import { createUrlBlock } from '../lib/urlBlocks';
 import { fileToBoardImageDataUrl } from '../lib/imageData';
+import { getOpenableEmbedUrl, isOpenableEmbed, openUrlInNewTab } from '../lib/openableEmbeds';
 import { clampViewportZoom } from '../types';
 import type { Viewport } from '../types';
 
 export const Canvas: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const containerRef = useRef<HTMLButtonElement>(null);
+  const containerRef = useRef<HTMLDivElement>(null);
   const viewport = useBoardStore((state) => state.viewport);
   const gridView = useBoardStore((state) => state.gridView);
   const blocks = useBoardStore((state) => state.blocks);
@@ -115,7 +116,7 @@ export const Canvas: React.FC<{ children: React.ReactNode }> = ({ children }) =>
     }
   }, []);
 
-  const publishViewport = useCallback((nextViewport: Viewport, commitMode: 'frame' | 'idle' = 'frame') => {
+  const publishViewport = useCallback((nextViewport: Viewport, commitMode: 'frame' | 'idle' = 'idle') => {
     viewportRef.current = nextViewport;
     mxRaw.set(nextViewport.x);
     myRaw.set(nextViewport.y);
@@ -364,7 +365,7 @@ export const Canvas: React.FC<{ children: React.ReactNode }> = ({ children }) =>
           x: currentViewport.x - e.deltaX,
           y: currentViewport.y - e.deltaY,
           zoom: currentViewport.zoom,
-        });
+        }, 'idle');
       }
     };
 
@@ -539,7 +540,7 @@ export const Canvas: React.FC<{ children: React.ReactNode }> = ({ children }) =>
         x: currentViewport.x + e.movementX * PAN_SENSITIVITY,
         y: currentViewport.y + e.movementY * PAN_SENSITIVITY,
         zoom: currentViewport.zoom,
-      });
+      }, 'idle');
       return;
     }
 
@@ -699,17 +700,45 @@ export const Canvas: React.FC<{ children: React.ReactNode }> = ({ children }) =>
     }
   }, [currentPath, activeShape, activeFrame, addDrawing, addBlock, blocks, setCurrentPath, setActiveShape, flushViewport]);
 
+  const handleDoubleClick = useCallback((e: React.MouseEvent) => {
+    if (tool !== 'select' || !containerRef.current) return;
+
+    const { viewport, blocks } = useBoardStore.getState();
+    const rect = containerRef.current.getBoundingClientRect();
+    const canvasX = (e.clientX - rect.left - viewport.x) / viewport.zoom;
+    const canvasY = (e.clientY - rect.top - viewport.y) / viewport.zoom;
+    const openableBlock = Object.values(blocks)
+      .filter((block) =>
+        isOpenableEmbed(block) &&
+        canvasX >= block.x &&
+        canvasX <= block.x + block.width &&
+        canvasY >= block.y &&
+        canvasY <= block.y + block.height
+      )
+      .sort((a, b) => b.zIndex - a.zIndex)[0];
+    if (!openableBlock) return;
+
+    const url = getOpenableEmbedUrl(openableBlock);
+    if (!url) return;
+
+    e.preventDefault();
+    e.stopPropagation();
+    openUrlInNewTab(url);
+  }, [tool]);
+
   return (
     <main className="absolute inset-0 w-full h-full overflow-hidden touch-none pointer-events-none">
-      <button 
+      <div
         ref={containerRef}
-        type="button"
+        role="application"
+        tabIndex={0}
         className={`absolute inset-0 w-full h-full focus:outline-none block appearance-none bg-transparent border-none text-left p-0 m-0 pointer-events-auto`}
         style={{ cursor: cursorStyle }}
         onPointerDown={handlePointerDown}
         onPointerMove={handlePointerMove}
         onPointerUp={handlePointerUp}
         onPointerLeave={handlePointerUp}
+        onDoubleClick={handleDoubleClick}
         onContextMenu={(e) => e.preventDefault()}
       >
         <AnimatePresence>
@@ -751,6 +780,8 @@ export const Canvas: React.FC<{ children: React.ReactNode }> = ({ children }) =>
             width: 0,
             height: 0,
             transform,
+            willChange: 'transform',
+            contain: 'layout style paint',
           }}
         >
           {children}
@@ -893,7 +924,7 @@ export const Canvas: React.FC<{ children: React.ReactNode }> = ({ children }) =>
             </svg>
           )}
         </motion.div>
-      </button>
+      </div>
     </main>
   );
 };

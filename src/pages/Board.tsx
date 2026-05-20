@@ -8,7 +8,7 @@ import { KeyboardShortcuts } from '../components/KeyboardShortcuts';
 import { ContextMenu } from '../components/ContextMenu';
 import { PropertyToolbar } from '../components/PropertyToolbar';
 import { useBoardStore } from '../store';
-import { getBoardSnapshot, loadBoardFromWeb, loadDefaultBoard, loadStashedSavedBoardSnapshot, saveBoard, saveBoardToWeb, setCurrentLoadingBoardId, stashSavedBoardSnapshot } from '../lib/boardCommands';
+import { getBoardSnapshot, loadBoardFromWeb, loadDefaultBoard, loadStashedSavedBoardSnapshot, saveBoardSnapshot, saveBoardToWeb, setCurrentLoadingBoardId, stashSavedBoardSnapshot } from '../lib/boardCommands';
 import {
   consumeImportedLocalSnapshotFlag,
   getSavedBoardId,
@@ -24,25 +24,109 @@ import { fileToBoardImageDataUrl } from '../lib/imageData';
 import type { Block, Viewport } from '../types';
 
 const LOCAL_DEFAULT_BOARD_ID = 'local-default-board';
-const BOARD_RENDER_OVERSCAN_PX = 1000;
+const BOARD_RENDER_OVERSCAN_PX = 640;
+const BOARD_RENDER_BUCKET_SIZE = 1200;
+const MAX_BUCKETS_PER_BLOCK = 128;
 const AUTOSAVE_DEBOUNCE_MS = 1200;
 
-const isBlockInRenderViewport = (block: Block, viewport: Viewport) => {
-  if (typeof window === 'undefined') return true;
+type ViewportSize = { width: number; height: number };
+type RenderBounds = { minX: number; minY: number; maxX: number; maxY: number };
+type BlockRenderIndex = {
+  buckets: Map<string, Block[]>;
+  fullScanBlocks: Block[];
+};
+
+const getViewportSize = (): ViewportSize => {
+  if (typeof window === 'undefined') return { width: 0, height: 0 };
+  return { width: window.innerWidth, height: window.innerHeight };
+};
+
+const getBucketKey = (x: number, y: number) => `${x}:${y}`;
+
+const getBlockBucketRange = (block: Block) => ({
+  minBucketX: Math.floor(block.x / BOARD_RENDER_BUCKET_SIZE),
+  minBucketY: Math.floor(block.y / BOARD_RENDER_BUCKET_SIZE),
+  maxBucketX: Math.floor((block.x + block.width) / BOARD_RENDER_BUCKET_SIZE),
+  maxBucketY: Math.floor((block.y + block.height) / BOARD_RENDER_BUCKET_SIZE),
+});
+
+const getViewportRenderBounds = (viewport: Viewport, viewportSize: ViewportSize): RenderBounds => {
+  if (typeof window === 'undefined') {
+    return { minX: -Infinity, minY: -Infinity, maxX: Infinity, maxY: Infinity };
+  }
 
   const zoom = Math.max(viewport.zoom, 0.1);
   const margin = BOARD_RENDER_OVERSCAN_PX / Math.max(zoom, 0.25);
-  const minX = -viewport.x / zoom - margin;
-  const minY = -viewport.y / zoom - margin;
-  const maxX = (-viewport.x + window.innerWidth) / zoom + margin;
-  const maxY = (-viewport.y + window.innerHeight) / zoom + margin;
+  return {
+    minX: -viewport.x / zoom - margin,
+    minY: -viewport.y / zoom - margin,
+    maxX: (-viewport.x + viewportSize.width) / zoom + margin,
+    maxY: (-viewport.y + viewportSize.height) / zoom + margin,
+  };
+};
 
-  return (
-    block.x < maxX &&
-    block.x + block.width > minX &&
-    block.y < maxY &&
-    block.y + block.height > minY
-  );
+const doesBlockIntersectBounds = (block: Block, bounds: RenderBounds) => (
+  block.x < bounds.maxX &&
+  block.x + block.width > bounds.minX &&
+  block.y < bounds.maxY &&
+  block.y + block.height > bounds.minY
+);
+
+const buildBlockRenderIndex = (blocks: Record<string, Block>): BlockRenderIndex => {
+  const buckets = new Map<string, Block[]>();
+  const fullScanBlocks: Block[] = [];
+
+  Object.values(blocks).forEach((block) => {
+    const { minBucketX, minBucketY, maxBucketX, maxBucketY } = getBlockBucketRange(block);
+    const bucketCount = (maxBucketX - minBucketX + 1) * (maxBucketY - minBucketY + 1);
+
+    if (bucketCount > MAX_BUCKETS_PER_BLOCK) {
+      fullScanBlocks.push(block);
+      return;
+    }
+
+    for (let bucketX = minBucketX; bucketX <= maxBucketX; bucketX += 1) {
+      for (let bucketY = minBucketY; bucketY <= maxBucketY; bucketY += 1) {
+        const key = getBucketKey(bucketX, bucketY);
+        const bucket = buckets.get(key);
+        if (bucket) {
+          bucket.push(block);
+        } else {
+          buckets.set(key, [block]);
+        }
+      }
+    }
+  });
+
+  return { buckets, fullScanBlocks };
+};
+
+const queryBlockRenderIndex = (index: BlockRenderIndex, bounds: RenderBounds) => {
+  const visibleById = new Map<string, Block>();
+  const minBucketX = Math.floor(bounds.minX / BOARD_RENDER_BUCKET_SIZE);
+  const minBucketY = Math.floor(bounds.minY / BOARD_RENDER_BUCKET_SIZE);
+  const maxBucketX = Math.floor(bounds.maxX / BOARD_RENDER_BUCKET_SIZE);
+  const maxBucketY = Math.floor(bounds.maxY / BOARD_RENDER_BUCKET_SIZE);
+
+  for (let bucketX = minBucketX; bucketX <= maxBucketX; bucketX += 1) {
+    for (let bucketY = minBucketY; bucketY <= maxBucketY; bucketY += 1) {
+      const bucket = index.buckets.get(getBucketKey(bucketX, bucketY));
+      if (!bucket) continue;
+      bucket.forEach((block) => {
+        if (!visibleById.has(block.id) && doesBlockIntersectBounds(block, bounds)) {
+          visibleById.set(block.id, block);
+        }
+      });
+    }
+  }
+
+  index.fullScanBlocks.forEach((block) => {
+    if (doesBlockIntersectBounds(block, bounds)) {
+      visibleById.set(block.id, block);
+    }
+  });
+
+  return visibleById;
 };
 
 const BoardBlock = memo(({ block }: { block: Block }) => (
@@ -58,10 +142,12 @@ function Board() {
   const blocks = useBoardStore((state) => state.blocks);
   const drawings = useBoardStore((state) => state.drawings);
   const canvasTitle = useBoardStore((state) => state.canvasTitle);
+  const viewport = useBoardStore((state) => state.viewport);
   const selection = useBoardStore((state) => state.selection);
   const mode = useBoardStore((state) => state.mode);
   const [isDraggingOver, setIsDraggingOver] = useState(false);
   const [renderViewport, setRenderViewport] = useState<Viewport>(() => useBoardStore.getState().viewport);
+  const [viewportSize, setViewportSize] = useState<ViewportSize>(getViewportSize);
   const autosaveReadyRef = useRef(false);
   const skipNextAutosaveRef = useRef(false);
   const pendingAutosaveRef = useRef(false);
@@ -69,13 +155,28 @@ function Board() {
   const autosaveTimerRef = useRef<number | null>(null);
   const autosaveQueueRef = useRef(Promise.resolve());
   const importedSnapshotBoardIdRef = useRef<string | null>(null);
+  const routeBoardIdRef = useRef<string | null>(params.id ?? null);
+
+  useLayoutEffect(() => {
+    routeBoardIdRef.current = params.id ?? null;
+  }, [params.id]);
+
+  const blockRenderIndex = useMemo(() => buildBlockRenderIndex(blocks), [blocks]);
 
   const renderedBlocks = useMemo(() => {
     const selectedIds = new Set(selection);
-    return Object.values(blocks).filter((block) =>
-      selectedIds.has(block.id) || isBlockInRenderViewport(block, renderViewport)
+    const visibleById = queryBlockRenderIndex(
+      blockRenderIndex,
+      getViewportRenderBounds(renderViewport, viewportSize),
     );
-  }, [blocks, renderViewport, selection]);
+
+    selectedIds.forEach((id) => {
+      const block = blocks[id];
+      if (block) visibleById.set(id, block);
+    });
+
+    return Array.from(visibleById.values());
+  }, [blockRenderIndex, blocks, renderViewport, selection, viewportSize]);
 
   const flushPendingAutosave = useCallback(() => {
     if (!pendingAutosaveRef.current) return;
@@ -89,7 +190,7 @@ function Board() {
     const savedBoardId = getSavedBoardId();
     const versionAtSave = changeVersionRef.current;
     const snapshotAtSave = getBoardSnapshot();
-    const savedLocally = saveBoard();
+    const savedLocally = saveBoardSnapshot(snapshotAtSave);
 
     if (savedLocally && !savedBoardId && changeVersionRef.current === versionAtSave) {
       markBoardClean();
@@ -100,15 +201,18 @@ function Board() {
     stashSavedBoardSnapshot(savedBoardId, snapshotAtSave);
     autosaveQueueRef.current = autosaveQueueRef.current
       .catch(() => undefined)
-      .then(() => saveBoardToWeb(snapshotAtSave.title, savedBoardId, snapshotAtSave))
+      .then(() => saveBoardToWeb(snapshotAtSave.title, savedBoardId, snapshotAtSave, { updateLocalCache: false }))
       .then(() => {
+        if (routeBoardIdRef.current !== savedBoardId) return;
         if (changeVersionRef.current === versionAtSave) {
+          stashSavedBoardSnapshot(savedBoardId, snapshotAtSave);
           markBoardClean();
         } else {
           markBoardDirty();
         }
       })
       .catch((error) => {
+        if (routeBoardIdRef.current !== savedBoardId) return;
         markBoardDirty();
         pendingAutosaveRef.current = true;
         console.error('Error autosaving moodboard:', error);
@@ -147,15 +251,43 @@ function Board() {
     };
   }, []);
 
+  useEffect(() => {
+    let resizeFrame: number | null = null;
+
+    const handleResize = () => {
+      if (resizeFrame !== null) return;
+      resizeFrame = window.requestAnimationFrame(() => {
+        resizeFrame = null;
+        setViewportSize(getViewportSize());
+      });
+    };
+
+    window.addEventListener('resize', handleResize);
+    return () => {
+      if (resizeFrame !== null) {
+        window.cancelAnimationFrame(resizeFrame);
+      }
+      window.removeEventListener('resize', handleResize);
+    };
+  }, []);
+
   useLayoutEffect(() => {
     if (!params.id) {
+      const defaultBoardLoad = new AbortController();
       setCurrentLoadingBoardId(null);
       importedSnapshotBoardIdRef.current = null;
-      loadDefaultBoard();
-      syncAllBlocks(useBoardStore.getState().blocks);
-      changeVersionRef.current = 0;
-      autosaveReadyRef.current = true;
-      return;
+      autosaveReadyRef.current = false;
+      skipNextAutosaveRef.current = true;
+      void loadDefaultBoard({ useTutorial: true, signal: defaultBoardLoad.signal }).then(() => {
+        if (defaultBoardLoad.signal.aborted) return;
+        syncAllBlocks(useBoardStore.getState().blocks);
+        changeVersionRef.current = 0;
+        autosaveReadyRef.current = true;
+        window.setTimeout(() => {
+          skipNextAutosaveRef.current = false;
+        }, 0);
+      });
+      return () => defaultBoardLoad.abort();
     }
 
     const boardId = params.id;
@@ -233,7 +365,7 @@ function Board() {
     autosaveTimerRef.current = window.setTimeout(() => {
       flushPendingAutosave();
     }, AUTOSAVE_DEBOUNCE_MS);
-  }, [blocks, drawings, canvasTitle, params.id, flushPendingAutosave]);
+  }, [blocks, drawings, canvasTitle, viewport, params.id, flushPendingAutosave]);
 
   useEffect(() => {
     const handleBeforeUnload = (event: BeforeUnloadEvent) => {
@@ -243,8 +375,20 @@ function Board() {
       event.returnValue = '';
     };
 
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'hidden') {
+        flushPendingAutosave();
+      }
+    };
+
     window.addEventListener('beforeunload', handleBeforeUnload);
-    return () => window.removeEventListener('beforeunload', handleBeforeUnload);
+    window.addEventListener('pagehide', flushPendingAutosave);
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    return () => {
+      window.removeEventListener('beforeunload', handleBeforeUnload);
+      window.removeEventListener('pagehide', flushPendingAutosave);
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+    };
   }, [flushPendingAutosave]);
 
   useEffect(() => {

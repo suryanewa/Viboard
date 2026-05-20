@@ -5,6 +5,7 @@ import { getSavedBoardId, markBoardDraftClean, markBoardImported, markBoardSaved
 import { clampViewportZoom } from '../types';
 import type { Block, DrawingPath, Viewport } from '../types';
 import type { BoardHistory } from '../store';
+import type { Session } from '@supabase/supabase-js';
 
 export type BoardSnapshot = {
   version: 1;
@@ -40,6 +41,8 @@ const PENDING_AUTHENTICATED_SAVE_KEY = 'viboard:pending-authenticated-save';
 const WEB_CACHE_INDEX_KEY = 'viboard:web:index';
 const AUTOSAVE_KEY = 'viboard:autosave';
 const RECENT_BOARDS_KEY = 'viboard:recent';
+const RECENT_WEB_BOARDS_KEY = 'viboard:recent-web-boards';
+const TUTORIAL_BOARD_URL = '/tutorial-board.viboard.json';
 const DEFAULT_BOARD_VIEWPORT_ZOOM = 1;
 const MAX_BROWSER_SNAPSHOT_CHARS = 4_000_000;
 const SNAPSHOT_DB_NAME = 'viboard-cache';
@@ -112,6 +115,12 @@ const isDefaultOnlySnapshot = (snapshot: BoardSnapshot) => {
     blockIds[0] === DEFAULT_LOCKUP_BLOCK.id &&
     (snapshot.drawings || []).length === 0
   );
+};
+
+const timestampValue = (value: unknown) => {
+  if (typeof value !== 'string') return null;
+  const timestamp = Date.parse(value);
+  return Number.isFinite(timestamp) ? timestamp : null;
 };
 
 export const getBoardSnapshot = (): BoardSnapshot => {
@@ -337,6 +346,32 @@ const defaultBoardSnapshot = (title = 'Untitled Board'): BoardSnapshot => ({
   history: { past: [], future: [] },
 });
 
+const loadBoardState = (snapshot: BoardSnapshot) => {
+  useBoardStore.setState({
+    blocks: snapshot.blocks || {},
+    drawings: snapshot.drawings || [],
+    selection: [],
+    drawingSelection: [],
+    canvasTitle: snapshot.title || 'Untitled Board',
+    viewport: normalizeViewport(snapshot.viewport),
+    history: normalizeHistory(snapshot.history),
+  });
+};
+
+const fetchTutorialBoardSnapshot = async (signal?: AbortSignal): Promise<BoardSnapshot | null> => {
+  if (typeof fetch === 'undefined') return null;
+
+  try {
+    const response = await fetch(TUTORIAL_BOARD_URL, { cache: 'force-cache', signal });
+    if (!response.ok || signal?.aborted) return null;
+    return normalizeSnapshot(await response.json());
+  } catch (error) {
+    if (signal?.aborted) return null;
+    console.warn('Could not load tutorial board:', error);
+    return null;
+  }
+};
+
 const isClearedBoardSnapshot = (snapshot: BoardSnapshot) =>
   Object.keys(snapshot.blocks || {}).length === 0 &&
   (snapshot.drawings || []).length === 0 &&
@@ -533,6 +568,24 @@ const saveRecentSnapshot = (snapshot: BoardSnapshot) => {
   return safeSetLocalStorage(RECENT_BOARDS_KEY, JSON.stringify(next));
 };
 
+const saveRecentWebBoardSummary = (board: SavedBoardSummary) => {
+  const now = new Date().toISOString();
+  const nextBoard = {
+    ...board,
+    title: board.title || 'Untitled Board',
+    updated_at: board.updated_at || now,
+  };
+  const recent = safeParseJson<SavedBoardSummary[]>(localStorage.getItem(RECENT_WEB_BOARDS_KEY), []);
+  const next = [nextBoard, ...recent.filter((item) => item.id !== nextBoard.id)].slice(0, 10);
+  safeSetLocalStorage(RECENT_WEB_BOARDS_KEY, JSON.stringify(next));
+};
+
+const removeRecentWebBoardSummary = (boardId: string) => {
+  const recent = safeParseJson<SavedBoardSummary[]>(localStorage.getItem(RECENT_WEB_BOARDS_KEY), []);
+  const next = recent.filter((board) => board.id !== boardId);
+  safeSetLocalStorage(RECENT_WEB_BOARDS_KEY, JSON.stringify(next));
+};
+
 const saveWebSnapshotCache = (boardId: string, snapshot: BoardSnapshot) => {
   const cacheKey = `viboard:web:${boardId}`;
   if (!safeSetSnapshotStorage(cacheKey, snapshot)) {
@@ -546,9 +599,12 @@ const saveWebSnapshotCache = (boardId: string, snapshot: BoardSnapshot) => {
     ...cachedBoards.filter((board) => board.id !== boardId),
   ].slice(0, 25);
   safeSetLocalStorage(WEB_CACHE_INDEX_KEY, JSON.stringify(next));
+  saveRecentWebBoardSummary({ id: boardId, title: snapshot.title, updated_at: now });
 };
 
 export const getCachedWebBoards = () => safeParseJson<SavedBoardSummary[]>(localStorage.getItem(WEB_CACHE_INDEX_KEY), []);
+export const getRecentWebBoards = (limit = 10) =>
+  safeParseJson<SavedBoardSummary[]>(localStorage.getItem(RECENT_WEB_BOARDS_KEY), []).slice(0, limit);
 
 export const cacheSavedBoardSnapshot = (boardId: string, snapshot: BoardSnapshot) => {
   saveWebSnapshotCache(boardId, snapshot);
@@ -572,39 +628,38 @@ export const loadStashedSavedBoardSnapshot = (boardId: string) => {
 
 export const newBoard = () => {
   const snapshot = defaultBoardSnapshot();
-  useBoardStore.setState({
-    blocks: snapshot.blocks,
-    drawings: snapshot.drawings,
-    selection: [],
-    drawingSelection: [],
-    canvasTitle: snapshot.title,
-    viewport: snapshot.viewport,
-    history: { past: [], future: [] },
-  });
+  loadBoardState(snapshot);
   markBoardUnsaved();
 };
 
-export const loadDefaultBoard = () => {
-  const snapshot = readSnapshotStorage(AUTOSAVE_KEY) ?? defaultBoardSnapshot();
-  useBoardStore.setState({
-    blocks: snapshot.blocks,
-    drawings: snapshot.drawings,
-    selection: [],
-    drawingSelection: [],
-    canvasTitle: snapshot.title,
-    viewport: snapshot.viewport,
-    history: normalizeHistory(snapshot.history),
-  });
+export const loadDefaultBoard = async (options: { useTutorial?: boolean; signal?: AbortSignal } = {}) => {
+  const cachedSnapshot = readSnapshotStorage(AUTOSAVE_KEY);
+  if (cachedSnapshot) {
+    loadBoardState(cachedSnapshot);
+    markBoardDraftClean();
+    return;
+  }
+
+  const fallbackSnapshot = defaultBoardSnapshot();
+  loadBoardState(fallbackSnapshot);
+
+  if (options.useTutorial) {
+    const tutorialSnapshot = await fetchTutorialBoardSnapshot(options.signal);
+    if (options.signal?.aborted) return;
+    if (tutorialSnapshot) loadBoardState(tutorialSnapshot);
+  }
+
   markBoardDraftClean();
 };
 
-export const saveBoard = () => {
-  const snapshot = getBoardSnapshot();
+export const saveBoardSnapshot = (snapshot: BoardSnapshot) => {
   if (isClearedBoardSnapshot(snapshot)) return false;
   const savedAutosave = safeSetSnapshotStorage(AUTOSAVE_KEY, snapshot);
   const savedRecent = saveRecentSnapshot(snapshot);
   return savedAutosave || savedRecent;
 };
+
+export const saveBoard = () => saveBoardSnapshot(getBoardSnapshot());
 
 type PendingAuthenticatedSave = {
   boardId: string | null;
@@ -652,7 +707,10 @@ export const savePendingAuthenticatedBoard = async () => {
   if (!pending) return null;
 
   loadBoardSnapshot(pending.snapshot);
-  const savedId = await saveBoardToWeb(pending.snapshot.title, pending.boardId, pending.snapshot);
+  const { data: sessionData } = await supabase.auth.getSession();
+  const savedId = await saveBoardToWeb(pending.snapshot.title, pending.boardId, pending.snapshot, {
+    sessionOverride: sessionData.session,
+  });
   localStorage.removeItem(PENDING_AUTHENTICATED_SAVE_KEY);
   return savedId;
 };
@@ -661,7 +719,7 @@ export const saveBoardToWeb = async (
   title: string,
   boardId?: string | null,
   snapshotOverride?: BoardSnapshot,
-  options: { allowDefaultSnapshot?: boolean } = {}
+  options: { allowDefaultSnapshot?: boolean; updateLocalCache?: boolean; sessionOverride?: Session | null } = {}
 ) => {
   const snapshotTitle = title.trim() || 'Untitled Board';
   const currentSnapshot = { ...(snapshotOverride ?? getBoardSnapshot()), title: snapshotTitle };
@@ -674,8 +732,7 @@ export const saveBoardToWeb = async (
     throw new Error('This save only contains the default Viboard logo block. Add or restore your board content before saving.');
   }
   const shouldApplySnapshotToStore = !snapshotOverride;
-  const { data: sessionData } = await supabase.auth.getSession();
-  const userId = sessionData.session?.user.id;
+  const userId = options.sessionOverride?.user.id ?? (await supabase.auth.getSession()).data.session?.user.id;
   if (!userId) throw new Error('You must be signed in to save this board.');
 
   const timestampedPayload = {
@@ -740,7 +797,9 @@ export const saveBoardToWeb = async (
   if (shouldApplySnapshotToStore) {
     useBoardStore.setState({ canvasTitle: snapshot.title });
   }
-  stashSavedBoardSnapshot(savedBoard.id, snapshot);
+  if (options.updateLocalCache !== false) {
+    stashSavedBoardSnapshot(savedBoard.id, snapshot);
+  }
   if (shouldApplySnapshotToStore) {
     markBoardSaved(savedBoard.id);
   }
@@ -768,6 +827,7 @@ export const deleteCurrentBoard = async () => {
   removeSnapshotIndexedDb(`viboard:web:${boardId}`);
   const cachedBoards = getCachedWebBoards().filter((board) => board.id !== boardId);
   safeSetLocalStorage(WEB_CACHE_INDEX_KEY, JSON.stringify(cachedBoards));
+  removeRecentWebBoardSummary(boardId);
   markBoardUnsaved();
 };
 
@@ -797,7 +857,7 @@ export const importBoardFile = () => {
 };
 
 export const fetchRecentBoards = async (limit = 10): Promise<SavedBoardSummary[]> => {
-  const cached = getCachedWebBoards();
+  const cached = getRecentWebBoards(limit);
   const { data, error } = await supabase
     .from('moodboards')
     .select('id,title,created_at,updated_at')
@@ -805,27 +865,15 @@ export const fetchRecentBoards = async (limit = 10): Promise<SavedBoardSummary[]
     .limit(limit);
 
   if (error) {
-    const fallback = await supabase
-      .from('moodboards')
-      .select('id,title,created_at')
-      .order('created_at', { ascending: false })
-      .limit(limit);
-    if (fallback.error || !fallback.data) return cached.slice(0, limit);
-    const remote = fallback.data.map((board) => ({ ...board, title: board.title || 'Untitled Board' }));
-    return mergeBoardSummaries(remote, cached).slice(0, limit);
+    return cached;
   }
 
-  const remote = (data || []).map((board) => ({ ...board, title: board.title || 'Untitled Board' }));
-  return mergeBoardSummaries(remote, cached).slice(0, limit);
-};
-
-const mergeBoardSummaries = (primary: SavedBoardSummary[], secondary: SavedBoardSummary[]) => {
-  const seen = new Set<string>();
-  return [...primary, ...secondary].filter((board) => {
-    if (seen.has(board.id)) return false;
-    seen.add(board.id);
-    return true;
-  });
+  const remoteById = new Map(
+    (data || []).map((board) => [board.id, { ...board, title: board.title || 'Untitled Board' }])
+  );
+  return cached
+    .map((board) => remoteById.get(board.id) ?? board)
+    .slice(0, limit);
 };
 
 export let currentLoadingBoardId: string | null = null;
@@ -837,6 +885,8 @@ export const setCurrentLoadingBoardId = (id: string | null) => {
 export const loadBoardFromWeb = async (boardId: string, onSnapshotApplied?: () => void) => {
   const cachedSnapshot = await readSnapshotCache(`viboard:web:${boardId}`);
   const cachedSignature = cachedSnapshot ? snapshotSignature(cachedSnapshot) : null;
+  const cachedSummary = getCachedWebBoards().find((board) => board.id === boardId);
+  const cachedUpdatedAt = timestampValue(cachedSummary?.updated_at);
 
   const fetchAndApplyRemoteSnapshot = async () => {
     const { data, error } = await supabase.from('moodboards').select('*').eq('id', boardId).single();
@@ -851,6 +901,26 @@ export const loadBoardFromWeb = async (boardId: string, onSnapshotApplied?: () =
 
     const snapshot = parseSnapshot(data as Record<string, unknown>);
     if (snapshot) {
+      const remoteSignature = snapshotSignature(snapshot);
+      const remoteUpdatedAt = timestampValue((data as Record<string, unknown>)?.updated_at)
+        ?? timestampValue((data as Record<string, unknown>)?.created_at);
+
+      if (cachedSnapshot && cachedSignature && remoteSignature !== cachedSignature) {
+        const currentSignature = snapshotSignature(getBoardSnapshot());
+        if (currentSignature !== cachedSignature) {
+          return;
+        }
+
+        const cachedLooksNewer = cachedUpdatedAt !== null
+          && (remoteUpdatedAt === null || cachedUpdatedAt > remoteUpdatedAt);
+        if (cachedLooksNewer) {
+          void saveBoardToWeb(cachedSnapshot.title, boardId, cachedSnapshot).catch((saveError) => {
+            console.error('Error syncing newer cached moodboard:', saveError);
+          });
+          return;
+        }
+      }
+
       if (cachedSignature && snapshotSignature(getBoardSnapshot()) !== cachedSignature) {
         return;
       }
@@ -869,6 +939,11 @@ export const loadBoardFromWeb = async (boardId: string, onSnapshotApplied?: () =
 
   if (cachedSnapshot) {
     loadBoardSnapshot(cachedSnapshot);
+    saveRecentWebBoardSummary({
+      id: boardId,
+      title: cachedSnapshot.title,
+      updated_at: cachedSummary?.updated_at || new Date().toISOString(),
+    });
     markBoardSaved(boardId);
     void fetchAndApplyRemoteSnapshot().catch((error) => {
       console.error('Error refreshing cached moodboard:', error);
@@ -881,15 +956,7 @@ export const loadBoardFromWeb = async (boardId: string, onSnapshotApplied?: () =
 };
 
 const loadBoardSnapshot = (snapshot: BoardSnapshot) => {
-  useBoardStore.setState({
-    blocks: snapshot.blocks || {},
-    drawings: snapshot.drawings || [],
-    selection: [],
-    drawingSelection: [],
-    canvasTitle: snapshot.title || 'Untitled Board',
-    viewport: normalizeViewport(snapshot.viewport),
-    history: normalizeHistory(snapshot.history),
-  });
+  loadBoardState(snapshot);
   saveRecentSnapshot(snapshot);
 };
 

@@ -3,6 +3,7 @@ import { motion, useMotionValue, AnimatePresence, animate } from 'framer-motion'
 import type { Block } from '../types';
 import { useBoardStore } from '../store';
 import clsx from 'clsx';
+import { isOpenableEmbed } from '../lib/openableEmbeds';
 
 import { createPortal } from 'react-dom';
 
@@ -213,7 +214,7 @@ const BlockShellComponent: React.FC<BlockShellProps> = ({ block, children }) => 
   const bringToFront = useBoardStore((state) => state.bringToFront);
   const historyAnimationKey = useBoardStore((state) => state.historyAnimationKey);
 
-  const showEmbedDragShield = tool === 'select' && INTERACTIVE_EMBED_TYPES.has(block.type);
+  const showEmbedDragShield = tool === 'select' && (INTERACTIVE_EMBED_TYPES.has(block.type) || isOpenableEmbed(block));
   const skipPlacementAnimation = block.type === 'shape' || block.data.skipPlacementAnimation;
   
   const clickPoint = useRef({ x: 0, y: 0, edge: 'top' });
@@ -897,6 +898,9 @@ const BlockShellComponent: React.FC<BlockShellProps> = ({ block, children }) => 
         width,
         height,
         zIndex: block.zIndex,
+        contain: 'layout style paint',
+        contentVisibility: 'auto',
+        containIntrinsicSize: `${Math.max(1, Math.round(block.width))}px ${Math.max(1, Math.round(block.height))}px`,
         // Let sticky/text/marker/shape/frame creation hit the canvas through empty frame areas.
         // Frame title + resize handles use their own pointer-events: auto.
         pointerEvents:

@@ -1,15 +1,17 @@
 import React, { useState, useEffect } from 'react';
 import { useBoardStore } from '../store';
-import { Type, Magnet, Pencil, Circle, MousePointer, Hand, ZoomIn, ZoomOut, Search, Send, Eye, Edit3, Frame, Upload } from 'lucide-react';
+import { Type, Magnet, Pencil, Circle, MousePointer, Hand, ZoomIn, ZoomOut, Search, Send, Eye, Edit3, Frame, Upload, LogIn } from 'lucide-react';
 import { v4 as uuidv4 } from 'uuid';
 import { motion, AnimatePresence, type TargetAndTransition } from 'framer-motion';
 import clsx from 'clsx';
+import { useNavigate, useParams } from 'react-router-dom';
 import type { Block, BlockData, BlockType } from '../types';
 import { Tooltip } from './Tooltip';
 import { SearchOverlay } from './SearchOverlay';
 import { BoardMenu } from './BoardMenu';
 import { getTextBlockHeight } from '../lib/textBlockMetrics';
 import { createUrlBlock } from '../lib/urlBlocks';
+import { supabase } from '../lib/supabase';
 
 type ToolbarVisualTool = 'select' | 'marker' | 'shape' | 'text' | 'pan' | 'sticky' | 'link' | 'frame';
 
@@ -31,6 +33,8 @@ type ToolbarToolEntry = {
 };
 
 export const Toolbar: React.FC = () => {
+  const navigate = useNavigate();
+  const params = useParams();
   const addBlock = useBoardStore((state) => state.addBlock);
   const viewport = useBoardStore((state) => state.viewport);
   const setViewport = useBoardStore((state) => state.setViewport);
@@ -57,6 +61,7 @@ export const Toolbar: React.FC = () => {
   const [isEditingTitle, setIsEditingTitle] = useState(false);
   const [draftCanvasTitle, setDraftCanvasTitle] = useState(canvasTitle);
   const [activeToolbarTool, setActiveToolbarTool] = useState<ToolbarVisualTool>(tool);
+  const [hasSession, setHasSession] = useState<boolean | null>(null);
   const animationTimeoutRef = React.useRef<number | null>(null);
   const titleInputRef = React.useRef<HTMLInputElement>(null);
 
@@ -76,7 +81,32 @@ export const Toolbar: React.FC = () => {
     return () => observer.disconnect();
   }, []);
 
+  useEffect(() => {
+    let mounted = true;
+
+    void supabase.auth.getSession().then(({ data, error }) => {
+      if (!mounted) return;
+      if (error) {
+        console.error('Error loading auth session for toolbar:', error);
+      }
+      setHasSession(Boolean(data.session));
+    });
+
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange((_event, session) => {
+      setHasSession(Boolean(session));
+    });
+
+    return () => {
+      mounted = false;
+      subscription.unsubscribe();
+    };
+  }, []);
+
   const ZOOM_LEVELS = [0.25, 0.5, 0.75, 1, 2];
+  const showLoginButton = !params.id && hasSession === false;
+
   const cycleZoom = () => {
     const { viewport, setViewport } = useBoardStore.getState();
     const currentIndex = ZOOM_LEVELS.findIndex(z => Math.abs(z - viewport.zoom) < 0.01);
@@ -622,6 +652,24 @@ export const Toolbar: React.FC = () => {
         <motion.div 
           className="flex items-center gap-1 px-2 py-1.5 bg-white/90 backdrop-blur-md shadow-none border border-zinc-200 pointer-events-auto rounded-xl"
         >
+          <AnimatePresence initial={false}>
+            {showLoginButton && (
+              <motion.button
+                type="button"
+                initial={{ opacity: 0, scale: 0.92, y: -4 }}
+                animate={{ opacity: 1, scale: 1, y: 0 }}
+                exit={{ opacity: 0, scale: 0.92, y: -4 }}
+                transition={{ type: 'spring', stiffness: 320, damping: 24 }}
+                whileHover={{ scale: 1.02 }}
+                whileTap={{ scale: 0.98 }}
+                onClick={() => navigate('/login')}
+                className="flex items-center gap-2 rounded-lg bg-[#6c5cff] px-3 py-2 text-sm font-medium text-white shadow-sm transition-colors hover:bg-[#5a4be8]"
+              >
+                <LogIn className="h-4 w-4" />
+                Log In
+              </motion.button>
+            )}
+          </AnimatePresence>
           <AnimatePresence>
             {mode === 'edit' && (
               <motion.div variants={{ hidden: { opacity: 0, scale: 0.5 }, visible: { opacity: 1, scale: 1, transition: { type: "spring", bounce: 0.4 } } }}>
