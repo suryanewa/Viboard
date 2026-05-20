@@ -192,7 +192,7 @@ interface BoardState {
   clearBoard: () => void;
 }
 
-export const MAX_HISTORY = 10;
+export const MAX_HISTORY = 25;
 const MAX_HISTORY_BLOCKS = 300;
 let historyAnimationSequence = 0;
 

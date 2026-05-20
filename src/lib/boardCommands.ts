@@ -23,6 +23,13 @@ export type SavedBoardSummary = {
   created_at?: string;
   updated_at?: string;
 };
+type MoodboardRow = Record<string, unknown> & {
+  id?: string;
+  title?: string;
+  snapshot_path?: string | null;
+  snapshot_compressed?: string | null;
+  snapshot_encoding?: string | null;
+};
 type TextCommand =
   | 'bold'
   | 'italic'
@@ -37,6 +44,9 @@ type TextCommand =
 
 export const BOARD_FILE_EXTENSION = 'viboard.json';
 const BOARD_CONTENT_COLUMNS = ['snapshot', 'data', 'content'];
+const SNAPSHOT_STORAGE_BUCKET = 'board-snapshots';
+const SNAPSHOT_STORAGE_VERSION = 1;
+const SNAPSHOT_COMPRESSED_ENCODING = 'gzip+base64+json';
 const PENDING_AUTHENTICATED_SAVE_KEY = 'viboard:pending-authenticated-save';
 const WEB_CACHE_INDEX_KEY = 'viboard:web:index';
 const AUTOSAVE_KEY = 'viboard:autosave';
@@ -91,6 +101,15 @@ const normalizeViewport = (viewport?: Partial<Viewport>): Viewport => ({
   ),
 });
 
+const snapshotForPersistence = (snapshot: BoardSnapshot): BoardSnapshot => ({
+  version: 1,
+  title: snapshot.title,
+  blocks: snapshot.blocks || {},
+  drawings: snapshot.drawings || [],
+  viewport: normalizeViewport(snapshot.viewport),
+  history: normalizeHistory(snapshot.history),
+});
+
 const snapshotSignature = (snapshot: BoardSnapshot) =>
   JSON.stringify({
     title: snapshot.title,
@@ -124,14 +143,14 @@ const timestampValue = (value: unknown) => {
 };
 
 export const getBoardSnapshot = (): BoardSnapshot => {
-  const { canvasTitle, blocks, drawings, viewport } = useBoardStore.getState();
+  const { canvasTitle, blocks, drawings, viewport, history } = useBoardStore.getState();
   return {
     version: 1,
     title: canvasTitle,
     blocks,
     drawings,
     viewport,
-    history: { past: [], future: [] },
+    history: normalizeHistory(history),
   };
 };
 
@@ -156,6 +175,48 @@ const safeParseJson = <T,>(value: string | null, fallback: T): T => {
   } catch {
     return fallback;
   }
+};
+
+const bytesToBase64 = (bytes: Uint8Array) => {
+  let binary = '';
+  const chunkSize = 0x8000;
+  for (let offset = 0; offset < bytes.length; offset += chunkSize) {
+    binary += String.fromCharCode(...bytes.subarray(offset, offset + chunkSize));
+  }
+  return btoa(binary);
+};
+
+const base64ToBytes = (base64: string) => {
+  const binary = atob(base64);
+  const bytes = new Uint8Array(binary.length);
+  for (let index = 0; index < binary.length; index += 1) {
+    bytes[index] = binary.charCodeAt(index);
+  }
+  return bytes;
+};
+
+const compressText = async (text: string) => {
+  if (typeof CompressionStream === 'undefined') return btoa(unescape(encodeURIComponent(text)));
+
+  const stream = new Blob([text], { type: 'application/json' })
+    .stream()
+    .pipeThrough(new CompressionStream('gzip'));
+  return bytesToBase64(new Uint8Array(await new Response(stream).arrayBuffer()));
+};
+
+const decompressText = async (value: string, encoding?: string | null) => {
+  if (encoding !== SNAPSHOT_COMPRESSED_ENCODING) {
+    return decodeURIComponent(escape(atob(value)));
+  }
+
+  if (typeof DecompressionStream === 'undefined') {
+    throw new Error('This browser cannot decompress the stored board snapshot.');
+  }
+
+  const stream = new Blob([base64ToBytes(value)])
+    .stream()
+    .pipeThrough(new DecompressionStream('gzip'));
+  return new Response(stream).text();
 };
 
 const openSnapshotDb = () =>
@@ -398,6 +459,40 @@ export const parseSnapshot = (row: Record<string, unknown> | null): BoardSnapsho
   }
 
   return null;
+};
+
+export const loadSnapshotFromRow = async (row: MoodboardRow | null): Promise<BoardSnapshot | null> => {
+  if (!row) return null;
+
+  if (typeof row.snapshot_path === 'string' && row.snapshot_path.trim()) {
+    const { data, error } = await supabase.storage
+      .from(SNAPSHOT_STORAGE_BUCKET)
+      .download(row.snapshot_path);
+
+    if (!error && data) {
+      try {
+        const normalized = normalizeSnapshot(JSON.parse(await data.text()));
+        return isClearedBoardSnapshot(normalized) ? null : normalized;
+      } catch (parseError) {
+        console.error('Error parsing stored board snapshot:', parseError);
+      }
+    } else {
+      console.error('Error downloading board snapshot:', error);
+    }
+  }
+
+  if (typeof row.snapshot_compressed === 'string' && row.snapshot_compressed.trim()) {
+    try {
+      const normalized = normalizeSnapshot(
+        JSON.parse(await decompressText(row.snapshot_compressed, row.snapshot_encoding))
+      );
+      return isClearedBoardSnapshot(normalized) ? null : normalized;
+    } catch (parseError) {
+      console.error('Error parsing compressed board snapshot:', parseError);
+    }
+  }
+
+  return parseSnapshot(row);
 };
 
 const normalizeSnapshot = (value: unknown): BoardSnapshot => {
@@ -686,7 +781,7 @@ export const queueAuthenticatedSave = (
   boardId?: string | null,
   snapshotOverride?: BoardSnapshot
 ) => {
-  const snapshot = { ...(snapshotOverride ?? getBoardSnapshot()), title: title.trim() || 'Untitled Board' };
+  const snapshot = snapshotForPersistence({ ...(snapshotOverride ?? getBoardSnapshot()), title: title.trim() || 'Untitled Board' });
   if (estimateJsonChars(snapshot) > MAX_BROWSER_SNAPSHOT_CHARS) {
     throw new Error('This board is too large to queue in browser storage. Sign in first, then save it again.');
   }
@@ -715,6 +810,61 @@ export const savePendingAuthenticatedBoard = async () => {
   return savedId;
 };
 
+const boardSnapshotStoragePath = (userId: string, boardId: string) =>
+  `${userId}/${boardId}.viboard.json`;
+
+const uploadBoardSnapshot = async (path: string, snapshot: BoardSnapshot) => {
+  const persistedSnapshot = snapshotForPersistence(snapshot);
+  const body = JSON.stringify(persistedSnapshot);
+  const { error } = await supabase.storage
+    .from(SNAPSHOT_STORAGE_BUCKET)
+    .upload(path, new Blob([body], { type: 'application/json' }), {
+      cacheControl: '0',
+      contentType: 'application/json',
+      upsert: true,
+    });
+
+  if (error) throw error;
+
+  return {
+    snapshot: persistedSnapshot,
+    size: body.length,
+  };
+};
+
+const prepareRemoteSnapshot = async (userId: string, boardId: string, snapshot: BoardSnapshot) => {
+  const persistedSnapshot = snapshotForPersistence(snapshot);
+  const snapshotPath = boardSnapshotStoragePath(userId, boardId);
+
+  try {
+    const uploaded = await uploadBoardSnapshot(snapshotPath, persistedSnapshot);
+    return {
+      snapshot: uploaded.snapshot,
+      size: uploaded.size,
+      path: snapshotPath,
+      compressed: null,
+      encoding: null,
+    };
+  } catch (storageError) {
+    console.error('Error uploading board snapshot to storage, falling back to compressed row storage:', storageError);
+  }
+
+  const body = JSON.stringify(persistedSnapshot);
+  return {
+    snapshot: persistedSnapshot,
+    size: body.length,
+    path: null,
+    compressed: await compressText(body),
+    encoding: SNAPSHOT_COMPRESSED_ENCODING,
+  };
+};
+
+const withoutId = <T extends { id: string }>(payload: T) => {
+  return Object.fromEntries(
+    Object.entries(payload).filter(([key]) => key !== 'id')
+  ) as Omit<T, 'id'>;
+};
+
 export const saveBoardToWeb = async (
   title: string,
   boardId?: string | null,
@@ -722,42 +872,60 @@ export const saveBoardToWeb = async (
   options: { allowDefaultSnapshot?: boolean; updateLocalCache?: boolean; sessionOverride?: Session | null } = {}
 ) => {
   const snapshotTitle = title.trim() || 'Untitled Board';
-  const currentSnapshot = { ...(snapshotOverride ?? getBoardSnapshot()), title: snapshotTitle };
+  const currentSnapshot = snapshotForPersistence({ ...(snapshotOverride ?? getBoardSnapshot()), title: snapshotTitle });
   if (isClearedBoardSnapshot(currentSnapshot)) {
     throw new Error('This board is empty. Add content before saving.');
   }
-  const snapshot = currentSnapshot;
-  if (isDefaultOnlySnapshot(snapshot) && !options.allowDefaultSnapshot) {
-    console.warn('Refusing to save default-only Viboard snapshot:', snapshotStats(snapshot));
+  if (isDefaultOnlySnapshot(currentSnapshot) && !options.allowDefaultSnapshot) {
+    console.warn('Refusing to save default-only Viboard snapshot:', snapshotStats(currentSnapshot));
     throw new Error('This save only contains the default Viboard logo block. Add or restore your board content before saving.');
   }
   const shouldApplySnapshotToStore = !snapshotOverride;
   const userId = options.sessionOverride?.user.id ?? (await supabase.auth.getSession()).data.session?.user.id;
   if (!userId) throw new Error('You must be signed in to save this board.');
 
+  const targetBoardId = boardId || uuidv4();
+  const remoteSnapshot = await prepareRemoteSnapshot(userId, targetBoardId, currentSnapshot);
+  const { snapshot: persistedSnapshot, size: snapshotSize } = remoteSnapshot;
+
   const timestampedPayload = {
-    title: snapshot.title,
+    id: targetBoardId,
+    title: persistedSnapshot.title,
     user_id: userId,
     updated_at: new Date().toISOString(),
+    snapshot_path: remoteSnapshot.path,
+    snapshot_size: snapshotSize,
+    snapshot_storage_version: SNAPSHOT_STORAGE_VERSION,
+    snapshot_compressed: remoteSnapshot.compressed,
+    snapshot_encoding: remoteSnapshot.encoding,
+    snapshot: {},
   };
   const basePayload = {
-    title: snapshot.title,
+    id: targetBoardId,
+    title: persistedSnapshot.title,
     user_id: userId,
+    snapshot_path: remoteSnapshot.path,
+    snapshot_size: snapshotSize,
+    snapshot_storage_version: SNAPSHOT_STORAGE_VERSION,
+    snapshot_compressed: remoteSnapshot.compressed,
+    snapshot_encoding: remoteSnapshot.encoding,
+    snapshot: {},
   };
   const savePayloads = [
-    { ...timestampedPayload, snapshot },
-    { ...basePayload, snapshot },
+    timestampedPayload,
+    basePayload,
   ];
   let data: { id: string } | null = null;
   const errors: unknown[] = [];
 
-  const trySave = async (mode: 'update' | 'insert', options: { includeRouteId?: boolean } = {}) => {
+  const trySave = async (mode: 'update' | 'insert') => {
     for (const payload of savePayloads) {
-      const query = mode === 'update' && boardId
-        ? supabase.from('moodboards').update(payload).eq('id', boardId).select('id').single()
+      const updatePayload = withoutId(payload);
+      const query = mode === 'update'
+        ? supabase.from('moodboards').update(updatePayload).eq('id', targetBoardId).select('id').single()
         : supabase
           .from('moodboards')
-          .insert([{ ...(options.includeRouteId && boardId ? { id: boardId } : {}), ...payload }])
+          .insert([payload])
           .select('id')
           .single();
       const result = await query;
@@ -771,7 +939,7 @@ export const saveBoardToWeb = async (
   if (boardId) {
     await trySave('update');
     if (!data) {
-      await trySave('insert', { includeRouteId: true });
+      await trySave('insert');
     }
   } else {
     await trySave('insert');
@@ -789,16 +957,16 @@ export const saveBoardToWeb = async (
     .select('*')
     .eq('id', savedBoard.id)
     .single();
-  if (verifyError || !parseSnapshot(verifiedRow as Record<string, unknown> | null)) {
+  if (verifyError || !(await loadSnapshotFromRow(verifiedRow as MoodboardRow | null))) {
     console.error('Error verifying saved moodboard:', verifyError, verifiedRow);
     throw new Error(errorMessage(verifyError) || 'Supabase saved the board row, but the board content could not be read back.');
   }
 
   if (shouldApplySnapshotToStore) {
-    useBoardStore.setState({ canvasTitle: snapshot.title });
+    useBoardStore.setState({ canvasTitle: persistedSnapshot.title });
   }
   if (options.updateLocalCache !== false) {
-    stashSavedBoardSnapshot(savedBoard.id, snapshot);
+    stashSavedBoardSnapshot(savedBoard.id, persistedSnapshot);
   }
   if (shouldApplySnapshotToStore) {
     markBoardSaved(savedBoard.id);
@@ -821,8 +989,17 @@ export const saveLocalCopy = () => {
 export const deleteCurrentBoard = async () => {
   const boardId = getSavedBoardId();
   if (!boardId) return;
+  const { data: existingRow } = await supabase
+    .from('moodboards')
+    .select('snapshot_path')
+    .eq('id', boardId)
+    .single();
   const { error } = await supabase.from('moodboards').delete().eq('id', boardId);
   if (error) throw error;
+  const snapshotPath = (existingRow as MoodboardRow | null)?.snapshot_path;
+  if (snapshotPath) {
+    void supabase.storage.from(SNAPSHOT_STORAGE_BUCKET).remove([snapshotPath]);
+  }
   localStorage.removeItem(`viboard:web:${boardId}`);
   removeSnapshotIndexedDb(`viboard:web:${boardId}`);
   const cachedBoards = getCachedWebBoards().filter((board) => board.id !== boardId);
@@ -899,7 +1076,7 @@ export const loadBoardFromWeb = async (boardId: string, onSnapshotApplied?: () =
       throw error;
     }
 
-    const snapshot = parseSnapshot(data as Record<string, unknown>);
+    const snapshot = await loadSnapshotFromRow(data as MoodboardRow);
     if (snapshot) {
       const remoteSignature = snapshotSignature(snapshot);
       const remoteUpdatedAt = timestampValue((data as Record<string, unknown>)?.updated_at)

@@ -1,7 +1,7 @@
 import { useEffect, useState, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { supabase } from '../lib/supabase';
-import { getCachedWebBoards, getCachedWebBoardSnapshot, downloadBlob, safeFilename, BOARD_FILE_EXTENSION, parseSnapshot, generateBoardPreview, createBoardOnWeb } from '../lib/boardCommands';
+import { getCachedWebBoards, getCachedWebBoardSnapshot, downloadBlob, safeFilename, BOARD_FILE_EXTENSION, loadSnapshotFromRow, generateBoardPreview, createBoardOnWeb } from '../lib/boardCommands';
 import { motion, AnimatePresence } from 'framer-motion';
 import { MoreVertical, Edit2, Trash2, Download, Plus, LogOut } from 'lucide-react';
 
@@ -120,7 +120,7 @@ export default function Dashboard() {
           // If not in local storage, fetch the full board data
           const { data: boardData } = await supabase.from('moodboards').select('*').eq('id', board.id).single();
           if (boardData) {
-            snapshot = parseSnapshot(boardData as Record<string, unknown>);
+            snapshot = await loadSnapshotFromRow(boardData as Record<string, unknown>);
           }
         }
         
@@ -242,12 +242,11 @@ export default function Dashboard() {
     e.stopPropagation();
     dismissBoardMenu();
 
-    // Try to get from local storage first
-    const cached = localStorage.getItem(`viboard:web:${board.id}`);
+    // Try the normalized browser cache first. Large boards may live in IndexedDB.
+    const cached = await getCachedWebBoardSnapshot(board.id);
     if (cached) {
-      const snapshot = JSON.parse(cached);
       downloadBlob(
-        new Blob([JSON.stringify(snapshot, null, 2)], { type: 'application/json' }),
+        new Blob([JSON.stringify(cached, null, 2)], { type: 'application/json' }),
         safeFilename(board.title || 'Untitled Board', BOARD_FILE_EXTENSION)
       );
       return;
@@ -256,7 +255,7 @@ export default function Dashboard() {
     // Otherwise fetch from supabase
     const { data, error } = await supabase.from('moodboards').select('*').eq('id', board.id).single();
     if (!error && data) {
-      const snapshot = parseSnapshot(data as Record<string, unknown>);
+      const snapshot = await loadSnapshotFromRow(data as Record<string, unknown>);
       if (snapshot) {
         downloadBlob(
           new Blob([JSON.stringify(snapshot, null, 2)], { type: 'application/json' }),
