@@ -42,6 +42,9 @@ const AUTOSAVE_KEY = 'viboard:autosave';
 const RECENT_BOARDS_KEY = 'viboard:recent';
 const DEFAULT_BOARD_VIEWPORT_ZOOM = 1;
 const MAX_BROWSER_SNAPSHOT_CHARS = 4_000_000;
+const SNAPSHOT_DB_NAME = 'viboard-cache';
+const SNAPSHOT_DB_VERSION = 1;
+const SNAPSHOT_STORE_NAME = 'snapshots';
 const transientSavedSnapshots = new Map<string, BoardSnapshot>();
 const DEFAULT_LOCKUP_BLOCK: Block = {
   id: 'viboard-lockup',
@@ -129,6 +132,61 @@ const safeParseJson = <T,>(value: string | null, fallback: T): T => {
   }
 };
 
+const openSnapshotDb = () =>
+  new Promise<IDBDatabase | null>((resolve) => {
+    if (typeof indexedDB === 'undefined') {
+      resolve(null);
+      return;
+    }
+
+    const request = indexedDB.open(SNAPSHOT_DB_NAME, SNAPSHOT_DB_VERSION);
+    request.onupgradeneeded = () => {
+      request.result.createObjectStore(SNAPSHOT_STORE_NAME);
+    };
+    request.onsuccess = () => resolve(request.result);
+    request.onerror = () => resolve(null);
+  });
+
+const withSnapshotStore = async <T,>(
+  mode: IDBTransactionMode,
+  callback: (store: IDBObjectStore) => IDBRequest<T>
+) => {
+  const db = await openSnapshotDb();
+  if (!db) return null;
+
+  return new Promise<T | null>((resolve) => {
+    const transaction = db.transaction(SNAPSHOT_STORE_NAME, mode);
+    const request = callback(transaction.objectStore(SNAPSHOT_STORE_NAME));
+    request.onsuccess = () => resolve(request.result);
+    request.onerror = () => resolve(null);
+    transaction.oncomplete = () => db.close();
+    transaction.onerror = () => db.close();
+    transaction.onabort = () => db.close();
+  });
+};
+
+const writeSnapshotIndexedDb = async (key: string, snapshot: BoardSnapshot) => {
+  const result = await withSnapshotStore('readwrite', (store) => store.put(snapshot, key));
+  return result !== null;
+};
+
+const removeSnapshotIndexedDb = (key: string) => {
+  void withSnapshotStore('readwrite', (store) => store.delete(key));
+};
+
+const readSnapshotIndexedDb = async (key: string): Promise<BoardSnapshot | null> => {
+  const stored = await withSnapshotStore<unknown>('readonly', (store) => store.get(key));
+  if (!stored || typeof stored !== 'object') return null;
+
+  try {
+    const snapshot = normalizeSnapshot(stored);
+    return isClearedBoardSnapshot(snapshot) ? null : snapshot;
+  } catch {
+    removeSnapshotIndexedDb(key);
+    return null;
+  }
+};
+
 const removeCachedWebSnapshots = (exceptBoardId?: string) => {
   const keysToRemove: string[] = [];
   for (let index = 0; index < localStorage.length; index += 1) {
@@ -137,7 +195,10 @@ const removeCachedWebSnapshots = (exceptBoardId?: string) => {
     if (exceptBoardId && key === `viboard:web:${exceptBoardId}`) continue;
     keysToRemove.push(key);
   }
-  keysToRemove.forEach((key) => localStorage.removeItem(key));
+  keysToRemove.forEach((key) => {
+    localStorage.removeItem(key);
+    removeSnapshotIndexedDb(key);
+  });
 };
 
 const freeBoardStorage = (key: string) => {
@@ -188,10 +249,13 @@ const estimateJsonChars = (value: unknown, seen = new WeakSet<object>()): number
 const safeSetSnapshotStorage = (key: string, snapshot: BoardSnapshot) => {
   if (estimateJsonChars(snapshot) > MAX_BROWSER_SNAPSHOT_CHARS) {
     localStorage.removeItem(key);
-    console.warn(`Skipping browser cache write for ${key} because the board is too large.`);
-    return false;
+    void writeSnapshotIndexedDb(key, snapshot).catch(() => {
+      console.warn(`Skipping browser cache write for ${key} because the board exceeds available storage.`);
+    });
+    return typeof indexedDB !== 'undefined';
   }
 
+  removeSnapshotIndexedDb(key);
   return safeSetLocalStorage(key, JSON.stringify(snapshot));
 };
 
@@ -208,6 +272,7 @@ const readSnapshotStorage = (key: string): BoardSnapshot | null => {
   const parsed = safeParseJson<unknown>(raw, null);
   if (!parsed || typeof parsed !== 'object') {
     localStorage.removeItem(key);
+    removeSnapshotIndexedDb(key);
     return null;
   }
 
@@ -215,14 +280,19 @@ const readSnapshotStorage = (key: string): BoardSnapshot | null => {
     const snapshot = normalizeSnapshot(parsed);
     if (isClearedBoardSnapshot(snapshot)) {
       localStorage.removeItem(key);
+      removeSnapshotIndexedDb(key);
       return null;
     }
     return snapshot;
   } catch {
     localStorage.removeItem(key);
+    removeSnapshotIndexedDb(key);
     return null;
   }
 };
+
+const readSnapshotCache = async (key: string) =>
+  readSnapshotStorage(key) ?? await readSnapshotIndexedDb(key);
 
 const centeredViewportForBlock = (block: Block): Viewport => {
   if (typeof window === 'undefined') {
@@ -665,6 +735,7 @@ export const deleteCurrentBoard = async () => {
   const { error } = await supabase.from('moodboards').delete().eq('id', boardId);
   if (error) throw error;
   localStorage.removeItem(`viboard:web:${boardId}`);
+  removeSnapshotIndexedDb(`viboard:web:${boardId}`);
   const cachedBoards = getCachedWebBoards().filter((board) => board.id !== boardId);
   safeSetLocalStorage(WEB_CACHE_INDEX_KEY, JSON.stringify(cachedBoards));
   markBoardUnsaved();
@@ -734,7 +805,7 @@ export const setCurrentLoadingBoardId = (id: string | null) => {
 };
 
 export const loadBoardFromWeb = async (boardId: string, onSnapshotApplied?: () => void) => {
-  const cachedSnapshot = readSnapshotStorage(`viboard:web:${boardId}`);
+  const cachedSnapshot = await readSnapshotCache(`viboard:web:${boardId}`);
   const cachedSignature = cachedSnapshot ? snapshotSignature(cachedSnapshot) : null;
 
   const fetchAndApplyRemoteSnapshot = async () => {
