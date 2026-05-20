@@ -30,6 +30,12 @@ type MoodboardRow = Record<string, unknown> & {
   snapshot_compressed?: string | null;
   snapshot_encoding?: string | null;
 };
+type SnapshotChunkManifest = {
+  type: typeof SNAPSHOT_CHUNK_MANIFEST_TYPE;
+  version: 1;
+  size: number;
+  chunks: { path: string; size: number }[];
+};
 type TextCommand =
   | 'bold'
   | 'italic'
@@ -48,6 +54,8 @@ const SNAPSHOT_STORAGE_BUCKET = 'board-snapshots';
 const SNAPSHOT_STORAGE_VERSION = 1;
 const SNAPSHOT_STORAGE_GZIP_ENCODING = 'gzip+json';
 const SNAPSHOT_COMPRESSED_ENCODING = 'gzip+base64+json';
+const SNAPSHOT_CHUNK_MANIFEST_TYPE = 'viboard.chunked-json';
+const MAX_STORAGE_OBJECT_CHARS = 20 * 1024 * 1024;
 const PENDING_AUTHENTICATED_SAVE_KEY = 'viboard:pending-authenticated-save';
 const WEB_CACHE_INDEX_KEY = 'viboard:web:index';
 const AUTOSAVE_KEY = 'viboard:autosave';
@@ -210,6 +218,55 @@ const decompressStorageSnapshot = async (blob: Blob, encoding?: string | null) =
 
   const stream = blob.stream().pipeThrough(new DecompressionStream('gzip'));
   return new Response(stream).text();
+};
+
+const isSnapshotChunkManifest = (value: unknown): value is SnapshotChunkManifest => {
+  if (!value || typeof value !== 'object') return false;
+  const record = value as Partial<SnapshotChunkManifest>;
+  return (
+    record.type === SNAPSHOT_CHUNK_MANIFEST_TYPE &&
+    record.version === 1 &&
+    typeof record.size === 'number' &&
+    Array.isArray(record.chunks) &&
+    record.chunks.every((chunk) =>
+      chunk &&
+      typeof chunk === 'object' &&
+      typeof chunk.path === 'string' &&
+      typeof chunk.size === 'number'
+    )
+  );
+};
+
+const downloadStorageText = async (path: string, encoding?: string | null) => {
+  const { data, error } = await supabase.storage
+    .from(SNAPSHOT_STORAGE_BUCKET)
+    .download(path);
+  if (error || !data) throw error ?? new Error('Could not download board snapshot.');
+  return decompressStorageSnapshot(data, encoding);
+};
+
+const downloadStoredSnapshotText = async (path: string, encoding?: string | null) => {
+  const text = await downloadStorageText(path, encoding);
+  const parsed = safeParseJson<unknown>(text, null);
+  if (!isSnapshotChunkManifest(parsed)) return text;
+
+  const chunkTexts = await Promise.all(
+    parsed.chunks.map((chunk) => downloadStorageText(chunk.path))
+  );
+  return chunkTexts.join('');
+};
+
+const removeStoredSnapshot = async (path: string) => {
+  const paths = [path];
+  try {
+    const parsed = safeParseJson<unknown>(await downloadStorageText(path), null);
+    if (isSnapshotChunkManifest(parsed)) {
+      paths.push(...parsed.chunks.map((chunk) => chunk.path));
+    }
+  } catch {
+    // If the manifest cannot be read, still remove the known object path.
+  }
+  await supabase.storage.from(SNAPSHOT_STORAGE_BUCKET).remove(paths);
 };
 
 const openSnapshotDb = () =>
@@ -458,19 +515,13 @@ export const loadSnapshotFromRow = async (row: MoodboardRow | null): Promise<Boa
   if (!row) return null;
 
   if (typeof row.snapshot_path === 'string' && row.snapshot_path.trim()) {
-    const { data, error } = await supabase.storage
-      .from(SNAPSHOT_STORAGE_BUCKET)
-      .download(row.snapshot_path);
-
-    if (!error && data) {
-      try {
-        const normalized = normalizeSnapshot(JSON.parse(await decompressStorageSnapshot(data, row.snapshot_encoding)));
-        return isClearedBoardSnapshot(normalized) ? null : normalized;
-      } catch (parseError) {
-        console.error('Error parsing stored board snapshot:', parseError);
-      }
-    } else {
-      console.error('Error downloading board snapshot:', error);
+    try {
+      const normalized = normalizeSnapshot(
+        JSON.parse(await downloadStoredSnapshotText(row.snapshot_path, row.snapshot_encoding))
+      );
+      return isClearedBoardSnapshot(normalized) ? null : normalized;
+    } catch (parseError) {
+      console.error('Error loading stored board snapshot:', parseError);
     }
   }
 
@@ -806,23 +857,63 @@ export const savePendingAuthenticatedBoard = async () => {
 const boardSnapshotStoragePath = (userId: string, boardId: string) =>
   `${userId}/${boardId}/${Date.now()}-${uuidv4()}.viboard.json`;
 
-const uploadBoardSnapshot = async (path: string, snapshot: BoardSnapshot) => {
-  const persistedSnapshot = snapshotForPersistence(snapshot);
-  const body = JSON.stringify(persistedSnapshot);
-  const uploadBody = new Blob([body], { type: 'application/json' });
+const uploadJsonStorageObject = async (path: string, body: string) => {
   const { error } = await supabase.storage
     .from(SNAPSHOT_STORAGE_BUCKET)
-    .upload(path, uploadBody, {
+    .upload(path, new Blob([body], { type: 'application/json' }), {
       cacheControl: '0',
       contentType: 'application/json',
       upsert: false,
     });
 
   if (error) throw error;
+  return new Blob([body]).size;
+};
+
+const uploadBoardSnapshot = async (path: string, snapshot: BoardSnapshot) => {
+  const persistedSnapshot = snapshotForPersistence(snapshot);
+  const body = JSON.stringify(persistedSnapshot);
+
+  if (body.length <= MAX_STORAGE_OBJECT_CHARS) {
+    return {
+      snapshot: persistedSnapshot,
+      size: await uploadJsonStorageObject(path, body),
+      paths: [path],
+    };
+  }
+
+  const prefix = path.replace(/\.viboard\.json$/, '');
+  const chunks: SnapshotChunkManifest['chunks'] = [];
+  const uploadedPaths: string[] = [];
+
+  try {
+    for (let offset = 0, index = 0; offset < body.length; offset += MAX_STORAGE_OBJECT_CHARS, index += 1) {
+      const chunkBody = body.slice(offset, offset + MAX_STORAGE_OBJECT_CHARS);
+      const chunkPath = `${prefix}.part-${String(index).padStart(4, '0')}.json`;
+      const chunkSize = await uploadJsonStorageObject(chunkPath, chunkBody);
+      chunks.push({ path: chunkPath, size: chunkSize });
+      uploadedPaths.push(chunkPath);
+    }
+
+    const manifest: SnapshotChunkManifest = {
+      type: SNAPSHOT_CHUNK_MANIFEST_TYPE,
+      version: 1,
+      size: new Blob([body]).size,
+      chunks,
+    };
+    await uploadJsonStorageObject(path, JSON.stringify(manifest));
+    uploadedPaths.unshift(path);
+  } catch (error) {
+    if (uploadedPaths.length > 0) {
+      void supabase.storage.from(SNAPSHOT_STORAGE_BUCKET).remove(uploadedPaths);
+    }
+    throw error;
+  }
 
   return {
     snapshot: persistedSnapshot,
-    size: uploadBody.size,
+    size: new Blob([body]).size,
+    paths: uploadedPaths,
   };
 };
 
@@ -836,6 +927,7 @@ const prepareRemoteSnapshot = async (userId: string, boardId: string, snapshot: 
       snapshot: uploaded.snapshot,
       size: uploaded.size,
       path: snapshotPath,
+      paths: uploaded.paths,
       compressed: null,
       encoding: null,
       usedStorage: true,
@@ -949,7 +1041,7 @@ export const saveBoardToWeb = async (
     const lastError = errors[errors.length - 1];
     console.error('Error saving moodboard:', lastError);
     if (remoteSnapshot.usedStorage && remoteSnapshot.path) {
-      void supabase.storage.from(SNAPSHOT_STORAGE_BUCKET).remove([remoteSnapshot.path]);
+      void supabase.storage.from(SNAPSHOT_STORAGE_BUCKET).remove(remoteSnapshot.paths);
     }
     throw new Error(errorMessage(lastError) || 'Could not save this board content to Supabase.');
   }
@@ -962,7 +1054,7 @@ export const saveBoardToWeb = async (
   if (verifyError || !(await loadSnapshotFromRow(verifiedRow as MoodboardRow | null))) {
     console.error('Error verifying saved moodboard:', verifyError, verifiedRow);
     if (remoteSnapshot.usedStorage && remoteSnapshot.path) {
-      void supabase.storage.from(SNAPSHOT_STORAGE_BUCKET).remove([remoteSnapshot.path]);
+      void supabase.storage.from(SNAPSHOT_STORAGE_BUCKET).remove(remoteSnapshot.paths);
     }
     throw new Error(errorMessage(verifyError) || 'Supabase saved the board row, but the board content could not be read back.');
   }
@@ -973,7 +1065,7 @@ export const saveBoardToWeb = async (
     remoteSnapshot.path &&
     previousSnapshotPath !== remoteSnapshot.path
   ) {
-    void supabase.storage.from(SNAPSHOT_STORAGE_BUCKET).remove([previousSnapshotPath]);
+    void removeStoredSnapshot(previousSnapshotPath);
   }
 
   if (shouldApplySnapshotToStore) {
@@ -1012,7 +1104,7 @@ export const deleteCurrentBoard = async () => {
   if (error) throw error;
   const snapshotPath = (existingRow as MoodboardRow | null)?.snapshot_path;
   if (snapshotPath) {
-    void supabase.storage.from(SNAPSHOT_STORAGE_BUCKET).remove([snapshotPath]);
+    void removeStoredSnapshot(snapshotPath);
   }
   localStorage.removeItem(`viboard:web:${boardId}`);
   removeSnapshotIndexedDb(`viboard:web:${boardId}`);
