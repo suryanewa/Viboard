@@ -781,7 +781,7 @@ export const Canvas: React.FC<{ children: React.ReactNode }> = ({ children }) =>
             height: 0,
             transform,
             willChange: 'transform',
-            contain: 'layout style paint',
+            overflow: 'visible',
           }}
         >
           {children}

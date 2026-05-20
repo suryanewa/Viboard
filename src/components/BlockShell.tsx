@@ -900,8 +900,6 @@ const BlockShellComponent: React.FC<BlockShellProps> = ({ block, children }) => 
         height,
         zIndex: block.zIndex,
         contain: 'layout style paint',
-        contentVisibility: 'auto',
-        containIntrinsicSize: `${Math.max(1, Math.round(block.width))}px ${Math.max(1, Math.round(block.height))}px`,
         // Let sticky/text/marker/shape/frame creation hit the canvas through empty frame areas.
         // Frame title + resize handles use their own pointer-events: auto.
         pointerEvents:
