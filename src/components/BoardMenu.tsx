@@ -59,7 +59,9 @@ import {
   flipSelection,
   groupSelection,
   importBoardFile,
+  getBoardSnapshot,
   queueAuthenticatedSave,
+  type BoardSnapshot,
   type SavedBoardSummary,
   newBoard,
   rotateSelection,
@@ -71,7 +73,7 @@ import {
   ungroupSelection,
   zoomToFit,
 } from '../lib/boardCommands';
-import { shouldPromptToSaveBoard, getSavedBoardId } from '../lib/boardSession';
+import { shouldPromptToSaveBoard, getSavedBoardId, markBoardSaved } from '../lib/boardSession';
 import { supabase } from '../lib/supabase';
 
 type MenuItem = {
@@ -380,16 +382,21 @@ export const BoardMenu: React.FC = () => {
     event.preventDefault();
     setIsSaving(true);
     setSaveError(null);
+    const saveTitleValue = saveTitle.trim() || 'Untitled Board';
+    const snapshotAtSubmit: BoardSnapshot = { ...getBoardSnapshot(), title: saveTitleValue };
+    const boardIdAtSubmit = getSavedBoardId() === params.id ? params.id : null;
     try {
       const { data: sessionData } = await supabase.auth.getSession();
       if (!sessionData.session) {
-        queueAuthenticatedSave(saveTitle, getSavedBoardId() === params.id ? params.id : null);
+        queueAuthenticatedSave(saveTitleValue, boardIdAtSubmit, snapshotAtSubmit);
         setIsSaveDialogOpen(false);
         navigate('/login');
         return;
       }
 
-      const savedId = await saveBoardToWeb(saveTitle, getSavedBoardId() === params.id ? params.id : null);
+      const savedId = await saveBoardToWeb(saveTitleValue, boardIdAtSubmit, snapshotAtSubmit);
+      useBoardStore.setState({ canvasTitle: saveTitleValue });
+      markBoardSaved(savedId);
       setIsSaveDialogOpen(false);
       const afterSaveAction = afterSaveActionRef.current;
       afterSaveActionRef.current = null;

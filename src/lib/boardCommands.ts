@@ -6,7 +6,7 @@ import { clampViewportZoom } from '../types';
 import type { Block, DrawingPath, Viewport } from '../types';
 import type { BoardHistory } from '../store';
 
-type BoardSnapshot = {
+export type BoardSnapshot = {
   version: 1;
   title: string;
   blocks: Record<string, Block>;
@@ -518,8 +518,12 @@ const readPendingAuthenticatedSave = (): PendingAuthenticatedSave | null => {
 
 export const hasPendingAuthenticatedSave = () => Boolean(readPendingAuthenticatedSave());
 
-export const queueAuthenticatedSave = (title: string, boardId?: string | null) => {
-  const snapshot = { ...getBoardSnapshot(), title: title.trim() || 'Untitled Board' };
+export const queueAuthenticatedSave = (
+  title: string,
+  boardId?: string | null,
+  snapshotOverride?: BoardSnapshot
+) => {
+  const snapshot = { ...(snapshotOverride ?? getBoardSnapshot()), title: title.trim() || 'Untitled Board' };
   if (estimateJsonChars(snapshot) > MAX_BROWSER_SNAPSHOT_CHARS) {
     throw new Error('This board is too large to queue in browser storage. Sign in first, then save it again.');
   }
@@ -540,7 +544,7 @@ export const savePendingAuthenticatedBoard = async () => {
   if (!pending) return null;
 
   loadBoardSnapshot(pending.snapshot);
-  const savedId = await saveBoardToWeb(pending.snapshot.title, pending.boardId);
+  const savedId = await saveBoardToWeb(pending.snapshot.title, pending.boardId, pending.snapshot);
   localStorage.removeItem(PENDING_AUTHENTICATED_SAVE_KEY);
   return savedId;
 };
