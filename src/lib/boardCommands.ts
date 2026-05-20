@@ -48,7 +48,6 @@ const SNAPSHOT_STORAGE_BUCKET = 'board-snapshots';
 const SNAPSHOT_STORAGE_VERSION = 1;
 const SNAPSHOT_STORAGE_GZIP_ENCODING = 'gzip+json';
 const SNAPSHOT_COMPRESSED_ENCODING = 'gzip+base64+json';
-const MAX_COMPRESSED_ROW_SNAPSHOT_CHARS = 1_000_000;
 const PENDING_AUTHENTICATED_SAVE_KEY = 'viboard:pending-authenticated-save';
 const WEB_CACHE_INDEX_KEY = 'viboard:web:index';
 const AUTOSAVE_KEY = 'viboard:autosave';
@@ -179,15 +178,6 @@ const safeParseJson = <T,>(value: string | null, fallback: T): T => {
   }
 };
 
-const bytesToBase64 = (bytes: Uint8Array) => {
-  let binary = '';
-  const chunkSize = 0x8000;
-  for (let offset = 0; offset < bytes.length; offset += chunkSize) {
-    binary += String.fromCharCode(...bytes.subarray(offset, offset + chunkSize));
-  }
-  return btoa(binary);
-};
-
 const base64ToBytes = (base64: string) => {
   const binary = atob(base64);
   const bytes = new Uint8Array(binary.length);
@@ -195,19 +185,6 @@ const base64ToBytes = (base64: string) => {
     bytes[index] = binary.charCodeAt(index);
   }
   return bytes;
-};
-
-const compressText = async (text: string) => {
-  if (typeof CompressionStream === 'undefined') return btoa(unescape(encodeURIComponent(text)));
-
-  return bytesToBase64(await gzipTextToBytes(text));
-};
-
-const gzipTextToBytes = async (text: string) => {
-  const stream = new Blob([text], { type: 'application/json' })
-    .stream()
-    .pipeThrough(new CompressionStream('gzip'));
-  return new Uint8Array(await new Response(stream).arrayBuffer());
 };
 
 const decompressText = async (value: string, encoding?: string | null) => {
@@ -826,22 +803,18 @@ export const savePendingAuthenticatedBoard = async () => {
   return savedId;
 };
 
-const boardSnapshotStoragePath = (userId: string, boardId: string, encoding: string | null) =>
-  `${userId}/${boardId}/${Date.now()}-${uuidv4()}.viboard.json${encoding === SNAPSHOT_STORAGE_GZIP_ENCODING ? '.gz' : ''}`;
+const boardSnapshotStoragePath = (userId: string, boardId: string) =>
+  `${userId}/${boardId}/${Date.now()}-${uuidv4()}.viboard.json`;
 
 const uploadBoardSnapshot = async (path: string, snapshot: BoardSnapshot) => {
   const persistedSnapshot = snapshotForPersistence(snapshot);
   const body = JSON.stringify(persistedSnapshot);
-  const canCompressForStorage = typeof CompressionStream !== 'undefined';
-  const encoding = canCompressForStorage ? SNAPSHOT_STORAGE_GZIP_ENCODING : null;
-  const uploadBody = canCompressForStorage
-    ? new Blob([await gzipTextToBytes(body)], { type: 'application/gzip' })
-    : new Blob([body], { type: 'application/json' });
+  const uploadBody = new Blob([body], { type: 'application/json' });
   const { error } = await supabase.storage
     .from(SNAPSHOT_STORAGE_BUCKET)
     .upload(path, uploadBody, {
       cacheControl: '0',
-      contentType: canCompressForStorage ? 'application/gzip' : 'application/json',
+      contentType: 'application/json',
       upsert: false,
     });
 
@@ -850,17 +823,12 @@ const uploadBoardSnapshot = async (path: string, snapshot: BoardSnapshot) => {
   return {
     snapshot: persistedSnapshot,
     size: uploadBody.size,
-    encoding,
   };
 };
 
 const prepareRemoteSnapshot = async (userId: string, boardId: string, snapshot: BoardSnapshot) => {
   const persistedSnapshot = snapshotForPersistence(snapshot);
-  const snapshotPath = boardSnapshotStoragePath(
-    userId,
-    boardId,
-    typeof CompressionStream !== 'undefined' ? SNAPSHOT_STORAGE_GZIP_ENCODING : null
-  );
+  const snapshotPath = boardSnapshotStoragePath(userId, boardId);
 
   try {
     const uploaded = await uploadBoardSnapshot(snapshotPath, persistedSnapshot);
@@ -869,26 +837,15 @@ const prepareRemoteSnapshot = async (userId: string, boardId: string, snapshot: 
       size: uploaded.size,
       path: snapshotPath,
       compressed: null,
-      encoding: uploaded.encoding,
+      encoding: null,
       usedStorage: true,
     };
   } catch (storageError) {
-    console.error('Error uploading board snapshot to storage, falling back to compressed row storage:', storageError);
+    console.error('Error uploading board snapshot to storage:', storageError);
+    throw new Error(
+      errorMessage(storageError) || 'Could not upload this board JSON file to Supabase Storage.'
+    );
   }
-
-  const body = JSON.stringify(persistedSnapshot);
-  if (body.length > MAX_COMPRESSED_ROW_SNAPSHOT_CHARS) {
-    throw new Error('Could not upload this board snapshot to Supabase Storage. Please try saving again in a moment.');
-  }
-
-  return {
-    snapshot: persistedSnapshot,
-    size: body.length,
-    path: null,
-    compressed: await compressText(body),
-    encoding: SNAPSHOT_COMPRESSED_ENCODING,
-    usedStorage: false,
-  };
 };
 
 const withoutId = <T extends { id: string }>(payload: T) => {
