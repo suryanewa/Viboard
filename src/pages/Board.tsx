@@ -156,6 +156,17 @@ function Board() {
   const autosaveQueueRef = useRef(Promise.resolve());
   const importedSnapshotBoardIdRef = useRef<string | null>(null);
   const routeBoardIdRef = useRef<string | null>(params.id ?? null);
+  const renderViewportFrameRef = useRef<number | null>(null);
+  const syncRenderViewportFromStore = useCallback(() => {
+    if (renderViewportFrameRef.current !== null) {
+      window.cancelAnimationFrame(renderViewportFrameRef.current);
+    }
+
+    renderViewportFrameRef.current = window.requestAnimationFrame(() => {
+      renderViewportFrameRef.current = null;
+      setRenderViewport(useBoardStore.getState().viewport);
+    });
+  }, []);
 
   useLayoutEffect(() => {
     routeBoardIdRef.current = params.id ?? null;
@@ -223,6 +234,10 @@ function Board() {
     return () => {
       flushPendingAutosave();
       setCurrentLoadingBoardId(null);
+      if (renderViewportFrameRef.current !== null) {
+        window.cancelAnimationFrame(renderViewportFrameRef.current);
+        renderViewportFrameRef.current = null;
+      }
     };
   }, [flushPendingAutosave]);
 
@@ -280,6 +295,7 @@ function Board() {
       skipNextAutosaveRef.current = true;
       void loadDefaultBoard({ useTutorial: true, signal: defaultBoardLoad.signal }).then(() => {
         if (defaultBoardLoad.signal.aborted) return;
+        syncRenderViewportFromStore();
         syncAllBlocks(useBoardStore.getState().blocks);
         changeVersionRef.current = 0;
         autosaveReadyRef.current = true;
@@ -298,12 +314,14 @@ function Board() {
     if (loadedStashedSnapshot) {
       importedSnapshotBoardIdRef.current = boardId;
       skipNextAutosaveRef.current = true;
+      syncRenderViewportFromStore();
       changeVersionRef.current = 0;
       autosaveReadyRef.current = true;
     }
     
     if (consumeImportedLocalSnapshotFlag()) {
       importedSnapshotBoardIdRef.current = boardId;
+      syncRenderViewportFromStore();
       autosaveReadyRef.current = true;
       changeVersionRef.current = 0;
       return;
@@ -313,7 +331,8 @@ function Board() {
     if (loadedStashedSnapshot) return;
     autosaveReadyRef.current = false;
     useBoardStore.getState().clearBoard();
-  }, [params.id]);
+    syncRenderViewportFromStore();
+  }, [params.id, syncRenderViewportFromStore]);
 
   useEffect(() => {
     if (!params.id || importedSnapshotBoardIdRef.current === params.id) return;
