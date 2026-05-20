@@ -17,7 +17,7 @@ values (
   'board-snapshots',
   false,
   52428800,
-  array['application/json']
+  array['application/json', 'application/gzip']
 )
 on conflict (id) do update
 set

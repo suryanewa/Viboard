@@ -46,7 +46,9 @@ export const BOARD_FILE_EXTENSION = 'viboard.json';
 const BOARD_CONTENT_COLUMNS = ['snapshot', 'data', 'content'];
 const SNAPSHOT_STORAGE_BUCKET = 'board-snapshots';
 const SNAPSHOT_STORAGE_VERSION = 1;
+const SNAPSHOT_STORAGE_GZIP_ENCODING = 'gzip+json';
 const SNAPSHOT_COMPRESSED_ENCODING = 'gzip+base64+json';
+const MAX_COMPRESSED_ROW_SNAPSHOT_CHARS = 1_000_000;
 const PENDING_AUTHENTICATED_SAVE_KEY = 'viboard:pending-authenticated-save';
 const WEB_CACHE_INDEX_KEY = 'viboard:web:index';
 const AUTOSAVE_KEY = 'viboard:autosave';
@@ -198,10 +200,14 @@ const base64ToBytes = (base64: string) => {
 const compressText = async (text: string) => {
   if (typeof CompressionStream === 'undefined') return btoa(unescape(encodeURIComponent(text)));
 
+  return bytesToBase64(await gzipTextToBytes(text));
+};
+
+const gzipTextToBytes = async (text: string) => {
   const stream = new Blob([text], { type: 'application/json' })
     .stream()
     .pipeThrough(new CompressionStream('gzip'));
-  return bytesToBase64(new Uint8Array(await new Response(stream).arrayBuffer()));
+  return new Uint8Array(await new Response(stream).arrayBuffer());
 };
 
 const decompressText = async (value: string, encoding?: string | null) => {
@@ -216,6 +222,16 @@ const decompressText = async (value: string, encoding?: string | null) => {
   const stream = new Blob([base64ToBytes(value)])
     .stream()
     .pipeThrough(new DecompressionStream('gzip'));
+  return new Response(stream).text();
+};
+
+const decompressStorageSnapshot = async (blob: Blob, encoding?: string | null) => {
+  if (encoding !== SNAPSHOT_STORAGE_GZIP_ENCODING) return blob.text();
+  if (typeof DecompressionStream === 'undefined') {
+    throw new Error('This browser cannot decompress the stored board snapshot.');
+  }
+
+  const stream = blob.stream().pipeThrough(new DecompressionStream('gzip'));
   return new Response(stream).text();
 };
 
@@ -471,7 +487,7 @@ export const loadSnapshotFromRow = async (row: MoodboardRow | null): Promise<Boa
 
     if (!error && data) {
       try {
-        const normalized = normalizeSnapshot(JSON.parse(await data.text()));
+        const normalized = normalizeSnapshot(JSON.parse(await decompressStorageSnapshot(data, row.snapshot_encoding)));
         return isClearedBoardSnapshot(normalized) ? null : normalized;
       } catch (parseError) {
         console.error('Error parsing stored board snapshot:', parseError);
@@ -810,31 +826,41 @@ export const savePendingAuthenticatedBoard = async () => {
   return savedId;
 };
 
-const boardSnapshotStoragePath = (userId: string, boardId: string) =>
-  `${userId}/${boardId}.viboard.json`;
+const boardSnapshotStoragePath = (userId: string, boardId: string, encoding: string | null) =>
+  `${userId}/${boardId}/${Date.now()}-${uuidv4()}.viboard.json${encoding === SNAPSHOT_STORAGE_GZIP_ENCODING ? '.gz' : ''}`;
 
 const uploadBoardSnapshot = async (path: string, snapshot: BoardSnapshot) => {
   const persistedSnapshot = snapshotForPersistence(snapshot);
   const body = JSON.stringify(persistedSnapshot);
+  const canCompressForStorage = typeof CompressionStream !== 'undefined';
+  const encoding = canCompressForStorage ? SNAPSHOT_STORAGE_GZIP_ENCODING : null;
+  const uploadBody = canCompressForStorage
+    ? new Blob([await gzipTextToBytes(body)], { type: 'application/gzip' })
+    : new Blob([body], { type: 'application/json' });
   const { error } = await supabase.storage
     .from(SNAPSHOT_STORAGE_BUCKET)
-    .upload(path, new Blob([body], { type: 'application/json' }), {
+    .upload(path, uploadBody, {
       cacheControl: '0',
-      contentType: 'application/json',
-      upsert: true,
+      contentType: canCompressForStorage ? 'application/gzip' : 'application/json',
+      upsert: false,
     });
 
   if (error) throw error;
 
   return {
     snapshot: persistedSnapshot,
-    size: body.length,
+    size: uploadBody.size,
+    encoding,
   };
 };
 
 const prepareRemoteSnapshot = async (userId: string, boardId: string, snapshot: BoardSnapshot) => {
   const persistedSnapshot = snapshotForPersistence(snapshot);
-  const snapshotPath = boardSnapshotStoragePath(userId, boardId);
+  const snapshotPath = boardSnapshotStoragePath(
+    userId,
+    boardId,
+    typeof CompressionStream !== 'undefined' ? SNAPSHOT_STORAGE_GZIP_ENCODING : null
+  );
 
   try {
     const uploaded = await uploadBoardSnapshot(snapshotPath, persistedSnapshot);
@@ -843,19 +869,25 @@ const prepareRemoteSnapshot = async (userId: string, boardId: string, snapshot: 
       size: uploaded.size,
       path: snapshotPath,
       compressed: null,
-      encoding: null,
+      encoding: uploaded.encoding,
+      usedStorage: true,
     };
   } catch (storageError) {
     console.error('Error uploading board snapshot to storage, falling back to compressed row storage:', storageError);
   }
 
   const body = JSON.stringify(persistedSnapshot);
+  if (body.length > MAX_COMPRESSED_ROW_SNAPSHOT_CHARS) {
+    throw new Error('Could not upload this board snapshot to Supabase Storage. Please try saving again in a moment.');
+  }
+
   return {
     snapshot: persistedSnapshot,
     size: body.length,
     path: null,
     compressed: await compressText(body),
     encoding: SNAPSHOT_COMPRESSED_ENCODING,
+    usedStorage: false,
   };
 };
 
@@ -885,6 +917,16 @@ export const saveBoardToWeb = async (
   if (!userId) throw new Error('You must be signed in to save this board.');
 
   const targetBoardId = boardId || uuidv4();
+  let previousSnapshotPath: string | null = null;
+  if (boardId) {
+    const { data: existingRow } = await supabase
+      .from('moodboards')
+      .select('snapshot_path')
+      .eq('id', targetBoardId)
+      .maybeSingle();
+    previousSnapshotPath = (existingRow as MoodboardRow | null)?.snapshot_path ?? null;
+  }
+
   const remoteSnapshot = await prepareRemoteSnapshot(userId, targetBoardId, currentSnapshot);
   const { snapshot: persistedSnapshot, size: snapshotSize } = remoteSnapshot;
 
@@ -949,6 +991,9 @@ export const saveBoardToWeb = async (
   if (!savedBoard) {
     const lastError = errors[errors.length - 1];
     console.error('Error saving moodboard:', lastError);
+    if (remoteSnapshot.usedStorage && remoteSnapshot.path) {
+      void supabase.storage.from(SNAPSHOT_STORAGE_BUCKET).remove([remoteSnapshot.path]);
+    }
     throw new Error(errorMessage(lastError) || 'Could not save this board content to Supabase.');
   }
 
@@ -959,7 +1004,19 @@ export const saveBoardToWeb = async (
     .single();
   if (verifyError || !(await loadSnapshotFromRow(verifiedRow as MoodboardRow | null))) {
     console.error('Error verifying saved moodboard:', verifyError, verifiedRow);
+    if (remoteSnapshot.usedStorage && remoteSnapshot.path) {
+      void supabase.storage.from(SNAPSHOT_STORAGE_BUCKET).remove([remoteSnapshot.path]);
+    }
     throw new Error(errorMessage(verifyError) || 'Supabase saved the board row, but the board content could not be read back.');
+  }
+
+  if (
+    remoteSnapshot.usedStorage &&
+    previousSnapshotPath &&
+    remoteSnapshot.path &&
+    previousSnapshotPath !== remoteSnapshot.path
+  ) {
+    void supabase.storage.from(SNAPSHOT_STORAGE_BUCKET).remove([previousSnapshotPath]);
   }
 
   if (shouldApplySnapshotToStore) {
