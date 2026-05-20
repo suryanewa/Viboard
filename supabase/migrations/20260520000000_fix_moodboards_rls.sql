@@ -13,6 +13,13 @@ create table if not exists public.moodboards (
   updated_at timestamptz not null default now()
 );
 
+alter table public.moodboards
+  alter column id set default gen_random_uuid(),
+  alter column title set default 'Untitled Board',
+  alter column snapshot set default '{}'::jsonb,
+  alter column created_at set default now(),
+  alter column updated_at set default now();
+
 create or replace function public.set_updated_at()
 returns trigger
 language plpgsql
@@ -25,7 +32,26 @@ begin
 end;
 $$;
 
-drop trigger if exists set_moodboards_updated_at on public.moodboards;
+-- Remove all user-defined triggers on moodboards before installing the one
+-- the app needs. A stale insert/update trigger that calls a private-schema
+-- function produces the same browser error as a bad RLS policy.
+do $$
+declare
+  trigger_name text;
+begin
+  for trigger_name in
+    select trg.tgname
+    from pg_trigger trg
+    join pg_class cls on cls.oid = trg.tgrelid
+    join pg_namespace nsp on nsp.oid = cls.relnamespace
+    where nsp.nspname = 'public'
+      and cls.relname = 'moodboards'
+      and not trg.tgisinternal
+  loop
+    execute format('drop trigger if exists %I on public.moodboards', trigger_name);
+  end loop;
+end;
+$$;
 
 create trigger set_moodboards_updated_at
 before update on public.moodboards
