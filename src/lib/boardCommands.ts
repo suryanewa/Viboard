@@ -311,6 +311,9 @@ const readSnapshotStorage = (key: string): BoardSnapshot | null => {
 const readSnapshotCache = async (key: string) =>
   readSnapshotStorage(key) ?? await readSnapshotIndexedDb(key);
 
+export const getCachedWebBoardSnapshot = (boardId: string) =>
+  readSnapshotCache(`viboard:web:${boardId}`);
+
 const centeredViewportForBlock = (block: Block): Viewport => {
   if (typeof window === 'undefined') {
     return { x: 300, y: 200, zoom: DEFAULT_BOARD_VIEWPORT_ZOOM };

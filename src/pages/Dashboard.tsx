@@ -1,7 +1,7 @@
 import { useEffect, useState, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { supabase } from '../lib/supabase';
-import { getCachedWebBoards, downloadBlob, safeFilename, BOARD_FILE_EXTENSION, parseSnapshot, generateBoardPreview, createBoardOnWeb } from '../lib/boardCommands';
+import { getCachedWebBoards, getCachedWebBoardSnapshot, downloadBlob, safeFilename, BOARD_FILE_EXTENSION, parseSnapshot, generateBoardPreview, createBoardOnWeb } from '../lib/boardCommands';
 import { motion, AnimatePresence } from 'framer-motion';
 import { MoreVertical, Edit2, Trash2, Download, Plus, LogOut } from 'lucide-react';
 
@@ -11,6 +11,8 @@ interface Moodboard {
   updated_at?: string;
   title: string;
 }
+
+type PreviewStatus = 'loading' | 'ready' | 'empty';
 
 export default function Dashboard() {
   const [moodboards, setMoodboards] = useState<Moodboard[]>([]);
@@ -24,7 +26,9 @@ export default function Dashboard() {
   const menuRef = useRef<HTMLDivElement>(null);
   const menuOpenIdRef = useRef<string | null>(null);
   const menuDismissTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const previewGenerationIdsRef = useRef<Set<string>>(new Set());
   const [previews, setPreviews] = useState<Record<string, string>>({});
+  const [previewStatuses, setPreviewStatuses] = useState<Record<string, PreviewStatus>>({});
 
   const clearMenuDismissReveal = () => {
     if (menuDismissTimerRef.current) {
@@ -91,18 +95,28 @@ export default function Dashboard() {
   };
 
   const generatePreviews = async (boards: Moodboard[]) => {
-    for (const board of boards) {
-      try {
-        // Skip if we already have a preview
-        if (previews[board.id]) continue;
+    const boardsToGenerate = boards.filter((board) => {
+      if (previews[board.id] || previewGenerationIdsRef.current.has(board.id)) return false;
+      previewGenerationIdsRef.current.add(board.id);
+      return true;
+    });
 
-        // Try to get snapshot from local storage first
-        const cachedSnapshot = localStorage.getItem(`viboard:web:${board.id}`);
-        let snapshot = null;
-        
-        if (cachedSnapshot) {
-          snapshot = JSON.parse(cachedSnapshot);
-        } else {
+    if (boardsToGenerate.length > 0) {
+      setPreviewStatuses(prev => {
+        const next = { ...prev };
+        for (const board of boardsToGenerate) {
+          if (!previews[board.id]) next[board.id] = 'loading';
+        }
+        return next;
+      });
+    }
+
+    for (const board of boardsToGenerate) {
+      try {
+        // Try the normalized browser cache first. Large boards may live in IndexedDB instead of localStorage.
+        let snapshot = await getCachedWebBoardSnapshot(board.id);
+
+        if (!snapshot) {
           // If not in local storage, fetch the full board data
           const { data: boardData } = await supabase.from('moodboards').select('*').eq('id', board.id).single();
           if (boardData) {
@@ -114,10 +128,18 @@ export default function Dashboard() {
           const previewUrl = await generateBoardPreview(snapshot.blocks, snapshot.drawings || []);
           if (previewUrl) {
             setPreviews(prev => ({ ...prev, [board.id]: previewUrl }));
+            setPreviewStatuses(prev => ({ ...prev, [board.id]: 'ready' }));
+          } else {
+            setPreviewStatuses(prev => ({ ...prev, [board.id]: 'empty' }));
           }
+        } else {
+          setPreviewStatuses(prev => ({ ...prev, [board.id]: 'empty' }));
         }
       } catch (err) {
         console.error(`Error generating preview for board ${board.id}:`, err);
+        setPreviewStatuses(prev => ({ ...prev, [board.id]: 'empty' }));
+      } finally {
+        previewGenerationIdsRef.current.delete(board.id);
       }
     }
   };
@@ -460,6 +482,11 @@ export default function Dashboard() {
                         alt={`${board.title || 'Untitled Board'} preview`} 
                         className={`w-full h-full object-cover transition-transform duration-700 ease-out ${menuOpenId === board.id ? 'scale-105' : 'group-hover:scale-105'}`}
                       />
+                    ) : previewStatuses[board.id] === 'loading' ? (
+                      <div className="flex items-center gap-2 text-zinc-400 text-sm font-medium" role="status" aria-live="polite">
+                        <span className="h-4 w-4 rounded-full border-2 border-zinc-200 border-t-[#6c5cff] animate-spin" aria-hidden="true" />
+                        <span>Preview Loading...</span>
+                      </div>
                     ) : (
                       <span className="text-zinc-400 text-sm font-medium">No preview</span>
                     )}
