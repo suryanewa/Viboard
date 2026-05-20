@@ -105,9 +105,6 @@ export const getBoardSnapshot = (): BoardSnapshot => {
   };
 };
 
-const boardContentColumnPayloads = (snapshot: BoardSnapshot) =>
-  BOARD_CONTENT_COLUMNS.map((column) => ({ [column]: snapshot }));
-
 const errorMessage = (error: unknown) =>
   error instanceof Error
     ? error.message
@@ -207,7 +204,23 @@ const readSnapshotStorage = (key: string): BoardSnapshot | null => {
     return null;
   }
 
-  return safeParseJson<BoardSnapshot | null>(raw, null);
+  const parsed = safeParseJson<unknown>(raw, null);
+  if (!parsed || typeof parsed !== 'object') {
+    localStorage.removeItem(key);
+    return null;
+  }
+
+  try {
+    const snapshot = normalizeSnapshot(parsed);
+    if (isClearedBoardSnapshot(snapshot)) {
+      localStorage.removeItem(key);
+      return null;
+    }
+    return snapshot;
+  } catch {
+    localStorage.removeItem(key);
+    return null;
+  }
 };
 
 const centeredViewportForBlock = (block: Block): Viewport => {
@@ -421,6 +434,7 @@ const applyListStyleToEditableSelection = (style: 'bullet' | 'number') => {
 };
 
 const saveRecentSnapshot = (snapshot: BoardSnapshot) => {
+  if (isClearedBoardSnapshot(snapshot)) return false;
   if (estimateJsonChars(snapshot) > MAX_BROWSER_SNAPSHOT_CHARS) {
     localStorage.removeItem(RECENT_BOARDS_KEY);
     return false;
@@ -478,6 +492,7 @@ export const loadDefaultBoard = () => {
 
 export const saveBoard = () => {
   const snapshot = getBoardSnapshot();
+  if (isClearedBoardSnapshot(snapshot)) return false;
   const savedAutosave = safeSetSnapshotStorage(AUTOSAVE_KEY, snapshot);
   const savedRecent = saveRecentSnapshot(snapshot);
   return savedAutosave || savedRecent;
@@ -550,15 +565,15 @@ export const saveBoardToWeb = async (title: string, boardId?: string | null, sna
     title: snapshot.title,
     user_id: userId,
   };
-  const contentPayloads = boardContentColumnPayloads(snapshot).flatMap((contentPayload) => [
-    { ...timestampedPayload, ...contentPayload },
-    { ...basePayload, ...contentPayload },
-  ]);
+  const savePayloads = [
+    { ...timestampedPayload, snapshot },
+    { ...basePayload, snapshot },
+  ];
   let data: { id: string } | null = null;
   const errors: unknown[] = [];
 
   const trySave = async (mode: 'update' | 'insert', options: { includeRouteId?: boolean } = {}) => {
-    for (const payload of contentPayloads) {
+    for (const payload of savePayloads) {
       const query = mode === 'update' && boardId
         ? supabase.from('moodboards').update(payload).eq('id', boardId).select('id').single()
         : supabase
@@ -699,8 +714,7 @@ export const setCurrentLoadingBoardId = (id: string | null) => {
 };
 
 export const loadBoardFromWeb = async (boardId: string, onSnapshotApplied?: () => void) => {
-  const cached = localStorage.getItem(`viboard:web:${boardId}`);
-  const cachedSnapshot = cached ? safeParseJson<BoardSnapshot | null>(cached, null) : null;
+  const cachedSnapshot = readSnapshotStorage(`viboard:web:${boardId}`);
   const cachedSignature = cachedSnapshot ? snapshotSignature(cachedSnapshot) : null;
 
   const fetchAndApplyRemoteSnapshot = async () => {
