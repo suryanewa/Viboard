@@ -842,7 +842,6 @@ export const loadBoardFromWeb = async (boardId: string, onSnapshotApplied?: () =
 
     if (error && cachedSnapshot) return;
     if (error) {
-      loadBoardSnapshot(defaultBoardSnapshot());
       markBoardUnsaved();
       throw error;
     }

@@ -82,7 +82,6 @@ function Board() {
         window.clearTimeout(autosaveTimerRef.current);
       }
       setCurrentLoadingBoardId(null);
-      useBoardStore.getState().clearBoard();
     };
   }, []);
 
