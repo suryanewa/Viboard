@@ -63,6 +63,7 @@ function Board() {
   const [isDraggingOver, setIsDraggingOver] = useState(false);
   const [renderViewport, setRenderViewport] = useState<Viewport>(() => useBoardStore.getState().viewport);
   const autosaveReadyRef = useRef(false);
+  const skipNextAutosaveRef = useRef(false);
   const changeVersionRef = useRef(0);
   const autosaveTimerRef = useRef<number | null>(null);
   const autosaveQueueRef = useRef(Promise.resolve());
@@ -126,6 +127,11 @@ function Board() {
     setCurrentLoadingBoardId(boardId);
 
     const loadedStashedSnapshot = loadStashedSavedBoardSnapshot(boardId);
+    if (loadedStashedSnapshot) {
+      skipNextAutosaveRef.current = true;
+      changeVersionRef.current = 0;
+      autosaveReadyRef.current = true;
+    }
     
     if (consumeImportedLocalSnapshotFlag()) {
       importedSnapshotBoardIdRef.current = boardId;
@@ -135,8 +141,8 @@ function Board() {
     }
 
     importedSnapshotBoardIdRef.current = null;
-    autosaveReadyRef.current = false;
     if (loadedStashedSnapshot) return;
+    autosaveReadyRef.current = false;
     useBoardStore.getState().clearBoard();
   }, [params.id]);
 
@@ -147,6 +153,7 @@ function Board() {
     let cancelled = false;
 
     const markLoadedSnapshotClean = () => {
+      skipNextAutosaveRef.current = true;
       changeVersionRef.current = 0;
       syncAllBlocks(useBoardStore.getState().blocks);
       markBoardClean();
@@ -172,6 +179,10 @@ function Board() {
 
   useEffect(() => {
     if (!autosaveReadyRef.current) return;
+    if (skipNextAutosaveRef.current) {
+      skipNextAutosaveRef.current = false;
+      return;
+    }
 
     const changeVersion = changeVersionRef.current + 1;
     changeVersionRef.current = changeVersion;

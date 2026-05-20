@@ -384,6 +384,13 @@ export const BoardMenu: React.FC = () => {
     setSaveError(null);
     const saveTitleValue = saveTitle.trim() || 'Untitled Board';
     const snapshotAtSubmit: BoardSnapshot = { ...getBoardSnapshot(), title: saveTitleValue };
+    console.info('Viboard save snapshot:', {
+      title: snapshotAtSubmit.title,
+      blockCount: Object.keys(snapshotAtSubmit.blocks || {}).length,
+      drawingCount: (snapshotAtSubmit.drawings || []).length,
+      jsonChars: JSON.stringify(snapshotAtSubmit).length,
+      blockIds: Object.keys(snapshotAtSubmit.blocks || {}).slice(0, 10),
+    });
     const boardIdAtSubmit = getSavedBoardId() === params.id ? params.id : null;
     try {
       const { data: sessionData } = await supabase.auth.getSession();

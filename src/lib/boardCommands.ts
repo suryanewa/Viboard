@@ -97,6 +97,23 @@ const snapshotSignature = (snapshot: BoardSnapshot) =>
     history: normalizeHistory(snapshot.history),
   });
 
+const snapshotStats = (snapshot: BoardSnapshot) => ({
+  title: snapshot.title,
+  blockCount: Object.keys(snapshot.blocks || {}).length,
+  drawingCount: (snapshot.drawings || []).length,
+  jsonChars: estimateJsonChars(snapshot),
+  blockIds: Object.keys(snapshot.blocks || {}).slice(0, 10),
+});
+
+const isDefaultOnlySnapshot = (snapshot: BoardSnapshot) => {
+  const blockIds = Object.keys(snapshot.blocks || {});
+  return (
+    blockIds.length === 1 &&
+    blockIds[0] === DEFAULT_LOCKUP_BLOCK.id &&
+    (snapshot.drawings || []).length === 0
+  );
+};
+
 export const getBoardSnapshot = (): BoardSnapshot => {
   const { canvasTitle, blocks, drawings, viewport } = useBoardStore.getState();
   return {
@@ -637,12 +654,22 @@ export const savePendingAuthenticatedBoard = async () => {
   return savedId;
 };
 
-export const saveBoardToWeb = async (title: string, boardId?: string | null, snapshotOverride?: BoardSnapshot) => {
+export const saveBoardToWeb = async (
+  title: string,
+  boardId?: string | null,
+  snapshotOverride?: BoardSnapshot,
+  options: { allowDefaultSnapshot?: boolean } = {}
+) => {
   const snapshotTitle = title.trim() || 'Untitled Board';
   const currentSnapshot = { ...(snapshotOverride ?? getBoardSnapshot()), title: snapshotTitle };
-  const snapshot = isClearedBoardSnapshot(currentSnapshot)
-    ? defaultBoardSnapshot(snapshotTitle)
-    : currentSnapshot;
+  if (isClearedBoardSnapshot(currentSnapshot)) {
+    throw new Error('This board is empty. Add content before saving.');
+  }
+  const snapshot = currentSnapshot;
+  if (isDefaultOnlySnapshot(snapshot) && !options.allowDefaultSnapshot) {
+    console.warn('Refusing to save default-only Viboard snapshot:', snapshotStats(snapshot));
+    throw new Error('This save only contains the default Viboard logo block. Add or restore your board content before saving.');
+  }
   const shouldApplySnapshotToStore = !snapshotOverride;
   const { data: sessionData } = await supabase.auth.getSession();
   const userId = sessionData.session?.user.id;
@@ -718,7 +745,7 @@ export const saveBoardToWeb = async (title: string, boardId?: string | null, sna
 };
 
 export const createBoardOnWeb = (title = 'Untitled Board') =>
-  saveBoardToWeb(title, null, defaultBoardSnapshot(title));
+  saveBoardToWeb(title, null, defaultBoardSnapshot(title), { allowDefaultSnapshot: true });
 
 export const saveLocalCopy = () => {
   const snapshot = getBoardSnapshot();
