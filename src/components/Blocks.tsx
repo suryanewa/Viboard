@@ -891,12 +891,11 @@ export const LinkBlock: React.FC<BlockContentProps> = ({ block }) => {
 
 export const AudioBlock: React.FC<BlockContentProps> = ({ block }) => {
   const [isPlaying, setIsPlaying] = useState(false);
-  const [metadata, setMetadata] = useState<{ title?: string; image?: string } | null>(null);
+  const [metadata, setMetadata] = useState<{ title?: string; image?: string; artist?: string } | null>(null);
   const { url, platform, coverUrl } = block.data;
 
   useEffect(() => {
     let isMounted = true;
-    if (coverUrl) return;
 
     const fetchMetadata = async () => {
       try {
@@ -905,7 +904,8 @@ export const AudioBlock: React.FC<BlockContentProps> = ({ block }) => {
         if (isMounted && json.status === 'success') {
           setMetadata({
             title: json.data?.title,
-            image: json.data?.image?.url || json.data?.logo?.url
+            image: json.data?.image?.url || json.data?.logo?.url,
+            artist: json.data?.author || json.data?.publisher,
           });
         }
       } catch (err) {
@@ -919,6 +919,7 @@ export const AudioBlock: React.FC<BlockContentProps> = ({ block }) => {
 
   const displayImage = coverUrl || metadata?.image;
   const displayTitle = metadata?.title || block.data.title || platform || 'Audio';
+  const displayArtist = metadata?.artist || block.data.artist || null;
   const discCenterClass =
     platform === 'Spotify' ? 'bg-[#1DB954]' :
     platform === 'SoundCloud' ? 'bg-[#FF5500]' :
@@ -931,6 +932,7 @@ export const AudioBlock: React.FC<BlockContentProps> = ({ block }) => {
       nativeWidth={240}
       nativeHeight={240}
       className="overflow-visible"
+      style={{ overflow: 'visible' }}
       frameClassName="flex items-center bg-transparent"
     >
       {/* Spinning Vinyl Record */}
@@ -981,9 +983,9 @@ export const AudioBlock: React.FC<BlockContentProps> = ({ block }) => {
             <div className="truncate text-[15px] font-semibold leading-tight text-white drop-shadow">
               {displayTitle}
             </div>
-            {platform && (
+            {(displayArtist || platform) && (
               <div className="mt-1 text-[11px] font-medium uppercase tracking-wide text-white/65">
-                {platform}
+                {displayArtist || platform}
               </div>
             )}
           </div>

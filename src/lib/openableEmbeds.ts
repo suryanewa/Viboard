@@ -2,6 +2,7 @@ import type { Block } from '../types';
 
 export const OPENABLE_EMBED_TYPES = new Set<Block['type']>([
   'link',
+  'audio',
   'instagram',
   'x',
   'youtube',
