@@ -42,6 +42,7 @@ const AUTOSAVE_KEY = 'viboard:autosave';
 const RECENT_BOARDS_KEY = 'viboard:recent';
 const DEFAULT_BOARD_VIEWPORT_ZOOM = 1;
 const MAX_BROWSER_SNAPSHOT_CHARS = 4_000_000;
+const transientSavedSnapshots = new Map<string, BoardSnapshot>();
 const DEFAULT_LOCKUP_BLOCK: Block = {
   id: 'viboard-lockup',
   type: 'image',
@@ -274,9 +275,6 @@ export const parseSnapshot = (row: Record<string, unknown> | null): BoardSnapsho
   return null;
 };
 
-const blankSnapshotForRow = (row: Record<string, unknown> | null): BoardSnapshot =>
-  defaultBoardSnapshot(String(row?.title || 'Untitled Board'));
-
 const normalizeSnapshot = (value: unknown): BoardSnapshot => {
   if (!value || typeof value !== 'object') throw new Error('This file is not a Viboard board.');
   const record = value as Record<string, unknown>;
@@ -462,6 +460,26 @@ const saveWebSnapshotCache = (boardId: string, snapshot: BoardSnapshot) => {
 
 export const getCachedWebBoards = () => safeParseJson<SavedBoardSummary[]>(localStorage.getItem(WEB_CACHE_INDEX_KEY), []);
 
+export const cacheSavedBoardSnapshot = (boardId: string, snapshot: BoardSnapshot) => {
+  saveWebSnapshotCache(boardId, snapshot);
+  safeSetSnapshotStorage(AUTOSAVE_KEY, snapshot);
+  saveRecentSnapshot(snapshot);
+};
+
+export const stashSavedBoardSnapshot = (boardId: string, snapshot: BoardSnapshot) => {
+  transientSavedSnapshots.set(boardId, snapshot);
+  cacheSavedBoardSnapshot(boardId, snapshot);
+};
+
+export const loadStashedSavedBoardSnapshot = (boardId: string) => {
+  const snapshot = transientSavedSnapshots.get(boardId);
+  if (!snapshot) return false;
+  transientSavedSnapshots.delete(boardId);
+  loadBoardSnapshot(snapshot);
+  markBoardSaved(boardId);
+  return true;
+};
+
 export const newBoard = () => {
   const snapshot = defaultBoardSnapshot();
   useBoardStore.setState({
@@ -622,9 +640,7 @@ export const saveBoardToWeb = async (title: string, boardId?: string | null, sna
   if (shouldApplySnapshotToStore) {
     useBoardStore.setState({ canvasTitle: snapshot.title });
   }
-  saveWebSnapshotCache(savedBoard.id, snapshot);
-  safeSetSnapshotStorage(AUTOSAVE_KEY, snapshot);
-  saveRecentSnapshot(snapshot);
+  stashSavedBoardSnapshot(savedBoard.id, snapshot);
   if (shouldApplySnapshotToStore) {
     markBoardSaved(savedBoard.id);
   }
@@ -748,9 +764,7 @@ export const loadBoardFromWeb = async (boardId: string, onSnapshotApplied?: () =
       markBoardSaved(boardId);
       return;
     }
-    loadBoardSnapshot(blankSnapshotForRow(data as Record<string, unknown>));
-    onSnapshotApplied?.();
-    markBoardSaved(boardId);
+    throw new Error('This board row exists in Supabase, but it does not contain readable Viboard content.');
   };
 
   if (cachedSnapshot) {

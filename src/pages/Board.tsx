@@ -8,7 +8,7 @@ import { KeyboardShortcuts } from '../components/KeyboardShortcuts';
 import { ContextMenu } from '../components/ContextMenu';
 import { PropertyToolbar } from '../components/PropertyToolbar';
 import { useBoardStore } from '../store';
-import { getBoardSnapshot, loadBoardFromWeb, loadDefaultBoard, saveBoard, saveBoardToWeb, setCurrentLoadingBoardId } from '../lib/boardCommands';
+import { getBoardSnapshot, loadBoardFromWeb, loadDefaultBoard, loadStashedSavedBoardSnapshot, saveBoard, saveBoardToWeb, setCurrentLoadingBoardId } from '../lib/boardCommands';
 import {
   consumeImportedLocalSnapshotFlag,
   getSavedBoardId,
@@ -124,6 +124,8 @@ function Board() {
     const boardId = params.id;
     
     setCurrentLoadingBoardId(boardId);
+
+    const loadedStashedSnapshot = loadStashedSavedBoardSnapshot(boardId);
     
     if (consumeImportedLocalSnapshotFlag()) {
       importedSnapshotBoardIdRef.current = boardId;
@@ -134,6 +136,7 @@ function Board() {
 
     importedSnapshotBoardIdRef.current = null;
     autosaveReadyRef.current = false;
+    if (loadedStashedSnapshot) return;
     useBoardStore.getState().clearBoard();
   }, [params.id]);
 
