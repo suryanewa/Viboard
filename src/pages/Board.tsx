@@ -1,4 +1,4 @@
-import { memo, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { useParams } from 'react-router-dom';
 import { Canvas } from '../components/Canvas';
 import { BlockShell } from '../components/BlockShell';
@@ -8,7 +8,7 @@ import { KeyboardShortcuts } from '../components/KeyboardShortcuts';
 import { ContextMenu } from '../components/ContextMenu';
 import { PropertyToolbar } from '../components/PropertyToolbar';
 import { useBoardStore } from '../store';
-import { getBoardSnapshot, loadBoardFromWeb, loadDefaultBoard, loadStashedSavedBoardSnapshot, saveBoard, saveBoardToWeb, setCurrentLoadingBoardId } from '../lib/boardCommands';
+import { getBoardSnapshot, loadBoardFromWeb, loadDefaultBoard, loadStashedSavedBoardSnapshot, saveBoard, saveBoardToWeb, setCurrentLoadingBoardId, stashSavedBoardSnapshot } from '../lib/boardCommands';
 import {
   consumeImportedLocalSnapshotFlag,
   getSavedBoardId,
@@ -64,6 +64,7 @@ function Board() {
   const [renderViewport, setRenderViewport] = useState<Viewport>(() => useBoardStore.getState().viewport);
   const autosaveReadyRef = useRef(false);
   const skipNextAutosaveRef = useRef(false);
+  const pendingAutosaveRef = useRef(false);
   const changeVersionRef = useRef(0);
   const autosaveTimerRef = useRef<number | null>(null);
   const autosaveQueueRef = useRef(Promise.resolve());
@@ -76,14 +77,50 @@ function Board() {
     );
   }, [blocks, renderViewport, selection]);
 
+  const flushPendingAutosave = useCallback(() => {
+    if (!pendingAutosaveRef.current) return;
+    pendingAutosaveRef.current = false;
+
+    if (autosaveTimerRef.current !== null) {
+      window.clearTimeout(autosaveTimerRef.current);
+      autosaveTimerRef.current = null;
+    }
+
+    const savedBoardId = getSavedBoardId();
+    const versionAtSave = changeVersionRef.current;
+    const snapshotAtSave = getBoardSnapshot();
+    const savedLocally = saveBoard();
+
+    if (savedLocally && !savedBoardId && changeVersionRef.current === versionAtSave) {
+      markBoardClean();
+    }
+
+    if (!savedBoardId || savedBoardId !== (params.id ?? null)) return;
+
+    stashSavedBoardSnapshot(savedBoardId, snapshotAtSave);
+    autosaveQueueRef.current = autosaveQueueRef.current
+      .catch(() => undefined)
+      .then(() => saveBoardToWeb(snapshotAtSave.title, savedBoardId, snapshotAtSave))
+      .then(() => {
+        if (changeVersionRef.current === versionAtSave) {
+          markBoardClean();
+        } else {
+          markBoardDirty();
+        }
+      })
+      .catch((error) => {
+        markBoardDirty();
+        pendingAutosaveRef.current = true;
+        console.error('Error autosaving moodboard:', error);
+      });
+  }, [params.id]);
+
   useEffect(() => {
     return () => {
-      if (autosaveTimerRef.current !== null) {
-        window.clearTimeout(autosaveTimerRef.current);
-      }
+      flushPendingAutosave();
       setCurrentLoadingBoardId(null);
     };
-  }, []);
+  }, [flushPendingAutosave]);
 
   useEffect(() => {
     let viewportTimer: number | null = null;
@@ -127,6 +164,7 @@ function Board() {
 
     const loadedStashedSnapshot = loadStashedSavedBoardSnapshot(boardId);
     if (loadedStashedSnapshot) {
+      importedSnapshotBoardIdRef.current = boardId;
       skipNextAutosaveRef.current = true;
       changeVersionRef.current = 0;
       autosaveReadyRef.current = true;
@@ -185,6 +223,7 @@ function Board() {
 
     const changeVersion = changeVersionRef.current + 1;
     changeVersionRef.current = changeVersion;
+    pendingAutosaveRef.current = true;
     markBoardDirty();
 
     if (autosaveTimerRef.current !== null) {
@@ -192,45 +231,13 @@ function Board() {
     }
 
     autosaveTimerRef.current = window.setTimeout(() => {
-      autosaveTimerRef.current = null;
-
-      const savedBoardId = getSavedBoardId();
-      const versionAtSave = changeVersionRef.current;
-      const snapshotAtSave = getBoardSnapshot();
-      const savedLocally = saveBoard();
-
-      if (savedLocally && !savedBoardId && changeVersionRef.current === versionAtSave) {
-        markBoardClean();
-      }
-
-      if (!savedBoardId || savedBoardId !== params.id) return;
-
-      autosaveQueueRef.current = autosaveQueueRef.current
-        .catch(() => undefined)
-        .then(() => saveBoardToWeb(snapshotAtSave.title, savedBoardId, snapshotAtSave))
-        .then(() => {
-          if (changeVersionRef.current === versionAtSave) {
-            markBoardClean();
-          } else {
-            markBoardDirty();
-          }
-        })
-        .catch((error) => {
-          markBoardDirty();
-          console.error('Error autosaving moodboard:', error);
-        });
+      flushPendingAutosave();
     }, AUTOSAVE_DEBOUNCE_MS);
-
-    return () => {
-      if (autosaveTimerRef.current !== null) {
-        window.clearTimeout(autosaveTimerRef.current);
-        autosaveTimerRef.current = null;
-      }
-    };
-  }, [blocks, drawings, canvasTitle, params.id]);
+  }, [blocks, drawings, canvasTitle, params.id, flushPendingAutosave]);
 
   useEffect(() => {
     const handleBeforeUnload = (event: BeforeUnloadEvent) => {
+      flushPendingAutosave();
       if (!shouldPromptToSaveBoard()) return;
       event.preventDefault();
       event.returnValue = '';
@@ -238,7 +245,7 @@ function Board() {
 
     window.addEventListener('beforeunload', handleBeforeUnload);
     return () => window.removeEventListener('beforeunload', handleBeforeUnload);
-  }, []);
+  }, [flushPendingAutosave]);
 
   useEffect(() => {
     void initializeCollection();
