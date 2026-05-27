@@ -17,7 +17,7 @@ import {
   markBoardUnsaved,
   shouldPromptToSaveBoard,
 } from '../lib/boardSession';
-import { initializeCollection, syncAllBlocks } from '../lib/typesense';
+import { syncAllBlocks } from '../lib/blockSearch';
 import { AnimatePresence, motion } from 'framer-motion';
 import { UploadCloud } from 'lucide-react';
 import { fileToBoardImageDataUrl } from '../lib/imageData';
@@ -334,10 +334,6 @@ function Board() {
       document.removeEventListener('visibilitychange', handleVisibilityChange);
     };
   }, [flushPendingAutosave]);
-
-  useEffect(() => {
-    void initializeCollection();
-  }, []);
 
   useEffect(() => {
     const handleDragOver = (e: DragEvent) => {

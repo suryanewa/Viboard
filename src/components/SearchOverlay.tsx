@@ -1,7 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useBoardStore } from '../store';
-import { searchBlocks, type BoardBlockDocument } from '../lib/typesense';
+import { searchBlocks, type BoardBlockDocument } from '../lib/blockSearch';
 import { Search, X, FileText, Link, StickyNote } from 'lucide-react';
 import { clsx } from 'clsx';
 

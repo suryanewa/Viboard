@@ -23,3 +23,14 @@ dist-ssr
 *.sln
 *.sw?
 .vercel
+
+# Local tooling / agent artifacts
+.playwright-mcp/
+.omo/
+.factory/
+test-results/
+supabase/.temp/
+
+# Scratch images from debugging
+tmp_*.png
+viboard-*-check.png

@@ -2,7 +2,7 @@ import { create } from 'zustand';
 import { clampViewportZoom } from './types';
 import type { Block, Viewport, DrawingPath } from './types';
 import { v4 as uuidv4 } from 'uuid';
-import { indexBlock, removeBlockFromIndex, syncAllBlocks } from './lib/typesense';
+import { indexBlock, removeBlockFromIndex, syncAllBlocks } from './lib/blockSearch';
 
 export type HistoryEntry = { blocks: Record<string, Block>; drawings: DrawingPath[] };
 export type BoardHistory = {
