@@ -1,10 +1,16 @@
 import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
 import './index.css'
-import App from './App.tsx'
+import { AppErrorBoundary } from './components/ErrorBoundaries.tsx'
+
+const { default: App } = import.meta.env.VITE_PORTFOLIO_ATLAS === '1'
+  ? await import('./PortfolioApp.tsx')
+  : await import('./App.tsx')
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
-    <App />
+    <AppErrorBoundary>
+      <App />
+    </AppErrorBoundary>
   </StrictMode>,
 )

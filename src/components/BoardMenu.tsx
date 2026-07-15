@@ -290,6 +290,7 @@ const DotGridIcon = ({ className }: { className?: string }) => (
 );
 
 export const BoardMenu: React.FC = () => {
+  const isPortfolioAtlas = import.meta.env.VITE_PORTFOLIO_ATLAS === '1';
   const [open, setOpen] = React.useState(false);
   const [hoveredTop, setHoveredTop] = React.useState<string | null>(null);
   const [hoveredNested, setHoveredNested] = React.useState<string | null>(null);
@@ -484,12 +485,22 @@ export const BoardMenu: React.FC = () => {
     }))
     : [{ id: 'recent-empty', label: 'No recent boards', icon: RotateCcw }];
 
-  const menus: MenuItem[] = [
-    {
-      id: 'file',
-      label: 'File',
-      icon: FileDown,
-      children: [
+  const fileMenuItems: MenuItem[] = isPortfolioAtlas
+    ? [
+        { id: 'import', label: 'Import', icon: FileUp, action: importBoardFile },
+        {
+          id: 'export',
+          label: 'Export as...',
+          shortcut: '⇧⌘E',
+          icon: FileImage,
+          children: [
+            { id: 'exportPng', label: 'PNG', icon: FileImage, action: () => exportBoard('png') },
+            { id: 'exportJpg', label: 'JPG', icon: FileImage, action: () => exportBoard('jpg') },
+            { id: 'exportPdf', label: 'PDF', icon: FileDown, action: () => exportBoard('pdf') },
+          ],
+        },
+      ]
+    : [
         { id: 'new', label: 'New', icon: FilePlus, action: () => runAfterUnsavedCheck(newBoard) },
         { id: 'open', label: 'Open', icon: FolderOpen, action: () => runAfterUnsavedCheck(openBoardsHome) },
         { id: 'openRecent', label: 'Open recent', icon: RotateCcw, children: recentBoardItems },
@@ -508,7 +519,14 @@ export const BoardMenu: React.FC = () => {
             { id: 'exportPdf', label: 'PDF', icon: FileDown, action: () => exportBoard('pdf') },
           ],
         },
-      ],
+      ];
+
+  const menus: MenuItem[] = [
+    {
+      id: 'file',
+      label: 'File',
+      icon: FileDown,
+      children: fileMenuItems,
     },
     {
       id: 'edit',

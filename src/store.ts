@@ -144,6 +144,7 @@ interface BoardState {
   historyAnimationKey: number;
   
   pushHistory: () => void;
+  pushHistorySnapshot: (entry: HistoryEntry) => void;
   commitBlockEdit: (beforeBlock: Block) => void;
   addBlock: (block: Block) => void;
   updateBlock: (id: string, updates: Partial<Block>, noHistory?: boolean) => void;
@@ -315,6 +316,14 @@ export const useBoardStore = create<BoardState>((set, get) => ({
     if (!shouldKeepHistory(get())) return;
     set({
       history: pushHistoryEntry(history, currentHistoryEntry(get()))
+    });
+  },
+
+  pushHistorySnapshot: (entry) => {
+    const { history } = get();
+    if (!shouldKeepHistory(entry)) return;
+    set({
+      history: pushHistoryEntry(history, entry)
     });
   },
 

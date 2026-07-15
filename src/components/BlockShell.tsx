@@ -8,6 +8,7 @@ import { isOpenableEmbed } from '../lib/openableEmbeds';
 import { createPortal } from 'react-dom';
 
 type BlockPositionUpdate = { id: string, updates: Pick<Block, 'x' | 'y'> };
+type BlockLiveUpdate = { id: string, updates: Partial<Block> };
 
 interface BlockShellProps {
   block: Block;
@@ -214,7 +215,7 @@ const BlockShellComponent: React.FC<BlockShellProps> = ({ block, children }) => 
   const bringToFront = useBoardStore((state) => state.bringToFront);
   const historyAnimationKey = useBoardStore((state) => state.historyAnimationKey);
 
-  const showEmbedDragShield = tool === 'select' && (INTERACTIVE_EMBED_TYPES.has(block.type) || isOpenableEmbed(block));
+  const showEmbedDragShield = tool === 'select' && block.type !== 'audio' && (INTERACTIVE_EMBED_TYPES.has(block.type) || isOpenableEmbed(block));
   const skipPlacementAnimation = block.type === 'shape' || block.data.skipPlacementAnimation;
   const shouldAnimatePlacement = Boolean(block.data.deferSelectionOverlay) && !skipPlacementAnimation;
   
@@ -298,7 +299,9 @@ const BlockShellComponent: React.FC<BlockShellProps> = ({ block, children }) => 
   const isDragging = useRef(false);
   const dragStartPos = useRef({ x: 0, y: 0, pointerX: 0, pointerY: 0 });
   const dragStartGroupPos = useRef<{id: string, x: number, y: number}[]>([]);
-  const hasPushedHistory = useRef(false);
+  const hasGestureMoved = useRef(false);
+  const liveUpdateFrame = useRef<number | null>(null);
+  const pendingLiveUpdates = useRef<BlockLiveUpdate[] | null>(null);
 
   const isResizing = useRef(false);
   const lastPositionHistoryAnimationKey = useRef(0);
@@ -320,6 +323,38 @@ const BlockShellComponent: React.FC<BlockShellProps> = ({ block, children }) => 
   const pathCw = useMotionValue('');
   const pathCcw = useMotionValue('');
   const audioDiscPath = useMotionValue('');
+
+  const flushLiveUpdates = () => {
+    if (liveUpdateFrame.current !== null) {
+      window.cancelAnimationFrame(liveUpdateFrame.current);
+      liveUpdateFrame.current = null;
+    }
+    const updates = pendingLiveUpdates.current;
+    pendingLiveUpdates.current = null;
+    if (updates?.length) {
+      useBoardStore.getState().updateBlocks(updates, true);
+    }
+  };
+
+  const scheduleLiveUpdates = (updates: BlockLiveUpdate[]) => {
+    pendingLiveUpdates.current = updates;
+    if (liveUpdateFrame.current !== null) return;
+
+    liveUpdateFrame.current = window.requestAnimationFrame(() => {
+      liveUpdateFrame.current = null;
+      const nextUpdates = pendingLiveUpdates.current;
+      pendingLiveUpdates.current = null;
+      if (nextUpdates?.length) {
+        useBoardStore.getState().updateBlocks(nextUpdates, true);
+      }
+    });
+  };
+
+  useEffect(() => () => {
+    if (liveUpdateFrame.current !== null) {
+      window.cancelAnimationFrame(liveUpdateFrame.current);
+    }
+  }, []);
 
   useEffect(() => {
     const updatePaths = () => {
@@ -460,7 +495,7 @@ const BlockShellComponent: React.FC<BlockShellProps> = ({ block, children }) => 
     }
 
     dragStartGroupPos.current = dragSelection.map(id => ({ id, x: storeState.blocks[id]?.x || 0, y: storeState.blocks[id]?.y || 0 }));
-    hasPushedHistory.current = false;
+    hasGestureMoved.current = false;
 
     isDragging.current = true;
     dragStartPos.current = { 
@@ -490,20 +525,18 @@ const BlockShellComponent: React.FC<BlockShellProps> = ({ block, children }) => 
     if (!isDragging.current) return;
     e.stopPropagation();
 
-    const { viewport, updateBlocks, snapping, setSnapLines } = useBoardStore.getState();
+    const { viewport, snapping, setSnapLines } = useBoardStore.getState();
     const zoom = viewport.zoom;
     const deltaX = (e.clientX - dragStartPos.current.pointerX) / zoom;
     const deltaY = (e.clientY - dragStartPos.current.pointerY) / zoom;
 
     const GRID_SIZE = 24;
 
-    if (!hasPushedHistory.current) {
-      useBoardStore.getState().pushHistory();
-      hasPushedHistory.current = true;
-    }
-
     const rawX = dragStartPos.current.x + deltaX;
     const rawY = dragStartPos.current.y + deltaY;
+    if (Math.abs(deltaX) > 0.1 || Math.abs(deltaY) > 0.1) {
+      hasGestureMoved.current = true;
+    }
 
     let snapX = rawX;
     let snapY = rawY;
@@ -525,7 +558,7 @@ const BlockShellComponent: React.FC<BlockShellProps> = ({ block, children }) => 
         return { id, updates: { x: startPos.x + snapOffsetX, y: startPos.y + snapOffsetY } };
       }).filter((update): update is BlockPositionUpdate => update !== null);
       
-      updateBlocks(updates, true);
+      scheduleLiveUpdates(updates);
     } else if (draggedIds.length > 1 && draggedIds.includes(block.id)) {
       const updates = draggedIds.map(id => {
         const startPos = dragStartGroupPos.current.find(s => s.id === id);
@@ -533,7 +566,7 @@ const BlockShellComponent: React.FC<BlockShellProps> = ({ block, children }) => 
         return { id, updates: { x: startPos.x + snapOffsetX, y: startPos.y + snapOffsetY } };
       }).filter((update): update is BlockPositionUpdate => update !== null);
       
-      updateBlocks(updates, true);
+      scheduleLiveUpdates(updates);
       x.set(snapX);
       y.set(snapY);
     } else if (draggedIds.includes(block.id)) {
@@ -541,7 +574,9 @@ const BlockShellComponent: React.FC<BlockShellProps> = ({ block, children }) => 
       y.set(snapY);
     }
 
-    setSnapLines([]);
+    if (snapping) {
+      setSnapLines([]);
+    }
   };
 
   const handlePointerUp = (e: React.PointerEvent) => {
@@ -550,6 +585,7 @@ const BlockShellComponent: React.FC<BlockShellProps> = ({ block, children }) => 
     
     e.currentTarget.releasePointerCapture(e.pointerId);
     isDragging.current = false;
+    flushLiveUpdates();
     altDupeIds.current = [];
     
     const { setIsDraggingGroup, setIsDuplicatingGroup, setSnapLines } = useBoardStore.getState();
@@ -558,6 +594,18 @@ const BlockShellComponent: React.FC<BlockShellProps> = ({ block, children }) => 
     setSnapLines([]);
 
     const draggedIds = dragStartGroupPos.current.map(s => s.id);
+    if (hasGestureMoved.current && altDupeIds.current.length === 0) {
+      const { blocks, drawings, pushHistorySnapshot } = useBoardStore.getState();
+      const beforeBlocks = { ...blocks };
+      dragStartGroupPos.current.forEach((startPos) => {
+        const currentBlock = beforeBlocks[startPos.id];
+        if (currentBlock) {
+          beforeBlocks[startPos.id] = { ...currentBlock, x: startPos.x, y: startPos.y };
+        }
+      });
+      pushHistorySnapshot({ blocks: beforeBlocks, drawings });
+    }
+
     if (!(draggedIds.length > 1 && draggedIds.includes(block.id)) && altDupeIds.current.length === 0) {
       updateBlock(block.id, { x: x.get(), y: y.get(), width: width.get(), height: height.get() }, true);
     }
@@ -578,7 +626,7 @@ const BlockShellComponent: React.FC<BlockShellProps> = ({ block, children }) => 
     e.currentTarget.setPointerCapture(e.pointerId);
     isResizing.current = true;
     resizeHandle.current = handle;
-    hasPushedHistory.current = false;
+    hasGestureMoved.current = false;
     
     const { selection, blocks } = useBoardStore.getState();
     const selectedBlocks = selection.includes(block.id)
@@ -611,15 +659,13 @@ const BlockShellComponent: React.FC<BlockShellProps> = ({ block, children }) => 
     if (!isResizing.current) return;
     e.stopPropagation();
 
-    if (!hasPushedHistory.current) {
-      useBoardStore.getState().pushHistory();
-      hasPushedHistory.current = true;
-    }
-
-    const { viewport, snapping, updateBlocks, setSnapLines, blocks } = useBoardStore.getState();
+    const { viewport, snapping, setSnapLines, blocks } = useBoardStore.getState();
     const zoom = viewport.zoom;
     const deltaX = (e.clientX - resizeStartPos.current.x) / zoom;
     const deltaY = (e.clientY - resizeStartPos.current.y) / zoom;
+    if (Math.abs(deltaX) > 0.1 || Math.abs(deltaY) > 0.1) {
+      hasGestureMoved.current = true;
+    }
 
     const GRID_SIZE = 24;
     const SNAP_THRESHOLD = 5 / zoom;
@@ -749,7 +795,7 @@ const BlockShellComponent: React.FC<BlockShellProps> = ({ block, children }) => 
 
     const otherUpdates = updates.filter(u => u.id !== block.id);
     if (otherUpdates.length > 0) {
-      updateBlocks(otherUpdates, true);
+      scheduleLiveUpdates(otherUpdates);
     }
   };
 
@@ -758,8 +804,18 @@ const BlockShellComponent: React.FC<BlockShellProps> = ({ block, children }) => 
     e.stopPropagation();
     e.currentTarget.releasePointerCapture(e.pointerId);
     isResizing.current = false;
+    flushLiveUpdates();
     resizeHandle.current = null;
     useBoardStore.getState().setSnapLines([]);
+
+    if (hasGestureMoved.current) {
+      const { blocks, drawings, pushHistorySnapshot } = useBoardStore.getState();
+      const beforeBlocks = { ...blocks };
+      resizeStartPos.current.selectedBlocks.forEach((startBlock) => {
+        beforeBlocks[startBlock.id] = startBlock;
+      });
+      pushHistorySnapshot({ blocks: beforeBlocks, drawings });
+    }
     
     const finalUpdates = resizeStartPos.current.selectedBlocks.map(b => {
       if (b.id === block.id) {

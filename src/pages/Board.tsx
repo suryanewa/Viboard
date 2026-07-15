@@ -1,4 +1,4 @@
-import { memo, useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { useParams } from 'react-router-dom';
 import { Canvas } from '../components/Canvas';
 import { BlockShell } from '../components/BlockShell';
@@ -7,6 +7,7 @@ import { Toolbar } from '../components/Toolbar';
 import { KeyboardShortcuts } from '../components/KeyboardShortcuts';
 import { ContextMenu } from '../components/ContextMenu';
 import { PropertyToolbar } from '../components/PropertyToolbar';
+import { BlockErrorBoundary } from '../components/ErrorBoundaries';
 import { useBoardStore } from '../store';
 import { getBoardSnapshot, loadBoardFromWeb, loadDefaultBoard, loadStashedSavedBoardSnapshot, saveBoardSnapshot, saveBoardToWeb, setCurrentLoadingBoardId, stashSavedBoardSnapshot } from '../lib/boardCommands';
 import {
@@ -18,9 +19,10 @@ import {
   shouldPromptToSaveBoard,
 } from '../lib/boardSession';
 import { syncAllBlocks } from '../lib/blockSearch';
-import { AnimatePresence, motion } from 'framer-motion';
+import { AnimatePresence, motion, useReducedMotion } from 'framer-motion';
 import { UploadCloud } from 'lucide-react';
 import { fileToBoardImageDataUrl } from '../lib/imageData';
+import { getVisibleBlocks } from '../lib/visibleBlocks';
 import { clampViewportZoom, type Block, type DrawingPath, type Viewport } from '../types';
 
 const LOCAL_DEFAULT_BOARD_ID = 'local-default-board';
@@ -134,20 +136,25 @@ const recoverViewportIfContentOffscreen = () => {
 
 const BoardBlock = memo(({ block }: { block: Block }) => (
   <BlockShell block={block}>
-    <BlockRenderer block={block} />
+    <BlockErrorBoundary block={block}>
+      <BlockRenderer block={block} />
+    </BlockErrorBoundary>
   </BlockShell>
 ));
 BoardBlock.displayName = 'BoardBlock';
 
 function Board() {
+  const shouldReduceMotion = useReducedMotion();
   const params = useParams();
   const activeBoardId = params.id ?? LOCAL_DEFAULT_BOARD_ID;
   const blocks = useBoardStore((state) => state.blocks);
+  const selection = useBoardStore((state) => state.selection);
   const drawings = useBoardStore((state) => state.drawings);
   const canvasTitle = useBoardStore((state) => state.canvasTitle);
   const viewport = useBoardStore((state) => state.viewport);
   const mode = useBoardStore((state) => state.mode);
   const [isDraggingOver, setIsDraggingOver] = useState(false);
+  const [isBoardLoading, setIsBoardLoading] = useState(true);
   const autosaveReadyRef = useRef(false);
   const skipNextAutosaveRef = useRef(false);
   const pendingAutosaveRef = useRef(false);
@@ -161,7 +168,10 @@ function Board() {
     routeBoardIdRef.current = params.id ?? null;
   }, [params.id]);
 
-  const renderedBlocks = Object.values(blocks);
+  const renderedBlocks = useMemo(
+    () => getVisibleBlocks(blocks, viewport, selection),
+    [blocks, viewport, selection],
+  );
 
   const flushPendingAutosave = useCallback(() => {
     if (!pendingAutosaveRef.current) return;
@@ -218,16 +228,20 @@ function Board() {
       importedSnapshotBoardIdRef.current = null;
       autosaveReadyRef.current = false;
       skipNextAutosaveRef.current = true;
-      void loadDefaultBoard({ useTutorial: true, signal: defaultBoardLoad.signal }).then(() => {
-        if (defaultBoardLoad.signal.aborted) return;
-        recoverViewportIfContentOffscreen();
-        syncAllBlocks(useBoardStore.getState().blocks);
-        changeVersionRef.current = 0;
-        autosaveReadyRef.current = true;
-        window.setTimeout(() => {
-          skipNextAutosaveRef.current = false;
-        }, 0);
-      });
+      void loadDefaultBoard({ useTutorial: true, signal: defaultBoardLoad.signal })
+        .then(() => {
+          if (defaultBoardLoad.signal.aborted) return;
+          recoverViewportIfContentOffscreen();
+          syncAllBlocks(useBoardStore.getState().blocks);
+          changeVersionRef.current = 0;
+          autosaveReadyRef.current = true;
+          window.setTimeout(() => {
+            skipNextAutosaveRef.current = false;
+          }, 0);
+        })
+        .finally(() => {
+          if (!defaultBoardLoad.signal.aborted) setIsBoardLoading(false);
+        });
       return () => defaultBoardLoad.abort();
     }
 
@@ -249,11 +263,15 @@ function Board() {
       recoverViewportIfContentOffscreen();
       autosaveReadyRef.current = true;
       changeVersionRef.current = 0;
-      return;
+      const loadingFrame = window.requestAnimationFrame(() => setIsBoardLoading(false));
+      return () => window.cancelAnimationFrame(loadingFrame);
     }
 
     importedSnapshotBoardIdRef.current = null;
-    if (loadedStashedSnapshot) return;
+    if (loadedStashedSnapshot) {
+      const loadingFrame = window.requestAnimationFrame(() => setIsBoardLoading(false));
+      return () => window.cancelAnimationFrame(loadingFrame);
+    }
     autosaveReadyRef.current = false;
     useBoardStore.getState().clearBoard();
   }, [params.id]);
@@ -277,10 +295,12 @@ function Board() {
         if (cancelled) return;
         markLoadedSnapshotClean();
         autosaveReadyRef.current = true;
+        setIsBoardLoading(false);
       })
       .catch((error) => {
         if (cancelled) return;
         autosaveReadyRef.current = true;
+        setIsBoardLoading(false);
         markBoardUnsaved();
         console.error('Error loading moodboard:', error);
       });
@@ -425,6 +445,24 @@ function Board() {
       </Canvas>
       <Toolbar />
       {mode === 'edit' && <PropertyToolbar />}
+      <AnimatePresence>
+        {isBoardLoading && (
+          <motion.div
+            className="fixed inset-0 z-[10000] flex items-center justify-center bg-zinc-50"
+            initial={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: shouldReduceMotion ? 0 : 0.16, ease: 'easeOut' }}
+          >
+            <div className="flex flex-col items-center gap-4 rounded-2xl border border-zinc-200 bg-white px-8 py-6 shadow-xl shadow-zinc-950/5">
+              <img src="/viboard-lockup.svg" alt="Viboard" className="w-36" />
+              <div className="flex items-center gap-2 text-sm font-medium text-zinc-500">
+                <span className="h-2 w-2 animate-pulse rounded-full bg-violet-500 motion-reduce:animate-none" aria-hidden="true" />
+                Loading board
+              </div>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </motion.div>
   );
 }

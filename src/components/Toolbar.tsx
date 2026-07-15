@@ -33,6 +33,7 @@ type ToolbarToolEntry = {
 };
 
 export const Toolbar: React.FC = () => {
+  const isPortfolioAtlas = import.meta.env.VITE_PORTFOLIO_ATLAS === '1';
   const navigate = useNavigate();
   const params = useParams();
   const addBlock = useBoardStore((state) => state.addBlock);
@@ -105,7 +106,7 @@ export const Toolbar: React.FC = () => {
   }, []);
 
   const ZOOM_LEVELS = [0.25, 0.5, 0.75, 1, 2];
-  const showLoginButton = !params.id && hasSession === false;
+  const showLoginButton = !isPortfolioAtlas && !params.id && hasSession === false;
 
   const cycleZoom = () => {
     const { viewport, setViewport } = useBoardStore.getState();

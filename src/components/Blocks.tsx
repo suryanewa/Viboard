@@ -2,7 +2,7 @@ import React, { useRef, useState, useEffect, useCallback, useLayoutEffect } from
 import type { Block, DrawingPath } from '../types';
 import { useBoardStore } from '../store';
 import clsx from 'clsx';
-import { ArrowUpRight, BookOpen } from 'lucide-react';
+import { ArrowUpRight, BookOpen, FileText, Image as ImageIcon, Link as LinkIcon, Music, Play, Video } from 'lucide-react';
 import { getTextBlockHeight, getTextBlockLineHeight } from '../lib/textBlockMetrics';
 
 interface BlockContentProps {
@@ -889,10 +889,53 @@ export const LinkBlock: React.FC<BlockContentProps> = ({ block }) => {
   );
 };
 
+const isDirectAudioUrl = (rawUrl?: string) => {
+  if (!rawUrl) return false;
+  try {
+    const pathname = new URL(rawUrl).pathname.toLowerCase();
+    return /\.(mp3|m4a|aac|wav|ogg|oga|opus|flac)(?:$|\?)/.test(pathname);
+  } catch {
+    return false;
+  }
+};
+
+type AudioMetadata = {
+  title?: string;
+  image?: string;
+  artist?: string;
+  previewUrl?: string;
+};
+
+const cleanAudioTitle = (title?: string) => {
+  if (!title) return undefined;
+  return title
+    .replace(/\s+-\s+song and lyrics.*$/i, '')
+    .replace(/\s*[|·]\s*(spotify|soundcloud|apple music).*$/i, '')
+    .trim() || title;
+};
+
+const lookupItunesPreview = async (title?: string, artist?: string) => {
+  const term = [cleanAudioTitle(title), artist].filter(Boolean).join(' ').trim();
+  if (!term) return undefined;
+
+  const params = new URLSearchParams({
+    term,
+    media: 'music',
+    entity: 'song',
+    limit: '1',
+  });
+  const response = await fetch(`https://itunes.apple.com/search?${params.toString()}`);
+  if (!response.ok) return undefined;
+
+  const json = await response.json();
+  return json.results?.[0]?.previewUrl as string | undefined;
+};
+
 export const AudioBlock: React.FC<BlockContentProps> = ({ block }) => {
+  const audioRef = useRef<HTMLAudioElement>(null);
   const [isPlaying, setIsPlaying] = useState(false);
-  const [metadata, setMetadata] = useState<{ title?: string; image?: string; artist?: string } | null>(null);
-  const { url, platform, coverUrl } = block.data;
+  const [metadata, setMetadata] = useState<AudioMetadata | null>(null);
+  const { url, platform, coverUrl, previewUrl, audioPreviewUrl } = block.data;
 
   useEffect(() => {
     let isMounted = true;
@@ -902,11 +945,21 @@ export const AudioBlock: React.FC<BlockContentProps> = ({ block }) => {
         const res = await fetch(`https://api.microlink.io?url=${encodeURIComponent(url)}`);
         const json = await res.json();
         if (isMounted && json.status === 'success') {
-          setMetadata({
-            title: json.data?.title,
+          const nextMetadata: AudioMetadata = {
+            title: cleanAudioTitle(json.data?.title),
             image: json.data?.image?.url || json.data?.logo?.url,
             artist: json.data?.author || json.data?.publisher,
-          });
+            previewUrl: json.data?.audio?.url,
+          };
+
+          setMetadata(nextMetadata);
+
+          if (!nextMetadata.previewUrl) {
+            const itunesPreviewUrl = await lookupItunesPreview(nextMetadata.title, nextMetadata.artist);
+            if (isMounted && itunesPreviewUrl) {
+              setMetadata((current) => ({ ...current, previewUrl: itunesPreviewUrl }));
+            }
+          }
         }
       } catch (err) {
         console.error(err);
@@ -920,11 +973,30 @@ export const AudioBlock: React.FC<BlockContentProps> = ({ block }) => {
   const displayImage = coverUrl || metadata?.image;
   const displayTitle = metadata?.title || block.data.title || platform || 'Audio';
   const displayArtist = metadata?.artist || block.data.artist || null;
+  const previewSrc = previewUrl || audioPreviewUrl || metadata?.previewUrl || (isDirectAudioUrl(url) ? url : undefined);
   const discCenterClass =
     platform === 'Spotify' ? 'bg-[#1DB954]' :
     platform === 'SoundCloud' ? 'bg-[#FF5500]' :
     platform === 'Apple Music' ? 'bg-[#FF2D55]' :
     'bg-red-500';
+
+  const togglePlayback = useCallback(async (event: React.MouseEvent<HTMLButtonElement>) => {
+    event.stopPropagation();
+
+    const audio = audioRef.current;
+    if (!audio || !previewSrc) return;
+
+    try {
+      if (audio.paused) {
+        await audio.play();
+      } else {
+        audio.pause();
+      }
+    } catch (err) {
+      console.error(err);
+      setIsPlaying(false);
+    }
+  }, [previewSrc]);
 
   return (
     <ScaledEmbedFrame
@@ -935,75 +1007,88 @@ export const AudioBlock: React.FC<BlockContentProps> = ({ block }) => {
       style={{ overflow: 'visible' }}
       frameClassName="flex items-center bg-transparent"
     >
-      {/* Spinning Vinyl Record */}
-      <div 
-        className={clsx(
-          "absolute right-0 top-1/2 -translate-y-1/2 w-[95%] h-[95%] rounded-full bg-zinc-900 border-[6px] border-zinc-800 flex items-center justify-center shadow-xl transition-transform duration-700 ease-in-out",
-          isPlaying ? "translate-x-[50%] animate-[spin_3s_linear_infinite]" : "translate-x-[50%]"
+      <div className="group/audio relative h-full w-full overflow-visible">
+        {previewSrc && (
+          <audio
+            ref={audioRef}
+            src={previewSrc}
+            preload="none"
+            onPlay={() => setIsPlaying(true)}
+            onPause={() => setIsPlaying(false)}
+            onEnded={() => setIsPlaying(false)}
+          />
         )}
-      >
-        {/* Grooves */}
-        <div className="absolute inset-2 rounded-full border border-zinc-700/30" />
-        <div className="absolute inset-4 rounded-full border border-zinc-700/30" />
-        <div className="absolute inset-6 rounded-full border border-zinc-700/30" />
-        <div className="absolute inset-8 rounded-full border border-zinc-700/30" />
-        <div className="absolute inset-10 rounded-full border border-zinc-700/30" />
-        
-        {/* Center Label */}
-        <div className={clsx(
-          "w-1/3 h-1/3 rounded-full flex items-center justify-center",
-          discCenterClass
-        )}>
-          <div className="w-3 h-3 rounded-full bg-zinc-900 relative z-10" />
-        </div>
-      </div>
 
-      {/* Album Cover (Square) */}
-      <div 
-        className="group/audio-cover relative z-10 w-full h-full bg-zinc-800 rounded-md shadow-2xl overflow-hidden cursor-pointer"
-        onClick={() => setIsPlaying(!isPlaying)}
-      >
-        {displayImage ? (
-          <img src={displayImage} alt="Album Cover" className="w-full h-full object-cover" />
-        ) : (
-          <div className={clsx(
-            "w-full h-full flex flex-col items-center justify-center p-4",
-            platform === 'Spotify' ? 'bg-gradient-to-br from-zinc-800 to-[#1DB954]/20' :
-            platform === 'SoundCloud' ? 'bg-gradient-to-br from-zinc-800 to-[#FF5500]/20' :
-            platform === 'Apple Music' ? 'bg-gradient-to-br from-zinc-800 to-[#FA243C]/20' :
-            'bg-gradient-to-br from-purple-500 to-indigo-600'
-          )}>
-            <span className="text-white font-bold text-xl mb-2 text-center">{metadata?.title || platform || 'Audio'}</span>
-            <span className="text-zinc-400 text-xs text-center truncate w-full">{url}</span>
+        <div
+          className={clsx(
+            "absolute left-1/2 top-1/2 z-0 flex h-[94%] w-[94%] -translate-y-1/2 items-center justify-center rounded-full border-[7px] border-zinc-800 bg-[radial-gradient(circle_at_center,#18181b_0_11%,#27272a_12%_14%,#09090b_15%_100%)] shadow-[0_18px_38px_rgba(0,0,0,0.35)] transition-transform duration-700 ease-[cubic-bezier(0.22,1,0.36,1)]",
+            isPlaying ? "animate-[spin_3s_linear_infinite]" : "group-hover:translate-x-3 group-hover/audio:translate-x-3"
+          )}
+        >
+          <div className="absolute inset-[10%] rounded-full border border-white/10" />
+          <div className="absolute inset-[20%] rounded-full border border-white/10" />
+          <div className="absolute inset-[30%] rounded-full border border-white/10" />
+          <div className="absolute inset-[40%] rounded-full border border-white/10" />
+
+          <div className={clsx("relative z-10 flex h-[30%] w-[30%] items-center justify-center rounded-full", discCenterClass)}>
+            <div className="h-3 w-3 rounded-full bg-zinc-950" />
           </div>
-        )}
+        </div>
 
-        <div className="absolute inset-x-0 bottom-0 z-10 flex min-h-20 items-end bg-gradient-to-t from-black/85 via-black/45 to-transparent px-4 pb-3 pt-8 opacity-0 translate-y-3 transition-[opacity,transform] duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] group-hover/audio-cover:opacity-100 group-hover/audio-cover:translate-y-0">
-          <div className="min-w-0">
-            <div className="truncate text-[15px] font-semibold leading-tight text-white drop-shadow">
-              {displayTitle}
+        <div className="relative z-10 h-full w-full overflow-hidden rounded-md bg-zinc-900 shadow-2xl">
+          {displayImage ? (
+            <img
+              src={displayImage}
+              alt=""
+              className="h-full w-full object-cover transition-[filter,transform] duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] group-hover:scale-105 group-hover:blur-sm group-hover:brightness-75 group-hover/audio:scale-105 group-hover/audio:blur-sm group-hover/audio:brightness-75"
+              draggable={false}
+            />
+          ) : (
+            <div className={clsx(
+              "flex h-full w-full flex-col items-center justify-center p-4 transition-[filter,transform] duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] group-hover:scale-105 group-hover:blur-sm group-hover:brightness-75 group-hover/audio:scale-105 group-hover/audio:blur-sm group-hover/audio:brightness-75",
+              platform === 'Spotify' ? 'bg-gradient-to-br from-zinc-800 to-[#1DB954]/35' :
+              platform === 'SoundCloud' ? 'bg-gradient-to-br from-zinc-800 to-[#FF5500]/35' :
+              platform === 'Apple Music' ? 'bg-gradient-to-br from-zinc-800 to-[#FA243C]/35' :
+              'bg-gradient-to-br from-zinc-800 to-indigo-600/45'
+            )}>
+              <Music className="h-12 w-12 text-white/80" />
+              <span className="mt-3 max-w-full truncate text-center text-sm font-semibold text-white/90">{platform || 'Audio'}</span>
             </div>
-            {(displayArtist || platform) && (
-              <div className="mt-1 text-[11px] font-medium uppercase tracking-wide text-white/65">
-                {displayArtist || platform}
+          )}
+
+          <div className="pointer-events-none absolute inset-x-0 bottom-0 z-10 flex min-h-24 items-end bg-gradient-to-t from-black/90 via-black/50 to-transparent px-4 pb-3 pt-10 opacity-0 translate-y-3 transition-[opacity,transform] duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] group-hover:opacity-100 group-hover:translate-y-0 group-hover/audio:opacity-100 group-hover/audio:translate-y-0">
+            <div className="min-w-0">
+              <div className="truncate text-[15px] font-semibold leading-tight text-white drop-shadow">
+                {displayTitle}
               </div>
-            )}
+              {(displayArtist || platform) && (
+                <div className="mt-1 truncate text-[11px] font-medium uppercase tracking-wide text-white/68">
+                  {displayArtist || platform}
+                </div>
+              )}
+            </div>
           </div>
-        </div>
-        
-        {/* Play/Pause Overlay */}
-        <div className={clsx(
-          "absolute inset-0 z-20 flex items-center justify-center bg-black/0 opacity-0 transition-[opacity,background-color] duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] group-hover/audio-cover:bg-black/10 group-hover/audio-cover:opacity-100"
-        )}>
-           <div className="w-14 h-14 rounded-full bg-white/20 backdrop-blur-sm flex items-center justify-center shadow-lg border border-white/10 scale-95 transition-[transform,background-color,box-shadow] duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] group-hover/audio-cover:scale-110 group-hover/audio-cover:bg-white/25 group-hover/audio-cover:shadow-xl">
-             {isPlaying ? (
-               <div className="flex gap-1.5">
-                 <div className="w-1.5 h-5 bg-white rounded-sm" />
-                 <div className="w-1.5 h-5 bg-white rounded-sm" />
-               </div>
-             ) : (
-               <div className="w-0 h-0 border-t-[10px] border-t-transparent border-l-[16px] border-l-white border-b-[10px] border-b-transparent ml-1" />
-             )}
+
+          <div className="absolute inset-0 z-20 flex items-center justify-center bg-black/0 opacity-0 transition-[background-color,opacity] duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] group-hover:bg-black/10 group-hover:opacity-100 group-hover/audio:bg-black/10 group-hover/audio:opacity-100">
+            <button
+              type="button"
+              className={clsx(
+                "pointer-events-auto flex h-14 w-14 scale-90 items-center justify-center rounded-full border border-white/20 bg-white/20 text-white shadow-lg backdrop-blur-md transition-[background-color,box-shadow,transform] duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] group-hover:scale-100 group-hover:bg-white/25 group-hover:shadow-xl group-hover/audio:scale-100 group-hover/audio:bg-white/25 group-hover/audio:shadow-xl",
+                !previewSrc && "cursor-default opacity-80"
+              )}
+              aria-label={isPlaying ? 'Pause audio preview' : 'Play audio preview'}
+              onPointerDown={(event) => event.stopPropagation()}
+              onClick={togglePlayback}
+            >
+              {isPlaying ? (
+                <span className="flex gap-1.5" aria-hidden="true">
+                  <span className="h-5 w-1.5 rounded-sm bg-white" />
+                  <span className="h-5 w-1.5 rounded-sm bg-white" />
+                </span>
+              ) : (
+                <span className="ml-1 h-0 w-0 border-y-[10px] border-l-[16px] border-y-transparent border-l-white" aria-hidden="true" />
+              )}
+            </button>
           </div>
         </div>
       </div>
@@ -1011,11 +1096,12 @@ export const AudioBlock: React.FC<BlockContentProps> = ({ block }) => {
   );
 };
 
-import { Tweet } from 'react-tweet';
-
 export const XBlock: React.FC<BlockContentProps> = ({ block }) => {
   const match = block.data.url?.match(/\/(?:status|statuses)\/(\d+)/);
   const tweetId = match ? match[1] : null;
+  const embedUrl = tweetId
+    ? `https://platform.twitter.com/embed/Tweet.html?id=${tweetId}&theme=dark&dnt=true`
+    : null;
 
   return (
     <ScaledEmbedFrame
@@ -1026,10 +1112,14 @@ export const XBlock: React.FC<BlockContentProps> = ({ block }) => {
       frameClassName="bg-[#0a0a0a]"
       data-theme="dark"
     >
-      {tweetId ? (
-        <div className="w-full h-full overflow-y-auto pointer-events-auto flex justify-center items-start [&>div]:my-0 [&>div]:w-full [&>div]:max-w-full">
-          <Tweet id={tweetId} />
-        </div>
+      {embedUrl ? (
+        <iframe
+          src={embedUrl}
+          title="X post"
+          className="h-full w-full border-0 pointer-events-auto"
+          loading="lazy"
+          allowFullScreen
+        />
       ) : (
         <div className="w-full h-full flex items-center justify-center text-zinc-500">
           Invalid Tweet URL
@@ -1719,7 +1809,170 @@ export const FrameBlock: React.FC<BlockContentProps> = ({ block }) => {
   );
 };
 
+const LOW_DETAIL_ZOOM = 0.3;
+
+const getBlockLabel = (block: Block) => {
+  if (block.type === 'youtube') return 'YouTube';
+  if (block.type === 'audio') return block.data.platform || 'Audio';
+  if (block.type === 'image') return block.data.alt || 'Image';
+  if (block.type === 'pdf') return 'PDF';
+  if (block.type === 'figma') return 'Figma';
+  if (block.type === 'arena') return 'Are.na';
+  if (block.type === 'github') return 'GitHub';
+  if (block.type === 'substack') return 'Substack';
+  if (block.type === 'wikipedia') return block.data.title || 'Wikipedia';
+  if (block.type === 'link') {
+    try {
+      return new URL(block.data.url).hostname.replace(/^www\./, '');
+    } catch {
+      return 'Link';
+    }
+  }
+  if (block.type === 'sticky' || block.type === 'text') return block.data.text || '';
+  return block.type;
+};
+
+const getLowDetailIcon = (type: Block['type']) => {
+  if (type === 'youtube' || type === 'video' || type === 'tiktok') return Video;
+  if (type === 'audio') return Music;
+  if (type === 'image') return ImageIcon;
+  if (type === 'pdf') return FileText;
+  if (type === 'link' || type === 'substack' || type === 'medium' || type === 'github' || type === 'wikipedia' || type === 'arena') return LinkIcon;
+  return Play;
+};
+
+const LowDetailImage: React.FC<BlockContentProps> = ({ block }) => (
+  <div className="h-full w-full overflow-hidden bg-zinc-100">
+    {block.data.url ? (
+      <img
+        src={block.data.previewUrl || block.data.url}
+        alt=""
+        className="h-full w-full object-cover"
+        decoding="async"
+        loading="lazy"
+        draggable={false}
+      />
+    ) : (
+      <div className="flex h-full w-full items-center justify-center bg-zinc-100 text-zinc-400">
+        <ImageIcon className="h-6 w-6" />
+      </div>
+    )}
+  </div>
+);
+
+const LowDetailAudio: React.FC<BlockContentProps> = ({ block }) => {
+  const platform = block.data.platform;
+  const accent =
+    platform === 'Spotify' ? '#1DB954' :
+      platform === 'SoundCloud' ? '#FF5500' :
+        platform === 'Apple Music' ? '#FF2D55' :
+          '#ef4444';
+
+  return (
+    <div className="relative h-full w-full overflow-hidden rounded-md bg-zinc-950 shadow-sm">
+      <div className="absolute left-[43%] top-1/2 h-[92%] w-[92%] -translate-y-1/2 rounded-full bg-zinc-900 ring-[6px] ring-zinc-800">
+        <div className="absolute inset-[14%] rounded-full border border-white/10" />
+        <div className="absolute inset-[26%] rounded-full border border-white/10" />
+        <div className="absolute left-1/2 top-1/2 h-[30%] w-[30%] -translate-x-1/2 -translate-y-1/2 rounded-full" style={{ backgroundColor: accent }} />
+      </div>
+      <div className="absolute inset-y-0 left-0 z-10 aspect-square overflow-hidden rounded-md bg-zinc-800 shadow-lg">
+        {block.data.coverUrl ? (
+          <img src={block.data.coverUrl} alt="" className="h-full w-full object-cover" loading="lazy" decoding="async" />
+        ) : (
+          <div className="flex h-full w-full items-center justify-center" style={{ background: `linear-gradient(135deg, #18181b, ${accent}55)` }}>
+            <Music className="h-8 w-8 text-white/80" />
+          </div>
+        )}
+      </div>
+    </div>
+  );
+};
+
+const LowDetailVideo: React.FC<BlockContentProps> = ({ block }) => {
+  const thumbnail = block.type === 'youtube' && block.data.videoId
+    ? `https://i.ytimg.com/vi/${block.data.videoId}/hqdefault.jpg`
+    : null;
+
+  return (
+    <div className="relative h-full w-full overflow-hidden rounded-md bg-zinc-950 text-white shadow-sm">
+      {thumbnail && (
+        <img src={thumbnail} alt="" className="h-full w-full object-cover opacity-85" loading="lazy" decoding="async" />
+      )}
+      <div className="absolute inset-0 bg-gradient-to-t from-black/45 via-black/10 to-transparent" />
+      <div className="absolute left-1/2 top-1/2 flex h-12 w-12 -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full bg-white/20 shadow-lg ring-1 ring-white/25 backdrop-blur-sm">
+        <Play className="ml-0.5 h-5 w-5 fill-white text-white" />
+      </div>
+    </div>
+  );
+};
+
+const LowDetailLinkCard: React.FC<BlockContentProps & { icon: React.ElementType; tone?: 'light' | 'dark' }> = ({ block, icon: Icon, tone = 'light' }) => {
+  const label = getBlockLabel(block);
+  const isDark = tone === 'dark';
+
+  return (
+    <div className={clsx(
+      'flex h-full w-full flex-col overflow-hidden rounded-md border shadow-sm',
+      isDark ? 'border-zinc-800 bg-zinc-950 text-white' : 'border-zinc-200 bg-white text-zinc-800'
+    )}>
+      <div className={clsx('flex h-8 shrink-0 items-center gap-1.5 border-b px-3', isDark ? 'border-white/10 bg-white/5' : 'border-zinc-200 bg-zinc-50')}>
+        <span className="h-2 w-2 rounded-full bg-[#ff5f56]" />
+        <span className="h-2 w-2 rounded-full bg-[#ffbd2e]" />
+        <span className="h-2 w-2 rounded-full bg-[#27c93f]" />
+      </div>
+      <div className="flex min-h-0 flex-1 items-center justify-center gap-2 px-4">
+        <Icon className="h-5 w-5 shrink-0 opacity-70" />
+        {block.width >= 170 && (
+          <span className="truncate text-sm font-medium opacity-80">{label}</span>
+        )}
+      </div>
+    </div>
+  );
+};
+
+const LowDetailBlock: React.FC<BlockContentProps> = ({ block }) => {
+  if (block.type === 'frame') return <FrameBlock block={block} />;
+  if (block.type === 'shape') return <ShapeBlock block={block} />;
+  if (block.type === 'image') return <LowDetailImage block={block} />;
+  if (block.type === 'audio') return <LowDetailAudio block={block} />;
+  if (block.type === 'youtube' || block.type === 'video' || block.type === 'tiktok') return <LowDetailVideo block={block} />;
+  if (block.type === 'figma' || block.type === 'codepen' || block.type === 'pdf') {
+    return <LowDetailLinkCard block={block} icon={getLowDetailIcon(block.type)} tone="dark" />;
+  }
+  if (block.type === 'link' || block.type === 'substack' || block.type === 'medium' || block.type === 'github' || block.type === 'wikipedia' || block.type === 'arena' || block.type === 'instagram' || block.type === 'x' || block.type === 'reddit') {
+    return <LowDetailLinkCard block={block} icon={getLowDetailIcon(block.type)} />;
+  }
+  if (block.type === 'sticky') {
+    const hue = typeof block.data.hue === 'number' ? block.data.hue : 55;
+    return (
+      <div
+        className="h-full w-full border border-black/5"
+        style={{ backgroundColor: `hsl(${hue}, 90%, 82%)` }}
+      />
+    );
+  }
+  if (block.type === 'text') {
+    return (
+      <div className="h-full w-full rounded-sm bg-transparent">
+        <div className="h-full w-full rounded-[2px] bg-zinc-900/85" />
+      </div>
+    );
+  }
+
+  return (
+    <div className="flex h-full w-full items-center justify-center overflow-hidden border border-zinc-200 bg-white text-zinc-500 shadow-sm">
+      <Play className="h-5 w-5 opacity-60" />
+    </div>
+  );
+};
+
 export const BlockRenderer: React.FC<BlockContentProps> = ({ block }) => {
+  const zoom = useBoardStore((state) => state.viewport.zoom);
+  const isSelected = useBoardStore((state) => state.selection.includes(block.id));
+  if (!isSelected && zoom < LOW_DETAIL_ZOOM) {
+    return <LowDetailBlock block={block} />;
+  }
+
   switch (block.type) {
     case 'frame': return <FrameBlock block={block} />;
     case 'sticky': return <StickyBlock block={block} />;

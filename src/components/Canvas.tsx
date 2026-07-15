@@ -70,6 +70,8 @@ export const Canvas: React.FC<{ children: React.ReactNode }> = ({ children }) =>
   const viewportRef = useRef<Viewport>(viewport);
   const viewportStoreFrame = useRef<number | null>(null);
   const viewportStoreTimeout = useRef<number | null>(null);
+  const mousePosFrame = useRef<number | null>(null);
+  const pendingMousePos = useRef<{ x: number, y: number } | null>(null);
 
   const captureCanvasPointer = (e: React.PointerEvent) => {
     const target = e.currentTarget;
@@ -185,8 +187,25 @@ export const Canvas: React.FC<{ children: React.ReactNode }> = ({ children }) =>
       if (viewportStoreTimeout.current !== null) {
         window.clearTimeout(viewportStoreTimeout.current);
       }
+      if (mousePosFrame.current !== null) {
+        window.cancelAnimationFrame(mousePosFrame.current);
+      }
     };
   }, []);
+
+  const publishMousePos = useCallback((x: number, y: number) => {
+    pendingMousePos.current = { x, y };
+    if (mousePosFrame.current !== null) return;
+
+    mousePosFrame.current = window.requestAnimationFrame(() => {
+      mousePosFrame.current = null;
+      const nextMousePos = pendingMousePos.current;
+      pendingMousePos.current = null;
+      if (nextMousePos) {
+        setMousePos(nextMousePos.x, nextMousePos.y);
+      }
+    });
+  }, [setMousePos]);
 
   const bgSize = useTransform(mZoomRaw, (z) => `${24 * z}px ${24 * z}px`);
   const dotSize = useTransform(mZoomRaw, (z) => `${24 * z}px ${24 * z}px`);
@@ -548,7 +567,7 @@ export const Canvas: React.FC<{ children: React.ReactNode }> = ({ children }) =>
     const canvasX = (e.clientX - rect.left - currentViewport.x) / currentViewport.zoom;
     const canvasY = (e.clientY - rect.top - currentViewport.y) / currentViewport.zoom;
     
-    setMousePos(canvasX, canvasY);
+    publishMousePos(canvasX, canvasY);
 
     if (isCreatingFrame.current && activeFrame) {
       setActiveFrame({
@@ -622,7 +641,7 @@ export const Canvas: React.FC<{ children: React.ReactNode }> = ({ children }) =>
         useBoardStore.getState().setDrawingSelection(selectedDrawingIds);
       }
     }
-  }, [marquee, blocks, drawings, setMousePos, currentPath, setCurrentPath, drawingSelection, updateDrawings, activeShape, setActiveShape, markerThickness, activeFrame, publishViewport]);
+  }, [marquee, blocks, drawings, publishMousePos, currentPath, setCurrentPath, drawingSelection, updateDrawings, activeShape, setActiveShape, markerThickness, activeFrame, publishViewport]);
 
   const handlePointerUp = useCallback((e: React.PointerEvent) => {
     releaseCanvasPointer(e);
