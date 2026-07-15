@@ -194,30 +194,22 @@ interface BoardState {
 }
 
 export const MAX_HISTORY = 25;
-const MAX_HISTORY_BLOCKS = 300;
 let historyAnimationSequence = 0;
 
-const cloneBlockForHistory = (block: Block): Block => {
-  const data = { ...block.data };
-  delete data.autoFocus;
-  return { ...block, data };
+const cloneHistoryEntry = (entry: HistoryEntry): HistoryEntry => {
+  let blocks = entry.blocks;
+  for (const [id, block] of Object.entries(entry.blocks)) {
+    if (!block.data.autoFocus) continue;
+    if (blocks === entry.blocks) blocks = { ...entry.blocks };
+    const data = { ...block.data };
+    delete data.autoFocus;
+    blocks[id] = { ...block, data };
+  }
+  return { blocks, drawings: entry.drawings };
 };
-
-const cloneHistoryEntry = (entry: HistoryEntry): HistoryEntry => ({
-  blocks: Object.fromEntries(
-    Object.entries(entry.blocks).map(([id, block]) => [id, cloneBlockForHistory(block)])
-  ),
-  drawings: entry.drawings.map((drawing) => ({
-    ...drawing,
-    points: drawing.points.map((point) => ({ ...point })),
-  })),
-});
 
 const currentHistoryEntry = (state: Pick<BoardState, 'blocks' | 'drawings'>): HistoryEntry =>
   cloneHistoryEntry({ blocks: state.blocks, drawings: state.drawings });
-
-const shouldKeepHistory = (state: Pick<BoardState, 'blocks'>) =>
-  Object.keys(state.blocks).length <= MAX_HISTORY_BLOCKS;
 
 const recordsEqual = (first: unknown, second: unknown) => {
   if (first === second) return true;
@@ -263,7 +255,7 @@ const pushHistoryEntry = (history: BoardState['history'], entry: HistoryEntry) =
 const nextHistory = (
   state: Pick<BoardState, 'blocks' | 'drawings'>,
   history: BoardState['history'],
-) => shouldKeepHistory(state) ? pushHistoryEntry(history, currentHistoryEntry(state)) : { past: [], future: [] };
+) => pushHistoryEntry(history, currentHistoryEntry(state));
 
 const reindexSearch = (blocks: Record<string, Block>) => {
   syncAllBlocks(blocks);
@@ -313,7 +305,6 @@ export const useBoardStore = create<BoardState>((set, get) => ({
 
   pushHistory: () => {
     const { history } = get();
-    if (!shouldKeepHistory(get())) return;
     set({
       history: pushHistoryEntry(history, currentHistoryEntry(get()))
     });
@@ -321,7 +312,6 @@ export const useBoardStore = create<BoardState>((set, get) => ({
 
   pushHistorySnapshot: (entry) => {
     const { history } = get();
-    if (!shouldKeepHistory(entry)) return;
     set({
       history: pushHistoryEntry(history, entry)
     });
@@ -332,12 +322,10 @@ export const useBoardStore = create<BoardState>((set, get) => ({
     const currentBlock = blocks[beforeBlock.id];
     if (!currentBlock || blocksEqual(currentBlock, beforeBlock)) return;
     set({
-      history: shouldKeepHistory({ blocks })
-        ? pushHistoryEntry(history, {
-            blocks: { ...blocks, [beforeBlock.id]: beforeBlock },
-            drawings,
-          })
-        : { past: [], future: [] },
+      history: pushHistoryEntry(history, {
+        blocks: { ...blocks, [beforeBlock.id]: beforeBlock },
+        drawings,
+      }),
     });
     if (currentBlock.type === 'sticky' || currentBlock.type === 'text' || currentBlock.type === 'link') {
       indexBlock(currentBlock);

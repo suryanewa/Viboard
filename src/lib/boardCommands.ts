@@ -3,6 +3,7 @@ import { MAX_HISTORY, useBoardStore } from '../store';
 import { supabase } from './supabase';
 import { getSavedBoardId, markBoardDraftClean, markBoardImported, markBoardSaved, markBoardUnsaved } from './boardSession';
 import { clampViewportZoom } from '../types';
+import { compactSnapshotAssets, expandSnapshotAssets } from './snapshotAssets';
 import type { Block, DrawingPath, Viewport } from '../types';
 import type { BoardHistory } from '../store';
 import type { Session } from '@supabase/supabase-js';
@@ -56,6 +57,7 @@ const SNAPSHOT_STORAGE_GZIP_ENCODING = 'gzip+json';
 const SNAPSHOT_COMPRESSED_ENCODING = 'gzip+base64+json';
 const SNAPSHOT_CHUNK_MANIFEST_TYPE = 'viboard.chunked-json';
 const MAX_STORAGE_OBJECT_CHARS = 20 * 1024 * 1024;
+const MIN_GZIP_SNAPSHOT_CHARS = 64 * 1024;
 const PENDING_AUTHENTICATED_SAVE_KEY = 'viboard:pending-authenticated-save';
 const WEB_CACHE_INDEX_KEY = 'viboard:web:index';
 const AUTOSAVE_KEY = 'viboard:autosave';
@@ -68,6 +70,7 @@ const SNAPSHOT_DB_NAME = 'viboard-cache';
 const SNAPSHOT_DB_VERSION = 1;
 const SNAPSHOT_STORE_NAME = 'snapshots';
 const transientSavedSnapshots = new Map<string, BoardSnapshot>();
+const serializedSnapshotCache = new WeakMap<BoardSnapshot, ReturnType<typeof compactSnapshotAssets>>();
 const DEFAULT_LOCKUP_BLOCK: Block = {
   id: 'viboard-lockup',
   type: 'image',
@@ -119,14 +122,25 @@ const snapshotForPersistence = (snapshot: BoardSnapshot): BoardSnapshot => ({
   history: normalizeHistory(snapshot.history),
 });
 
+const snapshotForSerialization = (snapshot: BoardSnapshot) => {
+  const cached = serializedSnapshotCache.get(snapshot);
+  if (cached) return cached;
+
+  const serialized = compactSnapshotAssets(
+    snapshotForPersistence(snapshot) as unknown as Record<string, unknown>
+  );
+  serializedSnapshotCache.set(snapshot, serialized);
+  return serialized;
+};
+
 const snapshotSignature = (snapshot: BoardSnapshot) =>
-  JSON.stringify({
+  JSON.stringify(compactSnapshotAssets({
     title: snapshot.title,
     blocks: snapshot.blocks,
     drawings: snapshot.drawings,
     viewport: snapshot.viewport,
     history: normalizeHistory(snapshot.history),
-  });
+  }));
 
 const snapshotStats = (snapshot: BoardSnapshot) => ({
   title: snapshot.title,
@@ -220,6 +234,18 @@ const decompressStorageSnapshot = async (blob: Blob, encoding?: string | null) =
   return new Response(stream).text();
 };
 
+const compressStorageSnapshot = async (body: string) => {
+  if (body.length < MIN_GZIP_SNAPSHOT_CHARS || typeof CompressionStream === 'undefined') {
+    return null;
+  }
+
+  const stream = new Blob([body], { type: 'application/json' })
+    .stream()
+    .pipeThrough(new CompressionStream('gzip'));
+  const compressed = await new Response(stream).blob();
+  return new Blob([compressed], { type: 'application/json' });
+};
+
 const isSnapshotChunkManifest = (value: unknown): value is SnapshotChunkManifest => {
   if (!value || typeof value !== 'object') return false;
   const record = value as Partial<SnapshotChunkManifest>;
@@ -303,7 +329,9 @@ const withSnapshotStore = async <T,>(
 };
 
 const writeSnapshotIndexedDb = async (key: string, snapshot: BoardSnapshot) => {
-  const result = await withSnapshotStore('readwrite', (store) => store.put(snapshot, key));
+  const result = await withSnapshotStore('readwrite', (store) =>
+    store.put(snapshotForSerialization(snapshot), key)
+  );
   return result !== null;
 };
 
@@ -384,7 +412,8 @@ const estimateJsonChars = (value: unknown, seen = new WeakSet<object>()): number
 };
 
 const safeSetSnapshotStorage = (key: string, snapshot: BoardSnapshot) => {
-  if (estimateJsonChars(snapshot) > MAX_BROWSER_SNAPSHOT_CHARS) {
+  const serializedSnapshot = snapshotForSerialization(snapshot);
+  if (estimateJsonChars(serializedSnapshot) > MAX_BROWSER_SNAPSHOT_CHARS) {
     localStorage.removeItem(key);
     void writeSnapshotIndexedDb(key, snapshot).catch(() => {
       console.warn(`Skipping browser cache write for ${key} because the board exceeds available storage.`);
@@ -393,7 +422,7 @@ const safeSetSnapshotStorage = (key: string, snapshot: BoardSnapshot) => {
   }
 
   removeSnapshotIndexedDb(key);
-  return safeSetLocalStorage(key, JSON.stringify(snapshot));
+  return safeSetLocalStorage(key, JSON.stringify(serializedSnapshot));
 };
 
 const readSnapshotStorage = (key: string): BoardSnapshot | null => {
@@ -540,6 +569,7 @@ export const loadSnapshotFromRow = async (row: MoodboardRow | null): Promise<Boa
 };
 
 const normalizeSnapshot = (value: unknown): BoardSnapshot => {
+  value = expandSnapshotAssets(value);
   if (!value || typeof value !== 'object') throw new Error('This file is not a Viboard board.');
   const record = value as Record<string, unknown>;
   const nested = BOARD_CONTENT_COLUMNS.map((column) => record[column]).find((item) => item && typeof item === 'object');
@@ -697,13 +727,14 @@ const applyListStyleToEditableSelection = (style: 'bullet' | 'number') => {
 
 const saveRecentSnapshot = (snapshot: BoardSnapshot) => {
   if (isClearedBoardSnapshot(snapshot)) return false;
-  if (estimateJsonChars(snapshot) > MAX_BROWSER_SNAPSHOT_CHARS) {
+  const serializedSnapshot = snapshotForSerialization(snapshot);
+  if (estimateJsonChars(serializedSnapshot) > MAX_BROWSER_SNAPSHOT_CHARS) {
     localStorage.removeItem(RECENT_BOARDS_KEY);
     return false;
   }
 
-  const recent = safeParseJson<BoardSnapshot[]>(localStorage.getItem(RECENT_BOARDS_KEY), []);
-  const next = [snapshot, ...recent.filter((item) => item.title !== snapshot.title)].slice(0, 5);
+  const recent = safeParseJson<Record<string, unknown>[]>(localStorage.getItem(RECENT_BOARDS_KEY), []);
+  const next = [serializedSnapshot, ...recent.filter((item) => item.title !== snapshot.title)].slice(0, 5);
   return safeSetLocalStorage(RECENT_BOARDS_KEY, JSON.stringify(next));
 };
 
@@ -810,8 +841,12 @@ const readPendingAuthenticatedSave = (): PendingAuthenticatedSave | null => {
   if (!raw) return null;
 
   try {
-    const pending = JSON.parse(raw) as PendingAuthenticatedSave;
-    return pending?.snapshot ? pending : null;
+    const pending = JSON.parse(raw) as { boardId?: unknown; snapshot?: unknown };
+    if (!pending?.snapshot) return null;
+    return {
+      boardId: typeof pending.boardId === 'string' ? pending.boardId : null,
+      snapshot: normalizeSnapshot(pending.snapshot),
+    };
   } catch {
     localStorage.removeItem(PENDING_AUTHENTICATED_SAVE_KEY);
     return null;
@@ -826,14 +861,15 @@ export const queueAuthenticatedSave = (
   snapshotOverride?: BoardSnapshot
 ) => {
   const snapshot = snapshotForPersistence({ ...(snapshotOverride ?? getBoardSnapshot()), title: title.trim() || 'Untitled Board' });
-  if (estimateJsonChars(snapshot) > MAX_BROWSER_SNAPSHOT_CHARS) {
+  const serializedSnapshot = snapshotForSerialization(snapshot);
+  if (estimateJsonChars(serializedSnapshot) > MAX_BROWSER_SNAPSHOT_CHARS) {
     throw new Error('This board is too large to queue in browser storage. Sign in first, then save it again.');
   }
 
   const queued = safeSetLocalStorage(PENDING_AUTHENTICATED_SAVE_KEY, JSON.stringify({
     boardId: boardId || null,
-    snapshot,
-  } satisfies PendingAuthenticatedSave));
+    snapshot: serializedSnapshot,
+  }));
   if (!queued) {
     throw new Error('This board is too large to queue in browser storage. Sign in first, then save it again.');
   }
@@ -857,28 +893,40 @@ export const savePendingAuthenticatedBoard = async () => {
 const boardSnapshotStoragePath = (userId: string, boardId: string) =>
   `${userId}/${boardId}/${Date.now()}-${uuidv4()}.viboard.json`;
 
-const uploadJsonStorageObject = async (path: string, body: string) => {
+const uploadJsonStorageObject = async (path: string, body: string | Blob) => {
+  const blob = body instanceof Blob ? body : new Blob([body], { type: 'application/json' });
   const { error } = await supabase.storage
     .from(SNAPSHOT_STORAGE_BUCKET)
-    .upload(path, new Blob([body], { type: 'application/json' }), {
+    .upload(path, blob, {
       cacheControl: '0',
       contentType: 'application/json',
       upsert: false,
     });
 
   if (error) throw error;
-  return new Blob([body]).size;
+  return blob.size;
 };
 
 const uploadBoardSnapshot = async (path: string, snapshot: BoardSnapshot) => {
   const persistedSnapshot = snapshotForPersistence(snapshot);
-  const body = JSON.stringify(persistedSnapshot);
+  const body = JSON.stringify(snapshotForSerialization(persistedSnapshot));
+  const compressedBody = await compressStorageSnapshot(body);
+
+  if (compressedBody) {
+    return {
+      snapshot: persistedSnapshot,
+      size: await uploadJsonStorageObject(path, compressedBody),
+      paths: [path],
+      encoding: SNAPSHOT_STORAGE_GZIP_ENCODING,
+    };
+  }
 
   if (body.length <= MAX_STORAGE_OBJECT_CHARS) {
     return {
       snapshot: persistedSnapshot,
       size: await uploadJsonStorageObject(path, body),
       paths: [path],
+      encoding: null,
     };
   }
 
@@ -914,6 +962,7 @@ const uploadBoardSnapshot = async (path: string, snapshot: BoardSnapshot) => {
     snapshot: persistedSnapshot,
     size: new Blob([body]).size,
     paths: uploadedPaths,
+    encoding: null,
   };
 };
 
@@ -929,7 +978,7 @@ const prepareRemoteSnapshot = async (userId: string, boardId: string, snapshot: 
       path: snapshotPath,
       paths: uploaded.paths,
       compressed: null,
-      encoding: null,
+      encoding: uploaded.encoding,
       usedStorage: true,
     };
   } catch (storageError) {
@@ -1087,7 +1136,7 @@ export const saveLocalCopy = () => {
   const snapshot = getBoardSnapshot();
   saveRecentSnapshot(snapshot);
   downloadBlob(
-    new Blob([JSON.stringify(snapshot, null, 2)], { type: 'application/json' }),
+    new Blob([JSON.stringify(snapshotForSerialization(snapshot), null, 2)], { type: 'application/json' }),
     safeFilename(snapshot.title, BOARD_FILE_EXTENSION)
   );
 };
@@ -1115,9 +1164,9 @@ export const deleteCurrentBoard = async () => {
 };
 
 export const openRecentBoard = () => {
-  const recent = safeParseJson<BoardSnapshot[]>(localStorage.getItem(RECENT_BOARDS_KEY), []);
-  const latest = recent[0] || safeParseJson<BoardSnapshot | null>(localStorage.getItem(AUTOSAVE_KEY), null);
-  if (latest) loadBoardSnapshot(latest);
+  const recent = safeParseJson<unknown[]>(localStorage.getItem(RECENT_BOARDS_KEY), []);
+  const latest = recent[0] || safeParseJson<unknown>(localStorage.getItem(AUTOSAVE_KEY), null);
+  if (latest) loadBoardSnapshot(normalizeSnapshot(latest));
 };
 
 export const importBoardFile = () => {

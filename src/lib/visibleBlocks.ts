@@ -1,8 +1,8 @@
 import type { Block, Viewport } from '../types';
 
 const getWorldOverscan = (zoom: number) => {
-  const screenOverscanPx = zoom < 0.2 ? 160 : 360;
-  return Math.min(3000, Math.max(600, screenOverscanPx / zoom));
+  const screenOverscanPx = zoom < 0.2 ? 96 : 192;
+  return Math.min(2000, Math.max(240, screenOverscanPx / zoom));
 };
 
 const intersectsViewport = (

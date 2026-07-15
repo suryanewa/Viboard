@@ -794,6 +794,7 @@ export const ImageBlock: React.FC<BlockContentProps> = ({ block }) => {
           alt={block.data.alt || "User content"}
           title="User content"
           className="w-full h-full object-contain"
+          loading="lazy"
           decoding="async"
           draggable={false}
           onLoad={handleImageLoad}
